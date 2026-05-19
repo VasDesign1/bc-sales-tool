@@ -1,0 +1,5 @@
+# Local-only files (working notes, dropped artefacts) — never push to the public repo
+_docx/
+Prompt.docx
+*.docx
+*.xlsx
