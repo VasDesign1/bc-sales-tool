@@ -3623,33 +3623,36 @@ function renderDemographics() {
 function _newNode(key, label) {
     return { key, label, sales: 0, qty: 0, cost: 0, costNonInv: 0, children: [] };
 }
-// Build a unified list of posted-sales documents, each tagged with its
-// display label, ILE doc-type (for cost lookup), and sign (returns are negative).
+// Build a unified list of posted-sales documents.
+// countsTotal=true: contributes to entity totals (Invoice, Credit Memo).
+// countsTotal=false: shipments / return receipts share the same stock as
+// their invoice/credit-memo counterpart — including them would double-count
+// cost & qty. Power BI handles this by zeroing those rows out; we do the same.
 function allPostedDocs() {
     const list = [];
     for (const inv of state.invoices) {
-        list.push({ type: "Posted Sales Invoice", ileType: "Sales Invoice", sign: 1,
+        list.push({ type: "Posted Sales Invoice", ileType: "Sales Invoice", sign: 1, countsTotal: true,
                     id: inv.id, number: inv.number,
                     customerNumber: inv.customerNumber, customerName: inv.customerName,
                     salesperson: inv.salesperson, postingDate: inv.postingDate,
                     lines: inv.salesInvoiceLines || [] });
     }
     for (const cm of state.creditMemos) {
-        list.push({ type: "Posted Sales CR/Adj Note", ileType: "Sales Credit Memo", sign: -1,
+        list.push({ type: "Posted Sales CR/Adj Note", ileType: "Sales Credit Memo", sign: -1, countsTotal: true,
                     id: cm.id, number: cm.number,
                     customerNumber: cm.customerNumber, customerName: cm.customerName,
                     salesperson: cm.salesperson, postingDate: cm.postingDate,
                     lines: cm.salesCreditMemoLines || [] });
     }
     for (const s of state.shipments) {
-        list.push({ type: "Posted Sales Shipment", ileType: "Sales Shipment", sign: 1,
+        list.push({ type: "Posted Sales Shipment", ileType: "Sales Shipment", sign: 1, countsTotal: false,
                     id: s.id, number: s.number,
                     customerNumber: s.customerNumber, customerName: s.customerName,
                     salesperson: s.salesperson, postingDate: s.postingDate,
                     lines: s.salesShipmentLines || [] });
     }
     for (const r of state.returnReceipts) {
-        list.push({ type: "Posted Sales Return Receipt", ileType: "Sales Return Receipt", sign: -1,
+        list.push({ type: "Posted Sales Return Receipt", ileType: "Sales Return Receipt", sign: -1, countsTotal: false,
                     id: r.id, number: r.number,
                     customerNumber: r.customerNumber, customerName: r.customerName,
                     salesperson: r.salesperson, postingDate: r.postingDate,
@@ -3690,10 +3693,11 @@ function buildCustomerDrillTree(customer) {
         for (const ln of d.lines) {
             if (state.filters.location && locationCode(ln.locationId) !== state.filters.location) continue;
             const itemNo = ln.lineObjectNumber || ln.itemId || "";
-            const s = num(ln.amountExcludingTax) * d.sign;
-            const q = num(ln.quantity) * d.sign;
-            const c = costFromLine(ln, d.sign);
-            const cn = costNonInvFromLine(ln, d.sign);
+            const mult = d.countsTotal ? 1 : 0;
+            const s = num(ln.amountExcludingTax) * d.sign * mult;
+            const q = num(ln.quantity) * d.sign * mult;
+            const c = costFromLine(ln, d.sign) * mult;
+            const cn = costNonInvFromLine(ln, d.sign) * mult;
             const leaf = _newNode("ct-line-" + d.type + "-" + d.id + "-" + (ln.id || ln.sequence || itemNo),
                 (itemNo ? "Item " + itemNo : "(non-item)") + (ln.description ? " · " + ln.description : ""));
             leaf.children = null;
@@ -3734,10 +3738,11 @@ function buildBranchDrillTree(_invoices) {
                 dt.children.push(docNode);
             }
             const itemNo = ln.lineObjectNumber || ln.itemId || "";
-            const s = num(ln.amountExcludingTax) * d.sign;
-            const q = num(ln.quantity) * d.sign;
-            const c = costFromLine(ln, d.sign);
-            const cn = costNonInvFromLine(ln, d.sign);
+            const mult = d.countsTotal ? 1 : 0;
+            const s = num(ln.amountExcludingTax) * d.sign * mult;
+            const q = num(ln.quantity) * d.sign * mult;
+            const c = costFromLine(ln, d.sign) * mult;
+            const cn = costNonInvFromLine(ln, d.sign) * mult;
             const leaf = _newNode("bt-line-" + locCode + "-" + d.type + "-" + d.id + "-" + (ln.id || ln.sequence || itemNo),
                 (itemNo ? "Item " + itemNo : "(non-item)") + (ln.description ? " · " + ln.description : ""));
             leaf.children = null;
@@ -3786,10 +3791,11 @@ function buildSalespersonDrillTree(_invoices) {
         for (const ln of d.lines) {
             if (state.filters.location && locationCode(ln.locationId) !== state.filters.location) continue;
             const itemNo = ln.lineObjectNumber || ln.itemId || "";
-            const s = num(ln.amountExcludingTax) * d.sign;
-            const q = num(ln.quantity) * d.sign;
-            const c = costFromLine(ln, d.sign);
-            const cn = costNonInvFromLine(ln, d.sign);
+            const mult = d.countsTotal ? 1 : 0;
+            const s = num(ln.amountExcludingTax) * d.sign * mult;
+            const q = num(ln.quantity) * d.sign * mult;
+            const c = costFromLine(ln, d.sign) * mult;
+            const cn = costNonInvFromLine(ln, d.sign) * mult;
             const leaf = _newNode("st-line-" + sp + "-" + d.type + "-" + d.id + "-" + (ln.id || ln.sequence || itemNo),
                 (itemNo ? "Item " + itemNo : "(non-item)") + (ln.description ? " · " + ln.description : ""));
             leaf.children = null;
