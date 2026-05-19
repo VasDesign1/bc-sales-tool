@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sales Analytics (Wiise Connected)</title>
+    <script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f0f2f5; color: #333; }
+
+        .header {
+            background: linear-gradient(135deg, #1a237e, #283593);
+            color: white; padding: 20px 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        }
+        .header h1 { font-size: 24px; font-weight: 600; }
+        .header .subtitle { font-size: 13px; opacity: 0.85; margin-top: 4px; }
+
+        .container { max-width: 1600px; margin: 0 auto; padding: 20px; }
+
+        .toolbar {
+            background: white; border-radius: 12px; padding: 18px 22px;
+            margin-bottom: 18px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            display: flex; gap: 18px; flex-wrap: wrap; align-items: center;
+        }
+        .toolbar .field { display: flex; flex-direction: column; gap: 4px; }
+        .toolbar label { font-size: 11px; font-weight: 600; color: #555; text-transform: uppercase; letter-spacing: 0.3px; }
+        .toolbar input[type="date"], .toolbar select {
+            padding: 7px 10px; border: 1px solid #ddd; border-radius: 6px;
+            font-size: 13px; min-width: 150px; background: white;
+        }
+        .toolbar .spacer { flex: 1; }
+        .btn {
+            padding: 8px 16px; border: none; border-radius: 6px;
+            font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s;
+        }
+        .btn-primary { background: #3f51b5; color: white; }
+        .btn-primary:hover { background: #303f9f; }
+        .btn-primary:disabled { background: #aaa; cursor: not-allowed; }
+        .btn-outline { background: white; color: #3f51b5; border: 1px solid #3f51b5; }
+        .btn-outline:hover { background: #e8eaf6; }
+        .btn-ghost { background: transparent; color: #555; }
+        .btn-ghost:hover { background: #eef; }
+
+        .stats-bar {
+            background: white; border-radius: 12px; padding: 18px 25px;
+            margin-bottom: 18px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            display: flex; gap: 40px; flex-wrap: wrap; align-items: center;
+        }
+        .stat .value { font-size: 22px; font-weight: 700; color: #1a237e; }
+        .stat .label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
+
+        .panel {
+            background: white; border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08); overflow: hidden;
+            margin-bottom: 18px;
+        }
+        .panel-header {
+            padding: 14px 22px; border-bottom: 1px solid #eee;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .panel-header h2 { font-size: 15px; color: #1a237e; font-weight: 600; }
+        .panel-header .count { font-size: 12px; color: #888; }
+
+        .table-scroll { overflow-x: auto; max-height: 65vh; overflow-y: auto; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th {
+            position: sticky; top: 0;
+            background: #e8eaf6; color: #1a237e; padding: 11px 14px;
+            text-align: left; font-weight: 600; font-size: 11px;
+            text-transform: uppercase; letter-spacing: 0.3px;
+            border-bottom: 2px solid #c5cae9; white-space: nowrap;
+            cursor: pointer; user-select: none;
+        }
+        th:hover { background: #c5cae9; }
+        th.sorted-asc::after { content: ' ▲'; font-size: 10px; }
+        th.sorted-desc::after { content: ' ▼'; font-size: 10px; }
+        td { padding: 9px 14px; border-bottom: 1px solid #f0f0f0; white-space: nowrap; }
+        tr:hover { background: #f5f7ff; }
+        tr.clickable { cursor: pointer; }
+        td.num { text-align: right; font-variant-numeric: tabular-nums; }
+        th.num { text-align: right; }
+
+        .breadcrumb {
+            background: white; border-radius: 12px; padding: 12px 22px;
+            margin-bottom: 18px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            display: flex; gap: 10px; align-items: center; font-size: 13px;
+        }
+        .breadcrumb a { color: #3f51b5; cursor: pointer; text-decoration: none; }
+        .breadcrumb a:hover { text-decoration: underline; }
+        .breadcrumb .sep { color: #bbb; }
+        .breadcrumb .current { color: #333; font-weight: 600; }
+
+        .chart-card {
+            background: white; border-radius: 12px; padding: 20px 22px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08); margin-bottom: 18px;
+        }
+        .chart-card h3 { font-size: 14px; color: #1a237e; margin-bottom: 12px; font-weight: 600; }
+        .chart-wrap { position: relative; height: 280px; }
+
+        .bucket-toggle { display: inline-flex; border: 1px solid #c5cae9; border-radius: 6px; overflow: hidden; }
+        .bucket-toggle button {
+            padding: 6px 14px; border: none; background: white; color: #3f51b5;
+            font-size: 12px; font-weight: 600; cursor: pointer;
+        }
+        .bucket-toggle button.active { background: #3f51b5; color: white; }
+        .bucket-toggle button + button { border-left: 1px solid #c5cae9; }
+
+        .empty { padding: 40px; text-align: center; color: #888; font-size: 14px; }
+
+        .signin-overlay {
+            position: fixed; inset: 0; background: rgba(26,35,126,0.92);
+            display: flex; align-items: center; justify-content: center;
+            z-index: 9999;
+        }
+        .signin-card {
+            background: white; border-radius: 16px; padding: 40px;
+            text-align: center; box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+            max-width: 420px;
+        }
+        .signin-card h2 { color: #1a237e; margin-bottom: 10px; }
+        .signin-card p { color: #666; margin-bottom: 24px; font-size: 14px; }
+        .signin-card .big-btn {
+            background: #3f51b5; color: white; padding: 12px 30px;
+            border: none; border-radius: 8px; font-size: 15px; font-weight: 600;
+            cursor: pointer;
+        }
+        .signin-card .big-btn:hover { background: #303f9f; }
+
+        .progress {
+            position: fixed; bottom: 20px; right: 20px;
+            background: #1a237e; color: white; padding: 12px 18px;
+            border-radius: 8px; font-size: 13px; box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            display: none; z-index: 100;
+        }
+
+        .badge {
+            display: inline-block; padding: 2px 8px; border-radius: 10px;
+            font-size: 11px; font-weight: 600;
+        }
+        .badge-open  { background: #fff3e0; color: #e65100; }
+        .badge-paid  { background: #e8f5e9; color: #2e7d32; }
+        .badge-draft { background: #eceff1; color: #455a64; }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h1>Sales Analytics</h1>
+    <div class="subtitle">Wiise / Business Central &mdash; <span id="userBadge">not signed in</span></div>
+</div>
+
+<div class="container">
+
+    <div class="toolbar">
+        <div class="field">
+            <label for="fromDate">From</label>
+            <input type="date" id="fromDate">
+        </div>
+        <div class="field">
+            <label for="toDate">To</label>
+            <input type="date" id="toDate">
+        </div>
+        <button class="btn btn-primary" id="loadBtn" disabled>Load sales</button>
+        <div class="spacer"></div>
+        <button class="btn btn-ghost" id="signOutBtn" style="display:none;">Sign out</button>
+    </div>
+
+    <!-- DASHBOARD VIEW -->
+    <div id="viewDashboard" style="display:none;">
+        <div class="stats-bar">
+            <div class="stat"><div class="value" id="statCustomers">&mdash;</div><div class="label">Customers</div></div>
+            <div class="stat"><div class="value" id="statInvoices">&mdash;</div><div class="label">Invoices</div></div>
+            <div class="stat"><div class="value" id="statRevenue">&mdash;</div><div class="label">Revenue (excl. tax)</div></div>
+            <div class="stat"><div class="value" id="statAvgInv">&mdash;</div><div class="label">Avg invoice</div></div>
+        </div>
+
+        <div class="panel">
+            <div class="panel-header">
+                <h2>Customers</h2>
+                <div class="count" id="custCount"></div>
+            </div>
+            <div class="table-scroll">
+                <table id="customerTable">
+                    <thead>
+                        <tr>
+                            <th data-sort="customerNumber">Customer No</th>
+                            <th data-sort="customerName">Name</th>
+                            <th class="num" data-sort="invoiceCount">Invoices</th>
+                            <th class="num" data-sort="revenue">Revenue</th>
+                            <th class="num" data-sort="lastInvoiceDate">Last invoice</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- CUSTOMER DETAIL VIEW -->
+    <div id="viewCustomer" style="display:none;">
+        <div class="breadcrumb">
+            <a id="bcHome">Dashboard</a>
+            <span class="sep">/</span>
+            <span class="current" id="bcCustomer"></span>
+        </div>
+
+        <div class="stats-bar">
+            <div class="stat"><div class="value" id="cdInvoices">&mdash;</div><div class="label">Invoices</div></div>
+            <div class="stat"><div class="value" id="cdRevenue">&mdash;</div><div class="label">Revenue (excl. tax)</div></div>
+            <div class="stat"><div class="value" id="cdAvg">&mdash;</div><div class="label">Avg invoice</div></div>
+            <div class="stat"><div class="value" id="cdFirst">&mdash;</div><div class="label">First invoice</div></div>
+            <div class="stat"><div class="value" id="cdLast">&mdash;</div><div class="label">Last invoice</div></div>
+        </div>
+
+        <div class="chart-card">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                <h3 style="margin:0;">Sales over time</h3>
+                <div class="bucket-toggle" id="bucketToggle">
+                    <button data-bucket="day">Day</button>
+                    <button data-bucket="week">Week</button>
+                    <button data-bucket="month" class="active">Month</button>
+                </div>
+            </div>
+            <div class="chart-wrap"><canvas id="customerChart"></canvas></div>
+        </div>
+
+        <div class="panel">
+            <div class="panel-header">
+                <h2>Invoices</h2>
+                <div class="count" id="cdInvCount"></div>
+            </div>
+            <div class="table-scroll">
+                <table id="customerInvoiceTable">
+                    <thead>
+                        <tr>
+                            <th data-sort="number">Invoice No</th>
+                            <th data-sort="postingDate">Posting date</th>
+                            <th data-sort="status">Status</th>
+                            <th class="num" data-sort="totalAmountExcludingTax">Amount (excl. tax)</th>
+                            <th class="num" data-sort="totalAmountIncludingTax">Amount (incl. tax)</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- INVOICE DETAIL VIEW -->
+    <div id="viewInvoice" style="display:none;">
+        <div class="breadcrumb">
+            <a id="biHome">Dashboard</a>
+            <span class="sep">/</span>
+            <a id="biCustomer"></a>
+            <span class="sep">/</span>
+            <span class="current" id="biInvoice"></span>
+        </div>
+
+        <div class="stats-bar">
+            <div class="stat"><div class="value" id="invPostingDate">&mdash;</div><div class="label">Posting date</div></div>
+            <div class="stat"><div class="value" id="invStatus">&mdash;</div><div class="label">Status</div></div>
+            <div class="stat"><div class="value" id="invLineCount">&mdash;</div><div class="label">Lines</div></div>
+            <div class="stat"><div class="value" id="invExcl">&mdash;</div><div class="label">Excl. tax</div></div>
+            <div class="stat"><div class="value" id="invIncl">&mdash;</div><div class="label">Incl. tax</div></div>
+        </div>
+
+        <div class="panel">
+            <div class="panel-header">
+                <h2>Lines</h2>
+                <div class="count" id="invLineCountSmall"></div>
+            </div>
+            <div class="table-scroll">
+                <table id="invoiceLineTable">
+                    <thead>
+                        <tr>
+                            <th>Type</th>
+                            <th>Item / No.</th>
+                            <th>Description</th>
+                            <th class="num">Qty</th>
+                            <th class="num">Unit price</th>
+                            <th class="num">Line discount</th>
+                            <th class="num">Amount (excl. tax)</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<div class="signin-overlay" id="signinOverlay">
+    <div class="signin-card">
+        <h2>Sales Analytics</h2>
+        <p>Sign in with your VicAir Microsoft account to load sales data from Wiise.</p>
+        <button class="big-btn" id="signInBtn">Sign in with Microsoft</button>
+    </div>
+</div>
+
+<div class="progress" id="bcProgress"><span id="bcProgressText"></span></div>
+
+<script>
+// ============================================================
+// BUSINESS CENTRAL / WIISE CONNECTION LAYER
+// (Same plumbing pattern as forecast-tool — kept in sync intentionally.)
+// ============================================================
+const BC_CONFIG = {
+    clientId:    "0f3136a8-79cd-4335-9790-7ae3fe5800be",
+    tenantId:    "68c88731-a731-4307-bb12-28557affd0ca",
+    environment: "Production",
+    companyName: "VICAIR Pty Ltd",
+};
+const BC_TENANT_DOMAIN = "VicAirPtyLtd.onmicrosoft.com";
+const BC_API_BASE = "https://api.businesscentral.dynamics.com/v2.0/" + BC_TENANT_DOMAIN + "/" + BC_CONFIG.environment;
+const BC_API_URL  = BC_API_BASE + "/api/v2.0";
+const BC_SCOPES   = ["https://api.businesscentral.dynamics.com/.default"];
+
+let bcMsalInstance = null;
+let bcAccessToken  = null;
+let bcCompanyId    = null;
+
+function initMsal() {
+    if (bcMsalInstance) return;
+    bcMsalInstance = new msal.PublicClientApplication({
+        auth: {
+            clientId: BC_CONFIG.clientId,
+            authority: "https://login.microsoftonline.com/" + BC_CONFIG.tenantId,
+            redirectUri: window.location.origin,
+        },
+        cache: { cacheLocation: "sessionStorage" }
+    });
+}
+
+async function bcGetToken() {
+    initMsal();
+    const accounts = bcMsalInstance.getAllAccounts();
+    if (accounts.length > 0) {
+        try {
+            const result = await bcMsalInstance.acquireTokenSilent({ scopes: BC_SCOPES, account: accounts[0] });
+            bcAccessToken = result.accessToken;
+            return result.accessToken;
+        } catch (e) { /* fall through to popup */ }
+    }
+    const result = await bcMsalInstance.loginPopup({ scopes: BC_SCOPES });
+    bcAccessToken = result.accessToken;
+    return result.accessToken;
+}
+
+async function bcFetch(url) {
+    const token = await bcGetToken();
+    let resp = await fetch(url, { headers: { "Authorization": "Bearer " + token, "Accept": "application/json" } });
+    if (resp.status === 401) {
+        bcAccessToken = null;
+        const newToken = await bcGetToken();
+        resp = await fetch(url, { headers: { "Authorization": "Bearer " + newToken, "Accept": "application/json" } });
+    }
+    if (!resp.ok) {
+        const errBody = await resp.text().catch(() => "");
+        throw new Error("BC API error " + resp.status + ": " + resp.statusText + (errBody ? " — " + errBody.substring(0, 200) : ""));
+    }
+    return resp.json();
+}
+
+async function bcFetchAll(url, progressLabel) {
+    let allRows = [];
+    let nextUrl = url;
+    let page = 0;
+    while (nextUrl) {
+        page++;
+        const data = await bcFetch(nextUrl);
+        allRows = allRows.concat(data.value || []);
+        updateBCProgress(progressLabel, allRows.length + " rows (page " + page + ")...");
+        nextUrl = data["@odata.nextLink"] || null;
+    }
+    return allRows;
+}
+
+async function bcGetCompanyId() {
+    if (bcCompanyId) return bcCompanyId;
+    const data = await bcFetch(BC_API_URL + "/companies");
+    const companies = data.value || [];
+    if (!companies.length) throw new Error("No companies found. Check environment: '" + BC_CONFIG.environment + "'");
+    let match = companies.find(c => (c.displayName || c.name || "").toLowerCase() === BC_CONFIG.companyName.toLowerCase());
+    if (!match) {
+        console.warn("Company '" + BC_CONFIG.companyName + "' not found. Using first: " + (companies[0].displayName || companies[0].name));
+        match = companies[0];
+    }
+    bcCompanyId = match.id;
+    return bcCompanyId;
+}
+
+function updateBCProgress(label, detail) {
+    const el = document.getElementById("bcProgressText");
+    const wrap = document.getElementById("bcProgress");
+    if (el && wrap) {
+        el.textContent = label + ": " + detail;
+        wrap.style.display = "block";
+    }
+}
+function hideBCProgress() {
+    const wrap = document.getElementById("bcProgress");
+    if (wrap) wrap.style.display = "none";
+}
+
+// ============================================================
+// SALES DATA FETCHERS
+// ============================================================
+async function fetchSalesInvoices(fromISO, toISO) {
+    const compId = await bcGetCompanyId();
+    const filter = "postingDate ge " + fromISO + " and postingDate le " + toISO;
+    const select = "id,number,invoiceDate,postingDate,customerId,customerNumber,customerName,totalAmountExcludingTax,totalAmountIncludingTax,currencyCode,status";
+    const url = BC_API_URL + "/companies(" + compId + ")/salesInvoices?$filter=" + encodeURIComponent(filter) + "&$select=" + select + "&$top=10000";
+    return bcFetchAll(url, "Sales invoices");
+}
+
+async function fetchInvoiceLines(invoiceId) {
+    const compId = await bcGetCompanyId();
+    const url = BC_API_URL + "/companies(" + compId + ")/salesInvoices(" + invoiceId + ")/salesInvoiceLines?$top=10000";
+    return bcFetchAll(url, "Invoice lines");
+}
+
+// ============================================================
+// APP STATE
+// ============================================================
+const state = {
+    invoices: [],
+    byCustomer: new Map(),   // customerNumber -> { customerNumber, customerName, invoices: [], revenue, count, first, last }
+    currentCustomer: null,
+    currentInvoice: null,
+    bucket: "month",
+    chart: null,
+    sort: { table: "customers", key: "revenue", dir: "desc" },
+};
+
+// ============================================================
+// FORMATTING
+// ============================================================
+const fmtMoney = (n) => {
+    if (n == null || isNaN(n)) return "—";
+    return new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD", maximumFractionDigits: 0 }).format(n);
+};
+const fmtMoney2 = (n) => {
+    if (n == null || isNaN(n)) return "—";
+    return new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+};
+const fmtInt = (n) => n == null ? "—" : new Intl.NumberFormat("en-AU").format(n);
+const fmtDate = (iso) => {
+    if (!iso) return "—";
+    const d = new Date(iso);
+    if (isNaN(d)) return iso;
+    return d.toLocaleDateString("en-AU", { year: "numeric", month: "short", day: "2-digit" });
+};
+const num = (v) => (v == null || v === "") ? 0 : parseFloat(v) || 0;
+
+function statusBadge(s) {
+    const k = (s || "").toLowerCase();
+    if (k === "paid")  return '<span class="badge badge-paid">Paid</span>';
+    if (k === "open")  return '<span class="badge badge-open">Open</span>';
+    if (k === "draft") return '<span class="badge badge-draft">Draft</span>';
+    return '<span class="badge badge-draft">' + (s || "—") + '</span>';
+}
+
+// ============================================================
+// AGGREGATION
+// ============================================================
+function aggregateByCustomer(invoices) {
+    const map = new Map();
+    for (const inv of invoices) {
+        const key = inv.customerNumber || inv.customerId || "(unknown)";
+        let g = map.get(key);
+        if (!g) {
+            g = {
+                customerNumber: inv.customerNumber || "",
+                customerName:   inv.customerName   || "(unknown)",
+                customerId:     inv.customerId    || "",
+                invoices: [],
+                revenue: 0,
+                invoiceCount: 0,
+                firstInvoiceDate: null,
+                lastInvoiceDate: null,
+            };
+            map.set(key, g);
+        }
+        g.invoices.push(inv);
+        g.revenue += num(inv.totalAmountExcludingTax);
+        g.invoiceCount += 1;
+        const d = inv.postingDate;
+        if (d) {
+            if (!g.firstInvoiceDate || d < g.firstInvoiceDate) g.firstInvoiceDate = d;
+            if (!g.lastInvoiceDate  || d > g.lastInvoiceDate)  g.lastInvoiceDate  = d;
+        }
+    }
+    return map;
+}
+
+function bucketKey(iso, bucket) {
+    const d = new Date(iso);
+    if (isNaN(d)) return iso || "(unknown)";
+    if (bucket === "day") {
+        return d.toISOString().slice(0, 10);
+    }
+    if (bucket === "week") {
+        // ISO week starting Monday
+        const tmp = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+        const day = tmp.getUTCDay() || 7;
+        tmp.setUTCDate(tmp.getUTCDate() - day + 1);
+        return tmp.toISOString().slice(0, 10); // Monday of that week
+    }
+    // month
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
+}
+
+function bucketInvoices(invoices, bucket) {
+    const map = new Map();
+    for (const inv of invoices) {
+        const k = bucketKey(inv.postingDate, bucket);
+        const cur = map.get(k) || { key: k, revenue: 0, count: 0 };
+        cur.revenue += num(inv.totalAmountExcludingTax);
+        cur.count   += 1;
+        map.set(k, cur);
+    }
+    return [...map.values()].sort((a, b) => a.key < b.key ? -1 : 1);
+}
+
+// ============================================================
+// VIEWS
+// ============================================================
+function showView(name) {
+    for (const id of ["viewDashboard", "viewCustomer", "viewInvoice"]) {
+        document.getElementById(id).style.display = (id === "view" + name) ? "block" : "none";
+    }
+    window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function renderDashboard() {
+    const groups = [...state.byCustomer.values()];
+    const totalRev = groups.reduce((s, g) => s + g.revenue, 0);
+    const totalInv = state.invoices.length;
+    document.getElementById("statCustomers").textContent = fmtInt(groups.length);
+    document.getElementById("statInvoices").textContent  = fmtInt(totalInv);
+    document.getElementById("statRevenue").textContent   = fmtMoney(totalRev);
+    document.getElementById("statAvgInv").textContent    = totalInv ? fmtMoney(totalRev / totalInv) : "—";
+
+    sortAndRenderCustomerTable();
+    document.getElementById("custCount").textContent = groups.length + " customers";
+    showView("Dashboard");
+}
+
+function sortAndRenderCustomerTable() {
+    const groups = [...state.byCustomer.values()];
+    const key = state.sort.key;
+    const dir = state.sort.dir === "asc" ? 1 : -1;
+    groups.sort((a, b) => {
+        let av = a[key], bv = b[key];
+        if (av == null) av = (typeof bv === "number") ? 0 : "";
+        if (bv == null) bv = (typeof av === "number") ? 0 : "";
+        if (typeof av === "number" && typeof bv === "number") return (av - bv) * dir;
+        return String(av).localeCompare(String(bv)) * dir;
+    });
+    const tbody = document.querySelector("#customerTable tbody");
+    tbody.innerHTML = groups.map(g => `
+        <tr class="clickable" data-cust="${escapeAttr(g.customerNumber)}">
+            <td>${escapeHtml(g.customerNumber)}</td>
+            <td>${escapeHtml(g.customerName)}</td>
+            <td class="num">${fmtInt(g.invoiceCount)}</td>
+            <td class="num">${fmtMoney(g.revenue)}</td>
+            <td class="num">${fmtDate(g.lastInvoiceDate)}</td>
+        </tr>
+    `).join("");
+    // mark sorted column
+    document.querySelectorAll("#customerTable th").forEach(th => {
+        th.classList.remove("sorted-asc", "sorted-desc");
+        if (th.dataset.sort === state.sort.key) {
+            th.classList.add(state.sort.dir === "asc" ? "sorted-asc" : "sorted-desc");
+        }
+    });
+}
+
+function showCustomer(custNumber) {
+    const g = state.byCustomer.get(custNumber);
+    if (!g) return;
+    state.currentCustomer = g;
+    document.getElementById("bcCustomer").textContent = (g.customerNumber ? g.customerNumber + " — " : "") + g.customerName;
+
+    document.getElementById("cdInvoices").textContent = fmtInt(g.invoiceCount);
+    document.getElementById("cdRevenue").textContent  = fmtMoney(g.revenue);
+    document.getElementById("cdAvg").textContent      = fmtMoney(g.revenue / g.invoiceCount);
+    document.getElementById("cdFirst").textContent    = fmtDate(g.firstInvoiceDate);
+    document.getElementById("cdLast").textContent     = fmtDate(g.lastInvoiceDate);
+
+    renderCustomerChart();
+    renderCustomerInvoiceTable();
+
+    document.getElementById("cdInvCount").textContent = g.invoices.length + " invoices";
+    showView("Customer");
+}
+
+function renderCustomerChart() {
+    const g = state.currentCustomer;
+    if (!g) return;
+    const buckets = bucketInvoices(g.invoices, state.bucket);
+    const labels = buckets.map(b => b.key);
+    const data   = buckets.map(b => b.revenue);
+
+    if (state.chart) state.chart.destroy();
+    const ctx = document.getElementById("customerChart").getContext("2d");
+    state.chart = new Chart(ctx, {
+        type: "bar",
+        data: {
+            labels,
+            datasets: [{
+                label: "Revenue (excl. tax)",
+                data,
+                backgroundColor: "#3f51b5",
+                borderRadius: 4,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => fmtMoney(ctx.parsed.y) + "  (" + buckets[ctx.dataIndex].count + " inv)"
+                    }
+                }
+            },
+            scales: {
+                y: { ticks: { callback: (v) => fmtMoney(v) } }
+            }
+        }
+    });
+}
+
+function renderCustomerInvoiceTable() {
+    const g = state.currentCustomer;
+    if (!g) return;
+    const rows = [...g.invoices].sort((a, b) => (a.postingDate < b.postingDate) ? 1 : -1);
+    const tbody = document.querySelector("#customerInvoiceTable tbody");
+    tbody.innerHTML = rows.map(inv => `
+        <tr class="clickable" data-inv="${escapeAttr(inv.id)}">
+            <td>${escapeHtml(inv.number)}</td>
+            <td>${fmtDate(inv.postingDate)}</td>
+            <td>${statusBadge(inv.status)}</td>
+            <td class="num">${fmtMoney2(num(inv.totalAmountExcludingTax))}</td>
+            <td class="num">${fmtMoney2(num(inv.totalAmountIncludingTax))}</td>
+        </tr>
+    `).join("");
+}
+
+async function showInvoice(invoiceId) {
+    const g = state.currentCustomer;
+    const inv = g && g.invoices.find(i => i.id === invoiceId);
+    if (!inv) return;
+    state.currentInvoice = inv;
+
+    document.getElementById("biCustomer").textContent = (g.customerNumber ? g.customerNumber + " — " : "") + g.customerName;
+    document.getElementById("biInvoice").textContent  = inv.number;
+
+    document.getElementById("invPostingDate").textContent = fmtDate(inv.postingDate);
+    document.getElementById("invStatus").innerHTML        = statusBadge(inv.status);
+    document.getElementById("invExcl").textContent        = fmtMoney2(num(inv.totalAmountExcludingTax));
+    document.getElementById("invIncl").textContent        = fmtMoney2(num(inv.totalAmountIncludingTax));
+    document.getElementById("invLineCount").textContent   = "…";
+    document.getElementById("invLineCountSmall").textContent = "Loading…";
+
+    const tbody = document.querySelector("#invoiceLineTable tbody");
+    tbody.innerHTML = '<tr><td colspan="7" class="empty">Loading invoice lines…</td></tr>';
+    showView("Invoice");
+
+    try {
+        const lines = await fetchInvoiceLines(invoiceId);
+        hideBCProgress();
+        document.getElementById("invLineCount").textContent = lines.length;
+        document.getElementById("invLineCountSmall").textContent = lines.length + " lines";
+        tbody.innerHTML = lines.map(l => `
+            <tr>
+                <td>${escapeHtml(l.lineType || "")}</td>
+                <td>${escapeHtml(l.lineObjectNumber || l.itemId || "")}</td>
+                <td>${escapeHtml(l.description || "")}</td>
+                <td class="num">${fmtInt(num(l.quantity))}</td>
+                <td class="num">${fmtMoney2(num(l.unitPrice))}</td>
+                <td class="num">${fmtMoney2(num(l.discountAmount))}</td>
+                <td class="num">${fmtMoney2(num(l.amountExcludingTax))}</td>
+            </tr>
+        `).join("");
+        if (!lines.length) tbody.innerHTML = '<tr><td colspan="7" class="empty">No lines on this invoice.</td></tr>';
+    } catch (err) {
+        hideBCProgress();
+        tbody.innerHTML = '<tr><td colspan="7" class="empty" style="color:#c62828;">' + escapeHtml(err.message || String(err)) + '</td></tr>';
+    }
+}
+
+// ============================================================
+// HTML ESCAPE
+// ============================================================
+function escapeHtml(s) {
+    if (s == null) return "";
+    return String(s).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+}
+function escapeAttr(s) { return escapeHtml(s); }
+
+// ============================================================
+// EVENT WIRING
+// ============================================================
+function setDefaultDates() {
+    const today = new Date();
+    const past  = new Date(today);
+    past.setFullYear(today.getFullYear() - 1);
+    document.getElementById("fromDate").value = past.toISOString().slice(0, 10);
+    document.getElementById("toDate").value   = today.toISOString().slice(0, 10);
+}
+
+async function handleSignIn() {
+    try {
+        await bcGetToken();
+        const accounts = bcMsalInstance.getAllAccounts();
+        const name = accounts[0] ? (accounts[0].name || accounts[0].username) : "signed in";
+        document.getElementById("userBadge").textContent = name;
+        document.getElementById("signinOverlay").style.display = "none";
+        document.getElementById("loadBtn").disabled = false;
+        document.getElementById("signOutBtn").style.display = "inline-block";
+    } catch (err) {
+        alert("Sign-in failed: " + (err.message || err));
+    }
+}
+
+async function handleLoad() {
+    const from = document.getElementById("fromDate").value;
+    const to   = document.getElementById("toDate").value;
+    if (!from || !to) { alert("Pick a date range."); return; }
+    if (from > to) { alert("From date must be on or before To date."); return; }
+
+    const btn = document.getElementById("loadBtn");
+    btn.disabled = true;
+    btn.textContent = "Loading…";
+    try {
+        state.invoices = await fetchSalesInvoices(from, to);
+        state.byCustomer = aggregateByCustomer(state.invoices);
+        renderDashboard();
+    } catch (err) {
+        alert("Load failed: " + (err.message || err));
+    } finally {
+        hideBCProgress();
+        btn.disabled = false;
+        btn.textContent = "Load sales";
+    }
+}
+
+function wireEvents() {
+    document.getElementById("signInBtn").addEventListener("click", handleSignIn);
+    document.getElementById("loadBtn").addEventListener("click", handleLoad);
+
+    document.getElementById("signOutBtn").addEventListener("click", () => {
+        if (bcMsalInstance) bcMsalInstance.logoutPopup().catch(() => {});
+        location.reload();
+    });
+
+    // Customer table click
+    document.querySelector("#customerTable tbody").addEventListener("click", (e) => {
+        const tr = e.target.closest("tr.clickable");
+        if (!tr) return;
+        showCustomer(tr.dataset.cust);
+    });
+
+    // Customer table sort
+    document.querySelectorAll("#customerTable th").forEach(th => {
+        th.addEventListener("click", () => {
+            const key = th.dataset.sort;
+            if (!key) return;
+            if (state.sort.key === key) {
+                state.sort.dir = state.sort.dir === "asc" ? "desc" : "asc";
+            } else {
+                state.sort.key = key;
+                state.sort.dir = (key === "customerName" || key === "customerNumber") ? "asc" : "desc";
+            }
+            sortAndRenderCustomerTable();
+        });
+    });
+
+    // Invoice table click
+    document.querySelector("#customerInvoiceTable tbody").addEventListener("click", (e) => {
+        const tr = e.target.closest("tr.clickable");
+        if (!tr) return;
+        showInvoice(tr.dataset.inv);
+    });
+
+    // Bucket toggle
+    document.querySelectorAll("#bucketToggle button").forEach(btn => {
+        btn.addEventListener("click", () => {
+            document.querySelectorAll("#bucketToggle button").forEach(b => b.classList.remove("active"));
+            btn.classList.add("active");
+            state.bucket = btn.dataset.bucket;
+            renderCustomerChart();
+        });
+    });
+
+    // Breadcrumb nav
+    document.getElementById("bcHome").addEventListener("click", () => showView("Dashboard"));
+    document.getElementById("biHome").addEventListener("click", () => showView("Dashboard"));
+    document.getElementById("biCustomer").addEventListener("click", () => {
+        if (state.currentCustomer) showCustomer(state.currentCustomer.customerNumber);
+    });
+}
+
+// ============================================================
+// BOOT
+// ============================================================
+setDefaultDates();
+wireEvents();
+// If a session-cached account exists, auto-skip the overlay
+(async () => {
+    try {
+        initMsal();
+        if (bcMsalInstance.getAllAccounts().length > 0) {
+            await handleSignIn();
+        }
+    } catch (_) {}
+})();
+</script>
+
+</body>
+</html>
