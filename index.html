@@ -310,6 +310,7 @@
             <div class="right">
                 <div class="user" id="userBadge">not signed in</div>
                 <div id="periodBadge"></div>
+                <div id="costQualityBadge" style="margin-top:2px;"></div>
             </div>
         </div>
 
@@ -1281,6 +1282,19 @@ function hideBCProgress() {
     const wrap = document.getElementById("bcProgress");
     if (wrap) wrap.style.display = "none";
 }
+function updateCostQualityBadge() {
+    const el = document.getElementById("costQualityBadge"); if (!el) return;
+    const s = state.costStats || {};
+    if (!s.sampleInvoices) { el.textContent = ""; return; }
+    const pct = Math.round(s.matched / s.sampleInvoices * 100);
+    if (pct >= 90) {
+        el.innerHTML = '<span style="color:#a5d6a7;">cost data ✓ ' + pct + '%</span>';
+    } else if (pct > 0) {
+        el.innerHTML = '<span style="color:#ffcc80;">cost data partial — ' + pct + '% invoices matched (open browser console for details)</span>';
+    } else {
+        el.innerHTML = '<span style="color:#ef9a9a;">cost data not matched (open browser console — likely shipment-number mismatch)</span>';
+    }
+}
 
 // ============================================================
 // FETCHERS
@@ -1486,34 +1500,74 @@ function buildCostMaps(iles) {
     state.costByItemDocKey.clear();
     state.costNonInvByDocKey.clear();
     state.costNonInvByItemDocKey.clear();
+    state.costStats = { rows: 0, processed: 0, totalCost: 0, matched: 0, sampleInvoices: 0, fields: null };
+    if (!iles.length) { console.warn("[ILE] no rows fetched — cost will be unavailable"); return; }
+    // Robust field discovery (BC v2 field naming varies across tenants)
+    const pick = (row, candidates) => { for (const c of candidates) if (c in row) return c; return null; };
+    const s = iles[0];
+    const fDocNo  = pick(s, ["documentNumber", "document_Number", "Document_No", "documentNo"]) || "documentNumber";
+    const fItem   = pick(s, ["itemNumber", "item_Number", "Item_No", "itemNo"]) || "itemNumber";
+    const fCost   = pick(s, ["costAmountActual", "Cost_Amount_Actual_", "cost_amount_actual"]) || "costAmountActual";
+    const fCostNI = pick(s, ["costAmountNonInvtbl", "Cost_Amount_Non_Invtbl", "cost_amount_non_invtbl"]) || "costAmountNonInvtbl";
+    const fExtDoc = pick(s, ["externalDocumentNumber", "external_Document_Number"]);
+    state.costStats.fields = { fDocNo, fItem, fCost, fCostNI, fExtDoc };
+    console.log("[ILE] using fields:", state.costStats.fields);
+    console.log("[ILE] sample row keys:", Object.keys(s).join(", "));
+
     for (const e of iles) {
-        const docType = e.documentType || "";
-        const docNo   = e.documentNumber || "";
+        state.costStats.rows++;
+        const docNo  = e[fDocNo] || "";
+        const extNo  = fExtDoc ? (e[fExtDoc] || "") : "";
         if (!docNo) continue;
-        const cost   = Math.abs(num(e.costAmountActual));
-        const costNI = Math.abs(num(e.costAmountNonInvtbl));
-        // Generic doc-keyed maps (any sales doc type)
-        const k  = docType + "|" + docNo;
-        const ki = k + "|" + (e.itemNumber || "");
-        state.costByDocKey.set(k, (state.costByDocKey.get(k) || 0) + cost);
-        state.costNonInvByDocKey.set(k, (state.costNonInvByDocKey.get(k) || 0) + costNI);
-        state.costByItemDocKey.set(ki, (state.costByItemDocKey.get(ki) || 0) + cost);
-        state.costNonInvByItemDocKey.set(ki, (state.costNonInvByItemDocKey.get(ki) || 0) + costNI);
-        // Backward-compat (Sales Invoice only) — used by existing aggregations
-        if (/Sales Invoice/i.test(docType)) {
-            state.costByInvoiceNo.set(docNo, (state.costByInvoiceNo.get(docNo) || 0) + cost);
-            state.costNonInvByInvoiceNo.set(docNo, (state.costNonInvByInvoiceNo.get(docNo) || 0) + costNI);
-            const itemKey = docNo + "|" + (e.itemNumber || "");
-            state.costByItemInvoiceNo.set(itemKey, (state.costByItemInvoiceNo.get(itemKey) || 0) + cost);
-            state.costNonInvByItemInvoiceNo.set(itemKey, (state.costNonInvByItemInvoiceNo.get(itemKey) || 0) + costNI);
+        state.costStats.processed++;
+        const cost   = Math.abs(num(e[fCost]));
+        const costNI = Math.abs(num(e[fCostNI]));
+        state.costStats.totalCost += cost;
+        const itemNo = e[fItem] || "";
+        // Key everything by docNumber alone (docType isn't reliably exposed)
+        const itemKey = docNo + "|" + itemNo;
+        state.costByInvoiceNo.set(docNo, (state.costByInvoiceNo.get(docNo) || 0) + cost);
+        state.costNonInvByInvoiceNo.set(docNo, (state.costNonInvByInvoiceNo.get(docNo) || 0) + costNI);
+        state.costByItemInvoiceNo.set(itemKey, (state.costByItemInvoiceNo.get(itemKey) || 0) + cost);
+        state.costNonInvByItemInvoiceNo.set(itemKey, (state.costNonInvByItemInvoiceNo.get(itemKey) || 0) + costNI);
+        state.costByDocKey.set(docNo, (state.costByDocKey.get(docNo) || 0) + cost);
+        state.costByItemDocKey.set(itemKey, (state.costByItemDocKey.get(itemKey) || 0) + cost);
+        state.costNonInvByDocKey.set(docNo, (state.costNonInvByDocKey.get(docNo) || 0) + costNI);
+        state.costNonInvByItemDocKey.set(itemKey, (state.costNonInvByItemDocKey.get(itemKey) || 0) + costNI);
+        // Mirror under externalDocumentNumber too — covers tenants where ILE.docNo is the shipment
+        // but ILE.externalDocumentNumber holds the invoice number (or vice versa).
+        if (extNo && extNo !== docNo) {
+            const extItemKey = extNo + "|" + itemNo;
+            state.costByInvoiceNo.set(extNo, (state.costByInvoiceNo.get(extNo) || 0) + cost);
+            state.costNonInvByInvoiceNo.set(extNo, (state.costNonInvByInvoiceNo.get(extNo) || 0) + costNI);
+            state.costByItemInvoiceNo.set(extItemKey, (state.costByItemInvoiceNo.get(extItemKey) || 0) + cost);
+            state.costNonInvByItemInvoiceNo.set(extItemKey, (state.costNonInvByItemInvoiceNo.get(extItemKey) || 0) + costNI);
+            state.costByDocKey.set(extNo, (state.costByDocKey.get(extNo) || 0) + cost);
+            state.costByItemDocKey.set(extItemKey, (state.costByItemDocKey.get(extItemKey) || 0) + cost);
+        }
+    }
+    // Verify how many invoices our cost map covers
+    if (state.invoices && state.invoices.length) {
+        const sample = state.invoices.slice(0, 50);
+        const matched = sample.filter(inv => state.costByInvoiceNo.has(inv.number)).length;
+        state.costStats.sampleInvoices = sample.length;
+        state.costStats.matched = matched;
+        const pct = sample.length ? (matched / sample.length * 100).toFixed(0) : 0;
+        console.log("[ILE] processed " + state.costStats.processed + "/" + state.costStats.rows +
+                    " entries · total cost " + fmtMoneyFull(state.costStats.totalCost));
+        console.log("[ILE→Invoice match] " + matched + "/" + sample.length + " (" + pct + "%) sample invoices matched");
+        if (matched === 0) {
+            console.warn("[ILE→Invoice match] 0% — ILE.documentNumber probably holds the SHIPMENT number, not the invoice number.");
+            console.log("[ILE] sample doc numbers:", iles.slice(0, 5).map(e => e[fDocNo]).join(", "));
+            console.log("[Invoices] sample numbers:", sample.slice(0, 5).map(i => i.number).join(", "));
         }
     }
 }
-function lineCostForDoc(ileDocType, docNo, itemNo) {
-    return state.costByItemDocKey.get(ileDocType + "|" + (docNo || "") + "|" + (itemNo || "")) || 0;
+function lineCostForDoc(_ileDocType, docNo, itemNo) {
+    return state.costByItemDocKey.get((docNo || "") + "|" + (itemNo || "")) || 0;
 }
-function lineCostNonInvForDoc(ileDocType, docNo, itemNo) {
-    return state.costNonInvByItemDocKey.get(ileDocType + "|" + (docNo || "") + "|" + (itemNo || "")) || 0;
+function lineCostNonInvForDoc(_ileDocType, docNo, itemNo) {
+    return state.costNonInvByItemDocKey.get((docNo || "") + "|" + (itemNo || "")) || 0;
 }
 function invoiceCost(inv) {
     return state.costByInvoiceNo.get(inv.number) || 0;
@@ -3882,6 +3936,7 @@ async function handleLoad() {
         state.invoices = invoices;
         state.iles = iles;
         buildCostMaps(iles);
+        updateCostQualityBadge();
         populateFilterDropdowns();
         rebuildFiltered();
         setPeriodBadge();
