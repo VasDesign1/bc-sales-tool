@@ -8,148 +8,207 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f0f2f5; color: #333; }
-
-        .header {
-            background: linear-gradient(135deg, #1a237e, #283593);
-            color: white; padding: 20px 30px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f4f5fa; color: #2c2f4a;
         }
-        .header h1 { font-size: 24px; font-weight: 600; }
-        .header .subtitle { font-size: 13px; opacity: 0.85; margin-top: 4px; }
 
-        .container { max-width: 1600px; margin: 0 auto; padding: 20px; }
+        /* ---------- HEADER ---------- */
+        .header {
+            background: linear-gradient(135deg, #1a237e, #283593 50%, #3949ab);
+            color: white; padding: 18px 30px;
+            box-shadow: 0 2px 14px rgba(26,35,126,0.25);
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .header h1 { font-size: 22px; font-weight: 600; letter-spacing: 0.3px; }
+        .header .subtitle { font-size: 12px; opacity: 0.85; margin-top: 3px; }
+        .header .right { text-align: right; font-size: 12px; opacity: 0.9; }
 
+        .container { max-width: 1700px; margin: 0 auto; padding: 20px; }
+
+        /* ---------- TOOLBAR ---------- */
         .toolbar {
-            background: white; border-radius: 12px; padding: 18px 22px;
-            margin-bottom: 18px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-            display: flex; gap: 18px; flex-wrap: wrap; align-items: center;
+            background: white; border-radius: 14px; padding: 16px 20px;
+            margin-bottom: 18px; box-shadow: 0 2px 10px rgba(26,35,126,0.08);
+            display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end;
         }
         .toolbar .field { display: flex; flex-direction: column; gap: 4px; }
-        .toolbar label { font-size: 11px; font-weight: 600; color: #555; text-transform: uppercase; letter-spacing: 0.3px; }
+        .toolbar label { font-size: 11px; font-weight: 700; color: #6e72a6; text-transform: uppercase; letter-spacing: 0.5px; }
         .toolbar input[type="date"], .toolbar select {
-            padding: 7px 10px; border: 1px solid #ddd; border-radius: 6px;
-            font-size: 13px; min-width: 150px; background: white;
+            padding: 8px 10px; border: 1px solid #d6d8eb; border-radius: 8px;
+            font-size: 13px; min-width: 150px; background: white; color: #2c2f4a;
         }
         .toolbar .spacer { flex: 1; }
         .btn {
-            padding: 8px 16px; border: none; border-radius: 6px;
-            font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s;
+            padding: 9px 18px; border: none; border-radius: 8px;
+            font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.15s;
         }
-        .btn-primary { background: #3f51b5; color: white; }
-        .btn-primary:hover { background: #303f9f; }
-        .btn-primary:disabled { background: #aaa; cursor: not-allowed; }
-        .btn-outline { background: white; color: #3f51b5; border: 1px solid #3f51b5; }
-        .btn-outline:hover { background: #e8eaf6; }
+        .btn-primary { background: linear-gradient(135deg, #3f51b5, #5c6bc0); color: white; }
+        .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 10px rgba(63,81,181,0.35); }
+        .btn-primary:disabled { background: #b0b3c9; cursor: not-allowed; transform: none; box-shadow: none; }
         .btn-ghost { background: transparent; color: #555; }
         .btn-ghost:hover { background: #eef; }
 
-        .stats-bar {
-            background: white; border-radius: 12px; padding: 18px 25px;
-            margin-bottom: 18px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-            display: flex; gap: 40px; flex-wrap: wrap; align-items: center;
+        /* ---------- KPI TILES ---------- */
+        .kpi-row {
+            display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 18px;
         }
-        .stat .value { font-size: 22px; font-weight: 700; color: #1a237e; }
-        .stat .label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
+        .kpi {
+            border-radius: 14px; padding: 18px 20px; color: white;
+            box-shadow: 0 4px 14px rgba(0,0,0,0.10);
+            position: relative; overflow: hidden;
+        }
+        .kpi::after {
+            content: ""; position: absolute; right: -30px; top: -30px;
+            width: 120px; height: 120px; border-radius: 50%;
+            background: rgba(255,255,255,0.10);
+        }
+        .kpi .label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; opacity: 0.85; }
+        .kpi .value { font-size: 28px; font-weight: 700; margin-top: 6px; letter-spacing: -0.3px; }
+        .kpi .sub   { font-size: 12px; margin-top: 6px; opacity: 0.85; }
+        .kpi.k-rev   { background: linear-gradient(135deg, #1a237e, #3949ab); }
+        .kpi.k-inv   { background: linear-gradient(135deg, #00695c, #00897b); }
+        .kpi.k-cust  { background: linear-gradient(135deg, #4527a0, #6a3ab2); }
+        .kpi.k-avg   { background: linear-gradient(135deg, #c2185b, #e91e63); }
 
+        /* ---------- CHART GRID ---------- */
+        .chart-grid {
+            display: grid; gap: 16px; margin-bottom: 18px;
+            grid-template-columns: repeat(12, 1fr);
+        }
+        .card {
+            background: white; border-radius: 14px;
+            box-shadow: 0 2px 10px rgba(26,35,126,0.08);
+            padding: 18px 20px; display: flex; flex-direction: column;
+        }
+        .card .head {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 10px;
+        }
+        .card h3 { font-size: 14px; color: #1a237e; font-weight: 700; letter-spacing: 0.2px; }
+        .card .head .meta { font-size: 11px; color: #888; }
+        .card .chart-wrap { position: relative; flex: 1; min-height: 240px; }
+        .card.span-12 { grid-column: span 12; }
+        .card.span-8  { grid-column: span 8; }
+        .card.span-6  { grid-column: span 6; }
+        .card.span-4  { grid-column: span 4; }
+
+        @media (max-width: 1100px) {
+            .kpi-row { grid-template-columns: repeat(2, 1fr); }
+            .card.span-8, .card.span-6, .card.span-4 { grid-column: span 12; }
+        }
+
+        /* ---------- TOGGLE ---------- */
+        .toggle { display: inline-flex; border: 1px solid #d6d8eb; border-radius: 8px; overflow: hidden; }
+        .toggle button {
+            padding: 5px 12px; border: none; background: white; color: #3f51b5;
+            font-size: 12px; font-weight: 600; cursor: pointer;
+        }
+        .toggle button.active { background: linear-gradient(135deg, #3f51b5, #5c6bc0); color: white; }
+        .toggle button + button { border-left: 1px solid #d6d8eb; }
+
+        /* ---------- TABLE ---------- */
         .panel {
-            background: white; border-radius: 12px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.08); overflow: hidden;
+            background: white; border-radius: 14px;
+            box-shadow: 0 2px 10px rgba(26,35,126,0.08); overflow: hidden;
             margin-bottom: 18px;
         }
         .panel-header {
-            padding: 14px 22px; border-bottom: 1px solid #eee;
+            padding: 14px 20px; border-bottom: 1px solid #eef;
             display: flex; justify-content: space-between; align-items: center;
         }
-        .panel-header h2 { font-size: 15px; color: #1a237e; font-weight: 600; }
-        .panel-header .count { font-size: 12px; color: #888; }
+        .panel-header h2 { font-size: 14px; color: #1a237e; font-weight: 700; }
+        .panel-header .meta { font-size: 12px; color: #888; }
+        .panel-header input.search {
+            padding: 7px 10px; border: 1px solid #d6d8eb; border-radius: 8px;
+            font-size: 13px; min-width: 200px;
+        }
 
-        .table-scroll { overflow-x: auto; max-height: 65vh; overflow-y: auto; }
+        .table-scroll { overflow-x: auto; max-height: 60vh; overflow-y: auto; }
         table { width: 100%; border-collapse: collapse; font-size: 13px; }
         th {
             position: sticky; top: 0;
-            background: #e8eaf6; color: #1a237e; padding: 11px 14px;
-            text-align: left; font-weight: 600; font-size: 11px;
+            background: #eef0fb; color: #1a237e; padding: 11px 14px;
+            text-align: left; font-weight: 700; font-size: 11px;
             text-transform: uppercase; letter-spacing: 0.3px;
             border-bottom: 2px solid #c5cae9; white-space: nowrap;
             cursor: pointer; user-select: none;
         }
-        th:hover { background: #c5cae9; }
-        th.sorted-asc::after { content: ' ▲'; font-size: 10px; }
+        th:hover { background: #dde0f4; }
+        th.sorted-asc::after  { content: ' ▲'; font-size: 10px; }
         th.sorted-desc::after { content: ' ▼'; font-size: 10px; }
-        td { padding: 9px 14px; border-bottom: 1px solid #f0f0f0; white-space: nowrap; }
+        td { padding: 9px 14px; border-bottom: 1px solid #f1f2f8; white-space: nowrap; }
         tr:hover { background: #f5f7ff; }
         tr.clickable { cursor: pointer; }
         td.num { text-align: right; font-variant-numeric: tabular-nums; }
         th.num { text-align: right; }
 
+        /* ---------- BREADCRUMB ---------- */
         .breadcrumb {
-            background: white; border-radius: 12px; padding: 12px 22px;
-            margin-bottom: 18px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            background: white; border-radius: 14px; padding: 12px 22px;
+            margin-bottom: 18px; box-shadow: 0 2px 10px rgba(26,35,126,0.08);
             display: flex; gap: 10px; align-items: center; font-size: 13px;
         }
-        .breadcrumb a { color: #3f51b5; cursor: pointer; text-decoration: none; }
+        .breadcrumb a { color: #3f51b5; cursor: pointer; text-decoration: none; font-weight: 600; }
         .breadcrumb a:hover { text-decoration: underline; }
         .breadcrumb .sep { color: #bbb; }
-        .breadcrumb .current { color: #333; font-weight: 600; }
+        .breadcrumb .current { color: #2c2f4a; font-weight: 700; }
 
-        .chart-card {
-            background: white; border-radius: 12px; padding: 20px 22px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.08); margin-bottom: 18px;
-        }
-        .chart-card h3 { font-size: 14px; color: #1a237e; margin-bottom: 12px; font-weight: 600; }
-        .chart-wrap { position: relative; height: 280px; }
-
-        .bucket-toggle { display: inline-flex; border: 1px solid #c5cae9; border-radius: 6px; overflow: hidden; }
-        .bucket-toggle button {
-            padding: 6px 14px; border: none; background: white; color: #3f51b5;
-            font-size: 12px; font-weight: 600; cursor: pointer;
-        }
-        .bucket-toggle button.active { background: #3f51b5; color: white; }
-        .bucket-toggle button + button { border-left: 1px solid #c5cae9; }
-
-        .empty { padding: 40px; text-align: center; color: #888; font-size: 14px; }
-
-        .signin-overlay {
-            position: fixed; inset: 0; background: rgba(26,35,126,0.92);
-            display: flex; align-items: center; justify-content: center;
-            z-index: 9999;
-        }
-        .signin-card {
-            background: white; border-radius: 16px; padding: 40px;
-            text-align: center; box-shadow: 0 8px 30px rgba(0,0,0,0.3);
-            max-width: 420px;
-        }
-        .signin-card h2 { color: #1a237e; margin-bottom: 10px; }
-        .signin-card p { color: #666; margin-bottom: 24px; font-size: 14px; }
-        .signin-card .big-btn {
-            background: #3f51b5; color: white; padding: 12px 30px;
-            border: none; border-radius: 8px; font-size: 15px; font-weight: 600;
-            cursor: pointer;
-        }
-        .signin-card .big-btn:hover { background: #303f9f; }
-
-        .progress {
-            position: fixed; bottom: 20px; right: 20px;
-            background: #1a237e; color: white; padding: 12px 18px;
-            border-radius: 8px; font-size: 13px; box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-            display: none; z-index: 100;
-        }
-
+        /* ---------- BADGES & MISC ---------- */
         .badge {
-            display: inline-block; padding: 2px 8px; border-radius: 10px;
-            font-size: 11px; font-weight: 600;
+            display: inline-block; padding: 3px 9px; border-radius: 11px;
+            font-size: 11px; font-weight: 700; letter-spacing: 0.2px;
         }
         .badge-open  { background: #fff3e0; color: #e65100; }
         .badge-paid  { background: #e8f5e9; color: #2e7d32; }
         .badge-draft { background: #eceff1; color: #455a64; }
+        .badge-other { background: #f3e5f5; color: #6a1b9a; }
+
+        .empty { padding: 40px; text-align: center; color: #888; font-size: 14px; }
+
+        /* ---------- SIGN-IN OVERLAY ---------- */
+        .signin-overlay {
+            position: fixed; inset: 0;
+            background: linear-gradient(135deg, rgba(26,35,126,0.96), rgba(57,73,171,0.96));
+            display: flex; align-items: center; justify-content: center;
+            z-index: 9999;
+        }
+        .signin-card {
+            background: white; border-radius: 18px; padding: 44px;
+            text-align: center; box-shadow: 0 12px 40px rgba(0,0,0,0.35);
+            max-width: 440px;
+        }
+        .signin-card h2 { color: #1a237e; margin-bottom: 10px; font-size: 24px; }
+        .signin-card p { color: #666; margin-bottom: 26px; font-size: 14px; }
+        .signin-card .big-btn {
+            background: linear-gradient(135deg, #3f51b5, #5c6bc0); color: white;
+            padding: 13px 32px; border: none; border-radius: 10px;
+            font-size: 15px; font-weight: 700; cursor: pointer;
+            box-shadow: 0 4px 14px rgba(63,81,181,0.35);
+        }
+        .signin-card .big-btn:hover { transform: translateY(-1px); }
+
+        /* ---------- PROGRESS ---------- */
+        .progress {
+            position: fixed; bottom: 20px; right: 20px;
+            background: #1a237e; color: white; padding: 12px 18px;
+            border-radius: 10px; font-size: 13px;
+            box-shadow: 0 4px 14px rgba(0,0,0,0.3);
+            display: none; z-index: 100;
+        }
     </style>
 </head>
 <body>
 
 <div class="header">
-    <h1>Sales Analytics</h1>
-    <div class="subtitle">Wiise / Business Central &mdash; <span id="userBadge">not signed in</span></div>
+    <div>
+        <h1>Sales Analytics</h1>
+        <div class="subtitle">Wiise / Business Central</div>
+    </div>
+    <div class="right">
+        <div id="userBadge">not signed in</div>
+        <div id="periodBadge" style="margin-top:2px;"></div>
+    </div>
 </div>
 
 <div class="container">
@@ -163,6 +222,17 @@
             <label for="toDate">To</label>
             <input type="date" id="toDate">
         </div>
+        <div class="field">
+            <label for="quickRange">Quick range</label>
+            <select id="quickRange">
+                <option value="">Custom</option>
+                <option value="30">Last 30 days</option>
+                <option value="90">Last 90 days</option>
+                <option value="180">Last 6 months</option>
+                <option value="365" selected>Last 12 months</option>
+                <option value="ytd">Year to date</option>
+            </select>
+        </div>
         <button class="btn btn-primary" id="loadBtn" disabled>Load sales</button>
         <div class="spacer"></div>
         <button class="btn btn-ghost" id="signOutBtn" style="display:none;">Sign out</button>
@@ -170,17 +240,78 @@
 
     <!-- DASHBOARD VIEW -->
     <div id="viewDashboard" style="display:none;">
-        <div class="stats-bar">
-            <div class="stat"><div class="value" id="statCustomers">&mdash;</div><div class="label">Customers</div></div>
-            <div class="stat"><div class="value" id="statInvoices">&mdash;</div><div class="label">Invoices</div></div>
-            <div class="stat"><div class="value" id="statRevenue">&mdash;</div><div class="label">Revenue (excl. tax)</div></div>
-            <div class="stat"><div class="value" id="statAvgInv">&mdash;</div><div class="label">Avg invoice</div></div>
+
+        <div class="kpi-row">
+            <div class="kpi k-rev">
+                <div class="label">Revenue (excl. tax)</div>
+                <div class="value" id="kpiRevenue">—</div>
+                <div class="sub"  id="kpiRevenueSub">&nbsp;</div>
+            </div>
+            <div class="kpi k-inv">
+                <div class="label">Invoices</div>
+                <div class="value" id="kpiInvoices">—</div>
+                <div class="sub"  id="kpiInvoicesSub">&nbsp;</div>
+            </div>
+            <div class="kpi k-cust">
+                <div class="label">Active customers</div>
+                <div class="value" id="kpiCustomers">—</div>
+                <div class="sub"  id="kpiCustomersSub">&nbsp;</div>
+            </div>
+            <div class="kpi k-avg">
+                <div class="label">Avg invoice value</div>
+                <div class="value" id="kpiAvg">—</div>
+                <div class="sub"  id="kpiAvgSub">&nbsp;</div>
+            </div>
+        </div>
+
+        <div class="chart-grid">
+            <div class="card span-12">
+                <div class="head">
+                    <h3>Revenue over time</h3>
+                    <div class="toggle" id="trendToggle">
+                        <button data-bucket="day">Day</button>
+                        <button data-bucket="week">Week</button>
+                        <button data-bucket="month" class="active">Month</button>
+                    </div>
+                </div>
+                <div class="chart-wrap" style="min-height:300px;"><canvas id="trendChart"></canvas></div>
+            </div>
+
+            <div class="card span-6">
+                <div class="head">
+                    <h3>Top 10 customers</h3>
+                    <div class="meta">click a bar to drill in</div>
+                </div>
+                <div class="chart-wrap" style="min-height:340px;"><canvas id="topCustomersChart"></canvas></div>
+            </div>
+
+            <div class="card span-6">
+                <div class="head">
+                    <h3>Top 10 items</h3>
+                    <div class="meta" id="topItemsMeta">by revenue</div>
+                </div>
+                <div class="chart-wrap" style="min-height:340px;"><canvas id="topItemsChart"></canvas></div>
+            </div>
+
+            <div class="card span-4">
+                <div class="head"><h3>Invoice status</h3></div>
+                <div class="chart-wrap"><canvas id="statusChart"></canvas></div>
+            </div>
+
+            <div class="card span-8">
+                <div class="head">
+                    <h3>Posting pattern by day of week</h3>
+                    <div class="meta">when do invoices post?</div>
+                </div>
+                <div class="chart-wrap"><canvas id="dowChart"></canvas></div>
+            </div>
         </div>
 
         <div class="panel">
             <div class="panel-header">
-                <h2>Customers</h2>
-                <div class="count" id="custCount"></div>
+                <h2>All customers</h2>
+                <input type="text" class="search" id="custSearch" placeholder="Search customer…">
+                <div class="meta" id="custCount"></div>
             </div>
             <div class="table-scroll">
                 <table id="customerTable">
@@ -207,30 +338,36 @@
             <span class="current" id="bcCustomer"></span>
         </div>
 
-        <div class="stats-bar">
-            <div class="stat"><div class="value" id="cdInvoices">&mdash;</div><div class="label">Invoices</div></div>
-            <div class="stat"><div class="value" id="cdRevenue">&mdash;</div><div class="label">Revenue (excl. tax)</div></div>
-            <div class="stat"><div class="value" id="cdAvg">&mdash;</div><div class="label">Avg invoice</div></div>
-            <div class="stat"><div class="value" id="cdFirst">&mdash;</div><div class="label">First invoice</div></div>
-            <div class="stat"><div class="value" id="cdLast">&mdash;</div><div class="label">Last invoice</div></div>
+        <div class="kpi-row">
+            <div class="kpi k-rev"><div class="label">Revenue</div><div class="value" id="cdRevenue">—</div></div>
+            <div class="kpi k-inv"><div class="label">Invoices</div><div class="value" id="cdInvoices">—</div></div>
+            <div class="kpi k-avg"><div class="label">Avg invoice</div><div class="value" id="cdAvg">—</div></div>
+            <div class="kpi k-cust"><div class="label">First → Last</div><div class="value" id="cdRange" style="font-size:16px;">—</div></div>
         </div>
 
-        <div class="chart-card">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-                <h3 style="margin:0;">Sales over time</h3>
-                <div class="bucket-toggle" id="bucketToggle">
-                    <button data-bucket="day">Day</button>
-                    <button data-bucket="week">Week</button>
-                    <button data-bucket="month" class="active">Month</button>
+        <div class="chart-grid">
+            <div class="card span-12">
+                <div class="head">
+                    <h3>Sales over time</h3>
+                    <div class="toggle" id="custBucketToggle">
+                        <button data-bucket="day">Day</button>
+                        <button data-bucket="week">Week</button>
+                        <button data-bucket="month" class="active">Month</button>
+                    </div>
                 </div>
+                <div class="chart-wrap" style="min-height:280px;"><canvas id="customerChart"></canvas></div>
             </div>
-            <div class="chart-wrap"><canvas id="customerChart"></canvas></div>
+
+            <div class="card span-12">
+                <div class="head"><h3>What this customer buys (top 15 items)</h3></div>
+                <div class="chart-wrap" style="min-height:340px;"><canvas id="customerItemsChart"></canvas></div>
+            </div>
         </div>
 
         <div class="panel">
             <div class="panel-header">
                 <h2>Invoices</h2>
-                <div class="count" id="cdInvCount"></div>
+                <div class="meta" id="cdInvCount"></div>
             </div>
             <div class="table-scroll">
                 <table id="customerInvoiceTable">
@@ -239,8 +376,8 @@
                             <th data-sort="number">Invoice No</th>
                             <th data-sort="postingDate">Posting date</th>
                             <th data-sort="status">Status</th>
-                            <th class="num" data-sort="totalAmountExcludingTax">Amount (excl. tax)</th>
-                            <th class="num" data-sort="totalAmountIncludingTax">Amount (incl. tax)</th>
+                            <th class="num" data-sort="totalAmountExcludingTax">Excl. tax</th>
+                            <th class="num" data-sort="totalAmountIncludingTax">Incl. tax</th>
                         </tr>
                     </thead>
                     <tbody></tbody>
@@ -259,18 +396,17 @@
             <span class="current" id="biInvoice"></span>
         </div>
 
-        <div class="stats-bar">
-            <div class="stat"><div class="value" id="invPostingDate">&mdash;</div><div class="label">Posting date</div></div>
-            <div class="stat"><div class="value" id="invStatus">&mdash;</div><div class="label">Status</div></div>
-            <div class="stat"><div class="value" id="invLineCount">&mdash;</div><div class="label">Lines</div></div>
-            <div class="stat"><div class="value" id="invExcl">&mdash;</div><div class="label">Excl. tax</div></div>
-            <div class="stat"><div class="value" id="invIncl">&mdash;</div><div class="label">Incl. tax</div></div>
+        <div class="kpi-row">
+            <div class="kpi k-rev"><div class="label">Posting date</div><div class="value" id="invPostingDate" style="font-size:18px;">—</div></div>
+            <div class="kpi k-inv"><div class="label">Status</div><div class="value" id="invStatus" style="font-size:18px;">—</div></div>
+            <div class="kpi k-cust"><div class="label">Excl. tax</div><div class="value" id="invExcl">—</div></div>
+            <div class="kpi k-avg"><div class="label">Incl. tax</div><div class="value" id="invIncl">—</div></div>
         </div>
 
         <div class="panel">
             <div class="panel-header">
                 <h2>Lines</h2>
-                <div class="count" id="invLineCountSmall"></div>
+                <div class="meta" id="invLineCountSmall"></div>
             </div>
             <div class="table-scroll">
                 <table id="invoiceLineTable">
@@ -281,8 +417,8 @@
                             <th>Description</th>
                             <th class="num">Qty</th>
                             <th class="num">Unit price</th>
-                            <th class="num">Line discount</th>
-                            <th class="num">Amount (excl. tax)</th>
+                            <th class="num">Discount</th>
+                            <th class="num">Excl. tax</th>
                         </tr>
                     </thead>
                     <tbody></tbody>
@@ -409,37 +545,49 @@ function hideBCProgress() {
 // ============================================================
 // SALES DATA FETCHERS
 // ============================================================
-async function fetchSalesInvoices(fromISO, toISO) {
+async function fetchSalesInvoicesWithLines(fromISO, toISO) {
     const compId = await bcGetCompanyId();
     const filter = "postingDate ge " + fromISO + " and postingDate le " + toISO;
-    const select = "id,number,invoiceDate,postingDate,customerId,customerNumber,customerName,totalAmountExcludingTax,totalAmountIncludingTax,currencyCode,status";
-    const url = BC_API_URL + "/companies(" + compId + ")/salesInvoices?$filter=" + encodeURIComponent(filter) + "&$select=" + select + "&$top=10000";
-    return bcFetchAll(url, "Sales invoices");
+    // $expand brings in line-level data on the same fetch — needed for top-items analytics.
+    const url = BC_API_URL + "/companies(" + compId + ")/salesInvoices?$filter=" + encodeURIComponent(filter)
+              + "&$expand=salesInvoiceLines&$top=2000";
+    return bcFetchAll(url, "Sales invoices + lines");
 }
 
 async function fetchInvoiceLines(invoiceId) {
+    // Fallback for invoice detail view if line data wasn't expanded.
     const compId = await bcGetCompanyId();
     const url = BC_API_URL + "/companies(" + compId + ")/salesInvoices(" + invoiceId + ")/salesInvoiceLines?$top=10000";
     return bcFetchAll(url, "Invoice lines");
 }
 
 // ============================================================
-// APP STATE
+// STATE
 // ============================================================
 const state = {
     invoices: [],
-    byCustomer: new Map(),   // customerNumber -> { customerNumber, customerName, invoices: [], revenue, count, first, last }
+    byCustomer: new Map(),
+    byItem: new Map(),
     currentCustomer: null,
     currentInvoice: null,
-    bucket: "month",
-    chart: null,
-    sort: { table: "customers", key: "revenue", dir: "desc" },
+    dashboardBucket: "month",
+    customerBucket: "month",
+    sort: { key: "revenue", dir: "desc" },
+    custFilter: "",
+    charts: {},   // keep references so we can destroy/recreate
 };
 
 // ============================================================
 // FORMATTING
 // ============================================================
 const fmtMoney = (n) => {
+    if (n == null || isNaN(n)) return "—";
+    const abs = Math.abs(n);
+    if (abs >= 1_000_000) return "$" + (n / 1_000_000).toFixed(2) + "M";
+    if (abs >= 10_000)    return "$" + (n / 1_000).toFixed(0) + "k";
+    return new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD", maximumFractionDigits: 0 }).format(n);
+};
+const fmtMoneyFull = (n) => {
     if (n == null || isNaN(n)) return "—";
     return new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD", maximumFractionDigits: 0 }).format(n);
 };
@@ -461,8 +609,14 @@ function statusBadge(s) {
     if (k === "paid")  return '<span class="badge badge-paid">Paid</span>';
     if (k === "open")  return '<span class="badge badge-open">Open</span>';
     if (k === "draft") return '<span class="badge badge-draft">Draft</span>';
-    return '<span class="badge badge-draft">' + (s || "—") + '</span>';
+    return '<span class="badge badge-other">' + escapeHtml(s || "—") + '</span>';
 }
+
+function escapeHtml(s) {
+    if (s == null) return "";
+    return String(s).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+}
+function escapeAttr(s) { return escapeHtml(s); }
 
 // ============================================================
 // AGGREGATION
@@ -497,6 +651,28 @@ function aggregateByCustomer(invoices) {
     return map;
 }
 
+function aggregateByItem(invoices) {
+    const map = new Map();
+    for (const inv of invoices) {
+        const lines = inv.salesInvoiceLines || [];
+        for (const ln of lines) {
+            // Skip non-item lines (comments, G/L, etc.) unless we still want them — group blanks together
+            const key = ln.lineObjectNumber || ln.itemId || ("(non-item) " + (ln.lineType || "?"));
+            let g = map.get(key);
+            if (!g) {
+                g = { number: ln.lineObjectNumber || "", description: ln.description || "", revenue: 0, qty: 0, lineCount: 0 };
+                map.set(key, g);
+            }
+            // prefer the most recent non-empty description
+            if (ln.description) g.description = ln.description;
+            g.revenue   += num(ln.amountExcludingTax);
+            g.qty       += num(ln.quantity);
+            g.lineCount += 1;
+        }
+    }
+    return map;
+}
+
 function bucketKey(iso, bucket) {
     const d = new Date(iso);
     if (isNaN(d)) return iso || "(unknown)";
@@ -504,13 +680,11 @@ function bucketKey(iso, bucket) {
         return d.toISOString().slice(0, 10);
     }
     if (bucket === "week") {
-        // ISO week starting Monday
         const tmp = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
         const day = tmp.getUTCDay() || 7;
         tmp.setUTCDate(tmp.getUTCDate() - day + 1);
-        return tmp.toISOString().slice(0, 10); // Monday of that week
+        return tmp.toISOString().slice(0, 10);
     }
-    // month
     return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
 }
 
@@ -526,6 +700,31 @@ function bucketInvoices(invoices, bucket) {
     return [...map.values()].sort((a, b) => a.key < b.key ? -1 : 1);
 }
 
+function statusCounts(invoices) {
+    const map = new Map();
+    for (const inv of invoices) {
+        const k = inv.status || "(unknown)";
+        map.set(k, (map.get(k) || 0) + 1);
+    }
+    return map;
+}
+
+function dayOfWeekCounts(invoices) {
+    // 0=Sun..6=Sat in JS — return arrays in Mon-Sun order to match AU week
+    const rev = [0, 0, 0, 0, 0, 0, 0]; // Mon..Sun
+    const cnt = [0, 0, 0, 0, 0, 0, 0];
+    for (const inv of invoices) {
+        if (!inv.postingDate) continue;
+        const d = new Date(inv.postingDate);
+        if (isNaN(d)) continue;
+        const js = d.getUTCDay(); // 0..6
+        const idx = (js + 6) % 7; // Mon=0..Sun=6
+        rev[idx] += num(inv.totalAmountExcludingTax);
+        cnt[idx] += 1;
+    }
+    return { rev, cnt };
+}
+
 // ============================================================
 // VIEWS
 // ============================================================
@@ -536,22 +735,217 @@ function showView(name) {
     window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
+function setPeriodBadge() {
+    const from = document.getElementById("fromDate").value;
+    const to   = document.getElementById("toDate").value;
+    document.getElementById("periodBadge").textContent = from && to ? (fmtDate(from) + " → " + fmtDate(to)) : "";
+}
+
 function renderDashboard() {
     const groups = [...state.byCustomer.values()];
+    const items  = [...state.byItem.values()];
     const totalRev = groups.reduce((s, g) => s + g.revenue, 0);
     const totalInv = state.invoices.length;
-    document.getElementById("statCustomers").textContent = fmtInt(groups.length);
-    document.getElementById("statInvoices").textContent  = fmtInt(totalInv);
-    document.getElementById("statRevenue").textContent   = fmtMoney(totalRev);
-    document.getElementById("statAvgInv").textContent    = totalInv ? fmtMoney(totalRev / totalInv) : "—";
 
+    document.getElementById("kpiRevenue").textContent  = fmtMoneyFull(totalRev);
+    document.getElementById("kpiInvoices").textContent = fmtInt(totalInv);
+    document.getElementById("kpiCustomers").textContent = fmtInt(groups.length);
+    document.getElementById("kpiAvg").textContent      = totalInv ? fmtMoneyFull(totalRev / totalInv) : "—";
+
+    document.getElementById("kpiRevenueSub").textContent  = "total excl. tax";
+    document.getElementById("kpiInvoicesSub").textContent = "posted in period";
+    document.getElementById("kpiCustomersSub").textContent = "billed in period";
+    document.getElementById("kpiAvgSub").textContent      = "per invoice";
+
+    renderTrendChart();
+    renderTopCustomersChart();
+    renderTopItemsChart();
+    renderStatusChart();
+    renderDayOfWeekChart();
     sortAndRenderCustomerTable();
-    document.getElementById("custCount").textContent = groups.length + " customers";
+
+    document.getElementById("custCount").textContent = groups.length + " customers · " + items.length + " distinct items";
     showView("Dashboard");
 }
 
+function destroyChart(key) {
+    if (state.charts[key]) { state.charts[key].destroy(); state.charts[key] = null; }
+}
+
+function renderTrendChart() {
+    destroyChart("trend");
+    const buckets = bucketInvoices(state.invoices, state.dashboardBucket);
+    const ctx = document.getElementById("trendChart").getContext("2d");
+    state.charts.trend = new Chart(ctx, {
+        type: "line",
+        data: {
+            labels: buckets.map(b => b.key),
+            datasets: [{
+                label: "Revenue (excl. tax)",
+                data: buckets.map(b => b.revenue),
+                borderColor: "#3f51b5",
+                backgroundColor: "rgba(63,81,181,0.15)",
+                fill: true, tension: 0.3, pointRadius: 3, pointHoverRadius: 6,
+                borderWidth: 2,
+            }]
+        },
+        options: chartBase({
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: (c) => fmtMoneyFull(c.parsed.y) + " (" + buckets[c.dataIndex].count + " inv)"
+                    }
+                }
+            },
+            scales: { y: { ticks: { callback: v => fmtMoney(v) } } }
+        })
+    });
+}
+
+function renderTopCustomersChart() {
+    destroyChart("topCustomers");
+    const top = [...state.byCustomer.values()].sort((a, b) => b.revenue - a.revenue).slice(0, 10);
+    const ctx = document.getElementById("topCustomersChart").getContext("2d");
+    state.charts.topCustomers = new Chart(ctx, {
+        type: "bar",
+        data: {
+            labels: top.map(g => truncate(g.customerName || g.customerNumber, 28)),
+            datasets: [{
+                data: top.map(g => g.revenue),
+                backgroundColor: top.map((_, i) => barShade("#3f51b5", i / 10)),
+                borderRadius: 4,
+            }]
+        },
+        options: chartBase({
+            indexAxis: "y",
+            plugins: {
+                legend: { display: false },
+                tooltip: { callbacks: { label: c => fmtMoneyFull(c.parsed.x) + "  (" + top[c.dataIndex].invoiceCount + " invoices)" } }
+            },
+            scales: { x: { ticks: { callback: v => fmtMoney(v) } } },
+            onClick: (_, els) => {
+                if (!els.length) return;
+                const g = top[els[0].index];
+                showCustomer(g.customerNumber);
+            }
+        })
+    });
+}
+
+function renderTopItemsChart() {
+    destroyChart("topItems");
+    const top = [...state.byItem.values()]
+        .filter(it => it.revenue > 0)
+        .sort((a, b) => b.revenue - a.revenue).slice(0, 10);
+    const ctx = document.getElementById("topItemsChart").getContext("2d");
+    state.charts.topItems = new Chart(ctx, {
+        type: "bar",
+        data: {
+            labels: top.map(it => truncate((it.number ? it.number + " — " : "") + (it.description || ""), 30)),
+            datasets: [{
+                data: top.map(it => it.revenue),
+                backgroundColor: top.map((_, i) => barShade("#00897b", i / 10)),
+                borderRadius: 4,
+            }]
+        },
+        options: chartBase({
+            indexAxis: "y",
+            plugins: {
+                legend: { display: false },
+                tooltip: { callbacks: { label: c => fmtMoneyFull(c.parsed.x) + "  (qty " + fmtInt(top[c.dataIndex].qty) + ")" } }
+            },
+            scales: { x: { ticks: { callback: v => fmtMoney(v) } } }
+        })
+    });
+}
+
+function renderStatusChart() {
+    destroyChart("status");
+    const sc = statusCounts(state.invoices);
+    const labels = [...sc.keys()];
+    const data   = labels.map(k => sc.get(k));
+    const palette = labels.map(k => {
+        const kk = (k || "").toLowerCase();
+        if (kk === "paid")  return "#2e7d32";
+        if (kk === "open")  return "#e65100";
+        if (kk === "draft") return "#607d8b";
+        return "#6a1b9a";
+    });
+    const ctx = document.getElementById("statusChart").getContext("2d");
+    state.charts.status = new Chart(ctx, {
+        type: "doughnut",
+        data: { labels, datasets: [{ data, backgroundColor: palette, borderWidth: 0 }] },
+        options: chartBase({
+            cutout: "62%",
+            plugins: {
+                legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } },
+                tooltip: { callbacks: { label: c => c.label + ": " + fmtInt(c.parsed) } }
+            }
+        })
+    });
+}
+
+function renderDayOfWeekChart() {
+    destroyChart("dow");
+    const { rev, cnt } = dayOfWeekCounts(state.invoices);
+    const labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    const ctx = document.getElementById("dowChart").getContext("2d");
+    state.charts.dow = new Chart(ctx, {
+        type: "bar",
+        data: {
+            labels,
+            datasets: [
+                { label: "Revenue", data: rev, backgroundColor: "#3f51b5", borderRadius: 4, yAxisID: "y" },
+                { label: "Invoices", data: cnt, type: "line", borderColor: "#e91e63", backgroundColor: "rgba(233,30,99,0.15)",
+                  fill: false, tension: 0.3, yAxisID: "y1", borderWidth: 2, pointRadius: 3 }
+            ]
+        },
+        options: chartBase({
+            plugins: {
+                legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } },
+                tooltip: { callbacks: { label: c => c.dataset.label + ": " + (c.dataset.yAxisID === "y" ? fmtMoneyFull(c.parsed.y) : fmtInt(c.parsed.y)) } }
+            },
+            scales: {
+                y:  { position: "left",  ticks: { callback: v => fmtMoney(v) } },
+                y1: { position: "right", grid: { drawOnChartArea: false }, ticks: { callback: v => fmtInt(v) } }
+            }
+        })
+    });
+}
+
+function chartBase(opts) {
+    return Object.assign({
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 400 },
+    }, opts);
+}
+
+function barShade(hex, t) {
+    // t = 0..1 — darker at top of list, lighter as t grows
+    const c = hex.replace("#", "");
+    const r = parseInt(c.slice(0, 2), 16);
+    const g = parseInt(c.slice(2, 4), 16);
+    const b = parseInt(c.slice(4, 6), 16);
+    const mix = 0.55 + (1 - t) * 0.45; // 0.55..1.0
+    const rr = Math.round(255 - (255 - r) * mix);
+    const gg = Math.round(255 - (255 - g) * mix);
+    const bb = Math.round(255 - (255 - b) * mix);
+    return "rgb(" + rr + "," + gg + "," + bb + ")";
+}
+
+function truncate(s, n) {
+    s = s || "";
+    return s.length > n ? s.slice(0, n - 1) + "…" : s;
+}
+
 function sortAndRenderCustomerTable() {
-    const groups = [...state.byCustomer.values()];
+    let groups = [...state.byCustomer.values()];
+    if (state.custFilter) {
+        const q = state.custFilter.toLowerCase();
+        groups = groups.filter(g => (g.customerName || "").toLowerCase().includes(q) || (g.customerNumber || "").toLowerCase().includes(q));
+    }
     const key = state.sort.key;
     const dir = state.sort.dir === "asc" ? 1 : -1;
     groups.sort((a, b) => {
@@ -567,11 +961,11 @@ function sortAndRenderCustomerTable() {
             <td>${escapeHtml(g.customerNumber)}</td>
             <td>${escapeHtml(g.customerName)}</td>
             <td class="num">${fmtInt(g.invoiceCount)}</td>
-            <td class="num">${fmtMoney(g.revenue)}</td>
+            <td class="num">${fmtMoneyFull(g.revenue)}</td>
             <td class="num">${fmtDate(g.lastInvoiceDate)}</td>
         </tr>
-    `).join("");
-    // mark sorted column
+    `).join("") || '<tr><td colspan="5" class="empty">No matching customers.</td></tr>';
+
     document.querySelectorAll("#customerTable th").forEach(th => {
         th.classList.remove("sorted-asc", "sorted-desc");
         if (th.dataset.sort === state.sort.key) {
@@ -580,66 +974,88 @@ function sortAndRenderCustomerTable() {
     });
 }
 
+// ============================================================
+// CUSTOMER DETAIL
+// ============================================================
 function showCustomer(custNumber) {
     const g = state.byCustomer.get(custNumber);
     if (!g) return;
     state.currentCustomer = g;
+
     document.getElementById("bcCustomer").textContent = (g.customerNumber ? g.customerNumber + " — " : "") + g.customerName;
-
+    document.getElementById("cdRevenue").textContent  = fmtMoneyFull(g.revenue);
     document.getElementById("cdInvoices").textContent = fmtInt(g.invoiceCount);
-    document.getElementById("cdRevenue").textContent  = fmtMoney(g.revenue);
-    document.getElementById("cdAvg").textContent      = fmtMoney(g.revenue / g.invoiceCount);
-    document.getElementById("cdFirst").textContent    = fmtDate(g.firstInvoiceDate);
-    document.getElementById("cdLast").textContent     = fmtDate(g.lastInvoiceDate);
+    document.getElementById("cdAvg").textContent      = fmtMoneyFull(g.revenue / g.invoiceCount);
+    document.getElementById("cdRange").textContent    = fmtDate(g.firstInvoiceDate) + " → " + fmtDate(g.lastInvoiceDate);
 
-    renderCustomerChart();
+    renderCustomerTrendChart();
+    renderCustomerItemsChart();
     renderCustomerInvoiceTable();
 
     document.getElementById("cdInvCount").textContent = g.invoices.length + " invoices";
     showView("Customer");
 }
 
-function renderCustomerChart() {
-    const g = state.currentCustomer;
-    if (!g) return;
-    const buckets = bucketInvoices(g.invoices, state.bucket);
-    const labels = buckets.map(b => b.key);
-    const data   = buckets.map(b => b.revenue);
-
-    if (state.chart) state.chart.destroy();
+function renderCustomerTrendChart() {
+    destroyChart("customer");
+    const g = state.currentCustomer; if (!g) return;
+    const buckets = bucketInvoices(g.invoices, state.customerBucket);
     const ctx = document.getElementById("customerChart").getContext("2d");
-    state.chart = new Chart(ctx, {
+    state.charts.customer = new Chart(ctx, {
         type: "bar",
         data: {
-            labels,
+            labels: buckets.map(b => b.key),
             datasets: [{
-                label: "Revenue (excl. tax)",
-                data,
+                label: "Revenue",
+                data: buckets.map(b => b.revenue),
                 backgroundColor: "#3f51b5",
                 borderRadius: 4,
             }]
         },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
+        options: chartBase({
             plugins: {
                 legend: { display: false },
-                tooltip: {
-                    callbacks: {
-                        label: (ctx) => fmtMoney(ctx.parsed.y) + "  (" + buckets[ctx.dataIndex].count + " inv)"
-                    }
-                }
+                tooltip: { callbacks: { label: c => fmtMoneyFull(c.parsed.y) + " (" + buckets[c.dataIndex].count + " inv)" } }
             },
-            scales: {
-                y: { ticks: { callback: (v) => fmtMoney(v) } }
-            }
-        }
+            scales: { y: { ticks: { callback: v => fmtMoney(v) } } }
+        })
+    });
+}
+
+function renderCustomerItemsChart() {
+    destroyChart("customerItems");
+    const g = state.currentCustomer; if (!g) return;
+    const itemMap = aggregateByItem(g.invoices);
+    const top = [...itemMap.values()].filter(it => it.revenue > 0).sort((a, b) => b.revenue - a.revenue).slice(0, 15);
+    const ctx = document.getElementById("customerItemsChart").getContext("2d");
+    if (!top.length) {
+        if (state.charts.customerItems) { state.charts.customerItems.destroy(); state.charts.customerItems = null; }
+        ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+        return;
+    }
+    state.charts.customerItems = new Chart(ctx, {
+        type: "bar",
+        data: {
+            labels: top.map(it => truncate((it.number ? it.number + " — " : "") + (it.description || ""), 36)),
+            datasets: [{
+                data: top.map(it => it.revenue),
+                backgroundColor: top.map((_, i) => barShade("#00897b", i / 15)),
+                borderRadius: 4,
+            }]
+        },
+        options: chartBase({
+            indexAxis: "y",
+            plugins: {
+                legend: { display: false },
+                tooltip: { callbacks: { label: c => fmtMoneyFull(c.parsed.x) + "  (qty " + fmtInt(top[c.dataIndex].qty) + ")" } }
+            },
+            scales: { x: { ticks: { callback: v => fmtMoney(v) } } }
+        })
     });
 }
 
 function renderCustomerInvoiceTable() {
-    const g = state.currentCustomer;
-    if (!g) return;
+    const g = state.currentCustomer; if (!g) return;
     const rows = [...g.invoices].sort((a, b) => (a.postingDate < b.postingDate) ? 1 : -1);
     const tbody = document.querySelector("#customerInvoiceTable tbody");
     tbody.innerHTML = rows.map(inv => `
@@ -653,6 +1069,9 @@ function renderCustomerInvoiceTable() {
     `).join("");
 }
 
+// ============================================================
+// INVOICE DETAIL
+// ============================================================
 async function showInvoice(invoiceId) {
     const g = state.currentCustomer;
     const inv = g && g.invoices.find(i => i.id === invoiceId);
@@ -661,22 +1080,21 @@ async function showInvoice(invoiceId) {
 
     document.getElementById("biCustomer").textContent = (g.customerNumber ? g.customerNumber + " — " : "") + g.customerName;
     document.getElementById("biInvoice").textContent  = inv.number;
-
     document.getElementById("invPostingDate").textContent = fmtDate(inv.postingDate);
     document.getElementById("invStatus").innerHTML        = statusBadge(inv.status);
     document.getElementById("invExcl").textContent        = fmtMoney2(num(inv.totalAmountExcludingTax));
     document.getElementById("invIncl").textContent        = fmtMoney2(num(inv.totalAmountIncludingTax));
-    document.getElementById("invLineCount").textContent   = "…";
-    document.getElementById("invLineCountSmall").textContent = "Loading…";
 
     const tbody = document.querySelector("#invoiceLineTable tbody");
+    document.getElementById("invLineCountSmall").textContent = "Loading…";
     tbody.innerHTML = '<tr><td colspan="7" class="empty">Loading invoice lines…</td></tr>';
     showView("Invoice");
 
     try {
-        const lines = await fetchInvoiceLines(invoiceId);
+        // Use already-expanded lines if present; otherwise fetch.
+        let lines = inv.salesInvoiceLines;
+        if (!lines || !lines.length) lines = await fetchInvoiceLines(invoiceId);
         hideBCProgress();
-        document.getElementById("invLineCount").textContent = lines.length;
         document.getElementById("invLineCountSmall").textContent = lines.length + " lines";
         tbody.innerHTML = lines.map(l => `
             <tr>
@@ -688,8 +1106,7 @@ async function showInvoice(invoiceId) {
                 <td class="num">${fmtMoney2(num(l.discountAmount))}</td>
                 <td class="num">${fmtMoney2(num(l.amountExcludingTax))}</td>
             </tr>
-        `).join("");
-        if (!lines.length) tbody.innerHTML = '<tr><td colspan="7" class="empty">No lines on this invoice.</td></tr>';
+        `).join("") || '<tr><td colspan="7" class="empty">No lines on this invoice.</td></tr>';
     } catch (err) {
         hideBCProgress();
         tbody.innerHTML = '<tr><td colspan="7" class="empty" style="color:#c62828;">' + escapeHtml(err.message || String(err)) + '</td></tr>';
@@ -697,23 +1114,22 @@ async function showInvoice(invoiceId) {
 }
 
 // ============================================================
-// HTML ESCAPE
-// ============================================================
-function escapeHtml(s) {
-    if (s == null) return "";
-    return String(s).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
-}
-function escapeAttr(s) { return escapeHtml(s); }
-
-// ============================================================
 // EVENT WIRING
 // ============================================================
-function setDefaultDates() {
+function applyQuickRange(value) {
     const today = new Date();
-    const past  = new Date(today);
-    past.setFullYear(today.getFullYear() - 1);
-    document.getElementById("fromDate").value = past.toISOString().slice(0, 10);
-    document.getElementById("toDate").value   = today.toISOString().slice(0, 10);
+    const toEl = document.getElementById("toDate");
+    const fromEl = document.getElementById("fromDate");
+    if (value === "ytd") {
+        fromEl.value = today.getFullYear() + "-01-01";
+        toEl.value   = today.toISOString().slice(0, 10);
+    } else if (value) {
+        const days = parseInt(value, 10);
+        const past = new Date(today); past.setDate(today.getDate() - days);
+        fromEl.value = past.toISOString().slice(0, 10);
+        toEl.value   = today.toISOString().slice(0, 10);
+    }
+    setPeriodBadge();
 }
 
 async function handleSignIn() {
@@ -740,8 +1156,10 @@ async function handleLoad() {
     btn.disabled = true;
     btn.textContent = "Loading…";
     try {
-        state.invoices = await fetchSalesInvoices(from, to);
+        state.invoices = await fetchSalesInvoicesWithLines(from, to);
         state.byCustomer = aggregateByCustomer(state.invoices);
+        state.byItem     = aggregateByItem(state.invoices);
+        setPeriodBadge();
         renderDashboard();
     } catch (err) {
         alert("Load failed: " + (err.message || err));
@@ -756,23 +1174,29 @@ function wireEvents() {
     document.getElementById("signInBtn").addEventListener("click", handleSignIn);
     document.getElementById("loadBtn").addEventListener("click", handleLoad);
 
+    document.getElementById("quickRange").addEventListener("change", e => {
+        if (e.target.value) applyQuickRange(e.target.value);
+    });
+    ["fromDate", "toDate"].forEach(id => {
+        document.getElementById(id).addEventListener("change", () => {
+            document.getElementById("quickRange").value = "";
+            setPeriodBadge();
+        });
+    });
+
     document.getElementById("signOutBtn").addEventListener("click", () => {
         if (bcMsalInstance) bcMsalInstance.logoutPopup().catch(() => {});
         location.reload();
     });
 
-    // Customer table click
-    document.querySelector("#customerTable tbody").addEventListener("click", (e) => {
-        const tr = e.target.closest("tr.clickable");
-        if (!tr) return;
+    document.querySelector("#customerTable tbody").addEventListener("click", e => {
+        const tr = e.target.closest("tr.clickable"); if (!tr) return;
         showCustomer(tr.dataset.cust);
     });
 
-    // Customer table sort
     document.querySelectorAll("#customerTable th").forEach(th => {
         th.addEventListener("click", () => {
-            const key = th.dataset.sort;
-            if (!key) return;
+            const key = th.dataset.sort; if (!key) return;
             if (state.sort.key === key) {
                 state.sort.dir = state.sort.dir === "asc" ? "desc" : "asc";
             } else {
@@ -783,24 +1207,33 @@ function wireEvents() {
         });
     });
 
-    // Invoice table click
-    document.querySelector("#customerInvoiceTable tbody").addEventListener("click", (e) => {
-        const tr = e.target.closest("tr.clickable");
-        if (!tr) return;
+    document.getElementById("custSearch").addEventListener("input", e => {
+        state.custFilter = e.target.value;
+        sortAndRenderCustomerTable();
+    });
+
+    document.querySelector("#customerInvoiceTable tbody").addEventListener("click", e => {
+        const tr = e.target.closest("tr.clickable"); if (!tr) return;
         showInvoice(tr.dataset.inv);
     });
 
-    // Bucket toggle
-    document.querySelectorAll("#bucketToggle button").forEach(btn => {
+    document.querySelectorAll("#trendToggle button").forEach(btn => {
         btn.addEventListener("click", () => {
-            document.querySelectorAll("#bucketToggle button").forEach(b => b.classList.remove("active"));
+            document.querySelectorAll("#trendToggle button").forEach(b => b.classList.remove("active"));
             btn.classList.add("active");
-            state.bucket = btn.dataset.bucket;
-            renderCustomerChart();
+            state.dashboardBucket = btn.dataset.bucket;
+            renderTrendChart();
+        });
+    });
+    document.querySelectorAll("#custBucketToggle button").forEach(btn => {
+        btn.addEventListener("click", () => {
+            document.querySelectorAll("#custBucketToggle button").forEach(b => b.classList.remove("active"));
+            btn.classList.add("active");
+            state.customerBucket = btn.dataset.bucket;
+            renderCustomerTrendChart();
         });
     });
 
-    // Breadcrumb nav
     document.getElementById("bcHome").addEventListener("click", () => showView("Dashboard"));
     document.getElementById("biHome").addEventListener("click", () => showView("Dashboard"));
     document.getElementById("biCustomer").addEventListener("click", () => {
@@ -811,9 +1244,8 @@ function wireEvents() {
 // ============================================================
 // BOOT
 // ============================================================
-setDefaultDates();
+applyQuickRange("365");
 wireEvents();
-// If a session-cached account exists, auto-skip the overlay
 (async () => {
     try {
         initMsal();
