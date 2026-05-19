@@ -394,6 +394,24 @@
                         </table>
                     </div>
                 </div>
+                <div class="panel">
+                    <div class="panel-header"><h2>Drill-down · Document Type → Document No → Item line</h2><div class="meta">click ▸ to expand</div></div>
+                    <div class="table-scroll">
+                        <table id="customerDrillTable">
+                            <thead><tr>
+                                <th>Group / Document / Item</th>
+                                <th class="num">Sales (LCY)</th>
+                                <th class="num">Qty</th>
+                                <th class="num">Adj Cost</th>
+                                <th class="num">Cost Non-Inv</th>
+                                <th class="num">Adj Profit</th>
+                                <th class="num">Margin %</th>
+                                <th class="num">% of GT</th>
+                            </tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
 
             <!-- DRILL: Item × Customer -->
@@ -588,6 +606,24 @@
                         </table>
                     </div>
                 </div>
+                <div class="panel">
+                    <div class="panel-header"><h2>Drill-down · Branch → Document Type → Document No → Item line</h2><div class="meta">click ▸ to expand</div></div>
+                    <div class="table-scroll">
+                        <table id="branchDrillTable">
+                            <thead><tr>
+                                <th>Branch / Document / Item</th>
+                                <th class="num">Sales (LCY)</th>
+                                <th class="num">Qty</th>
+                                <th class="num">Adj Cost</th>
+                                <th class="num">Cost Non-Inv</th>
+                                <th class="num">Adj Profit</th>
+                                <th class="num">Margin %</th>
+                                <th class="num">% of GT</th>
+                            </tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
             </section>
 
             <!-- TAB: Salesperson Sales -->
@@ -611,6 +647,24 @@
                                 <th class="num">GP %</th>
                                 <th class="num">Qty</th>
                                 <th class="num">Customers</th>
+                            </tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="panel">
+                    <div class="panel-header"><h2>Drill-down · Salesperson → Customer → Document Type → Document No → Item line</h2><div class="meta">click ▸ to expand</div></div>
+                    <div class="table-scroll">
+                        <table id="salespersonDrillTable">
+                            <thead><tr>
+                                <th>Salesperson / Customer / Document / Item</th>
+                                <th class="num">Sales (LCY)</th>
+                                <th class="num">Qty</th>
+                                <th class="num">Adj Cost</th>
+                                <th class="num">Cost Non-Inv</th>
+                                <th class="num">Adj Profit</th>
+                                <th class="num">Margin %</th>
+                                <th class="num">% of GT</th>
                             </tr></thead>
                             <tbody></tbody>
                         </table>
@@ -1014,6 +1068,8 @@ const state = {
     expandedMatrix: new Set(), // keys of expanded matrix rows
     costByInvoiceNo: new Map(), // invoice.number -> cost total (abs)
     costByItemInvoiceNo: new Map(), // (invoice.number||"") + "|" + itemNumber -> cost
+    costNonInvByInvoiceNo: new Map(),
+    costNonInvByItemInvoiceNo: new Map(),
     byCustomer: new Map(), byItem: new Map(), byLocation: new Map(), bySalesperson: new Map(),
     currentCustomer: null, currentInvoice: null, currentItem: null,
     dashboardBucket: "month", customerBucket: "month", ciBucket: "month",
@@ -1111,6 +1167,8 @@ function monthKey(iso) {
 function buildCostMaps(iles) {
     state.costByInvoiceNo.clear();
     state.costByItemInvoiceNo.clear();
+    state.costNonInvByInvoiceNo.clear();
+    state.costNonInvByItemInvoiceNo.clear();
     for (const e of iles) {
         // We want sales-side invoice entries (not credit memos for now)
         const docType = e.documentType || "";
@@ -1118,9 +1176,12 @@ function buildCostMaps(iles) {
         const docNo = e.documentNumber || "";
         if (!docNo) continue;
         const cost = Math.abs(num(e.costAmountActual));
+        const costNI = Math.abs(num(e.costAmountNonInvtbl));
         state.costByInvoiceNo.set(docNo, (state.costByInvoiceNo.get(docNo) || 0) + cost);
+        state.costNonInvByInvoiceNo.set(docNo, (state.costNonInvByInvoiceNo.get(docNo) || 0) + costNI);
         const itemKey = docNo + "|" + (e.itemNumber || "");
         state.costByItemInvoiceNo.set(itemKey, (state.costByItemInvoiceNo.get(itemKey) || 0) + cost);
+        state.costNonInvByItemInvoiceNo.set(itemKey, (state.costNonInvByItemInvoiceNo.get(itemKey) || 0) + costNI);
     }
 }
 function invoiceCost(inv) {
@@ -1132,6 +1193,9 @@ function invoiceGP(inv) {
 }
 function lineCost(invNumber, itemNumber) {
     return state.costByItemInvoiceNo.get((invNumber || "") + "|" + (itemNumber || "")) || 0;
+}
+function lineCostNonInv(invNumber, itemNumber) {
+    return state.costNonInvByItemInvoiceNo.get((invNumber || "") + "|" + (itemNumber || "")) || 0;
 }
 
 // ============================================================
@@ -1786,6 +1850,7 @@ function renderBranch() {
         </tr>
     `).join("") || '<tr><td colspan="8" class="empty">No data.</td></tr>';
     document.getElementById("brMeta").textContent = sorted.length + " rows";
+    renderBranchDrillTree();
 }
 
 function monthLabelFromKey(mk) {
@@ -1828,6 +1893,7 @@ function renderSalesperson() {
         </tr>
     `).join("") || '<tr><td colspan="8" class="empty">No data.</td></tr>';
     document.getElementById("spMeta").textContent = sorted.length + " rows";
+    renderSalespersonDrillTree();
 }
 
 // ============================================================
@@ -1928,6 +1994,7 @@ function showCustomer(custNumber) {
     renderCustomerTrendChart();
     renderCustomerItemsChart();
     renderCustomerInvoiceTable();
+    renderCustomerDrillTree();
     document.getElementById("cdInvCount").textContent = g.invoices.length + " invoices";
     openDrill("customer");
 }
@@ -2512,6 +2579,184 @@ function renderDemographics() {
 }
 
 // ============================================================
+// DRILL-DOWN TREES (Customer / Branch / Salesperson)
+// ============================================================
+function _newNode(key, label) {
+    return { key, label, sales: 0, qty: 0, cost: 0, costNonInv: 0, children: [] };
+}
+function _finalizeTree(roots, grandTotal) {
+    const walk = (n) => {
+        n.gp = n.sales - n.cost;
+        n.gpPct = n.sales ? n.gp / n.sales : 0;
+        n.pctGT = grandTotal ? n.sales / grandTotal : 0;
+        if (n.children) n.children.forEach(walk);
+    };
+    roots.forEach(walk);
+}
+function _accumLine(parents, s, q, c, cn) {
+    for (const p of parents) { p.sales += s; p.qty += q; p.cost += c; p.costNonInv += cn; }
+}
+function _grandTotalSales() {
+    let t = 0; for (const inv of state.filtered) t += invoiceSalesAmount(inv); return t;
+}
+
+function buildCustomerDrillTree(customer) {
+    const dtMap = new Map();
+    for (const inv of customer.invoices) {
+        const docKey = "Posted Sales Invoice";
+        let dt = dtMap.get(docKey);
+        if (!dt) { dt = _newNode("ct-dt-" + docKey, docKey); dtMap.set(docKey, dt); }
+        const docNode = _newNode("ct-inv-" + inv.id, inv.number || "(no number)");
+        for (const ln of (inv.salesInvoiceLines || [])) {
+            if (state.filters.location && locationCode(ln.locationId) !== state.filters.location) continue;
+            const itemNo = ln.lineObjectNumber || ln.itemId || "";
+            const s = num(ln.amountExcludingTax), q = num(ln.quantity);
+            const c = lineCost(inv.number, itemNo), cn = lineCostNonInv(inv.number, itemNo);
+            const leaf = _newNode("ct-line-" + inv.id + "-" + (ln.id || ln.sequence || itemNo),
+                (itemNo ? "Item " + itemNo : "(non-item)") + (ln.description ? " · " + ln.description : ""));
+            leaf.children = null;
+            leaf.sales = s; leaf.qty = q; leaf.cost = c; leaf.costNonInv = cn;
+            docNode.children.push(leaf);
+            _accumLine([docNode, dt], s, q, c, cn);
+        }
+        if (docNode.children.length) dt.children.push(docNode);
+    }
+    const roots = [...dtMap.values()];
+    _finalizeTree(roots, _grandTotalSales());
+    return roots;
+}
+
+function buildBranchDrillTree(invoices) {
+    const locMap = new Map();
+    const docByLoc = new Map(); // locCode -> Map<docType, node>
+    const invByLocDt = new Map(); // locCode|docType -> Map<invId, node>
+    for (const inv of invoices) {
+        for (const ln of (inv.salesInvoiceLines || [])) {
+            const locCode = locationCode(ln.locationId);
+            if (state.filters.location && locCode !== state.filters.location) continue;
+            let loc = locMap.get(locCode);
+            if (!loc) { loc = _newNode("bt-loc-" + locCode, locCode); locMap.set(locCode, loc); docByLoc.set(locCode, new Map()); }
+            const docKey = "Posted Sales Invoice";
+            let dt = docByLoc.get(locCode).get(docKey);
+            if (!dt) {
+                dt = _newNode("bt-dt-" + locCode + "-" + docKey, docKey);
+                docByLoc.get(locCode).set(docKey, dt);
+                loc.children.push(dt);
+                invByLocDt.set(locCode + "|" + docKey, new Map());
+            }
+            const invMap = invByLocDt.get(locCode + "|" + docKey);
+            let docNode = invMap.get(inv.id);
+            if (!docNode) {
+                docNode = _newNode("bt-inv-" + locCode + "-" + inv.id, inv.number || "(no number)");
+                invMap.set(inv.id, docNode);
+                dt.children.push(docNode);
+            }
+            const itemNo = ln.lineObjectNumber || ln.itemId || "";
+            const s = num(ln.amountExcludingTax), q = num(ln.quantity);
+            const c = lineCost(inv.number, itemNo), cn = lineCostNonInv(inv.number, itemNo);
+            const leaf = _newNode("bt-line-" + locCode + "-" + inv.id + "-" + (ln.id || ln.sequence || itemNo),
+                (itemNo ? "Item " + itemNo : "(non-item)") + (ln.description ? " · " + ln.description : ""));
+            leaf.children = null;
+            leaf.sales = s; leaf.qty = q; leaf.cost = c; leaf.costNonInv = cn;
+            docNode.children.push(leaf);
+            _accumLine([docNode, dt, loc], s, q, c, cn);
+        }
+    }
+    const roots = [...locMap.values()].sort((a, b) => b.sales - a.sales);
+    _finalizeTree(roots, _grandTotalSales());
+    return roots;
+}
+
+function buildSalespersonDrillTree(invoices) {
+    const spMap = new Map();
+    const custBySp = new Map(); // sp -> Map<custKey, node>
+    const dtBySpCust = new Map(); // sp|cust -> Map<docType, node>
+    const invBySpCustDt = new Map();
+    for (const inv of invoices) {
+        const sp = inv.salesperson || "(unassigned)";
+        let spNode = spMap.get(sp);
+        if (!spNode) { spNode = _newNode("st-sp-" + sp, sp); spMap.set(sp, spNode); custBySp.set(sp, new Map()); }
+        const custKey = inv.customerNumber || inv.customerId || "(unknown)";
+        let custNode = custBySp.get(sp).get(custKey);
+        if (!custNode) {
+            custNode = _newNode("st-cust-" + sp + "-" + custKey, inv.customerName || custKey);
+            custBySp.get(sp).set(custKey, custNode);
+            spNode.children.push(custNode);
+            dtBySpCust.set(sp + "|" + custKey, new Map());
+        }
+        const docKey = "Posted Sales Invoice";
+        let dt = dtBySpCust.get(sp + "|" + custKey).get(docKey);
+        if (!dt) {
+            dt = _newNode("st-dt-" + sp + "-" + custKey + "-" + docKey, docKey);
+            dtBySpCust.get(sp + "|" + custKey).set(docKey, dt);
+            custNode.children.push(dt);
+            invBySpCustDt.set(sp + "|" + custKey + "|" + docKey, new Map());
+        }
+        const invMap = invBySpCustDt.get(sp + "|" + custKey + "|" + docKey);
+        let docNode = invMap.get(inv.id);
+        if (!docNode) {
+            docNode = _newNode("st-inv-" + sp + "-" + inv.id, inv.number || "(no number)");
+            invMap.set(inv.id, docNode);
+            dt.children.push(docNode);
+        }
+        for (const ln of (inv.salesInvoiceLines || [])) {
+            if (state.filters.location && locationCode(ln.locationId) !== state.filters.location) continue;
+            const itemNo = ln.lineObjectNumber || ln.itemId || "";
+            const s = num(ln.amountExcludingTax), q = num(ln.quantity);
+            const c = lineCost(inv.number, itemNo), cn = lineCostNonInv(inv.number, itemNo);
+            const leaf = _newNode("st-line-" + sp + "-" + inv.id + "-" + (ln.id || ln.sequence || itemNo),
+                (itemNo ? "Item " + itemNo : "(non-item)") + (ln.description ? " · " + ln.description : ""));
+            leaf.children = null;
+            leaf.sales = s; leaf.qty = q; leaf.cost = c; leaf.costNonInv = cn;
+            docNode.children.push(leaf);
+            _accumLine([docNode, dt, custNode, spNode], s, q, c, cn);
+        }
+    }
+    const roots = [...spMap.values()].sort((a, b) => b.sales - a.sales);
+    _finalizeTree(roots, _grandTotalSales());
+    return roots;
+}
+
+function renderDrillTree(roots, tableSelector) {
+    const tbody = document.querySelector(tableSelector + " tbody");
+    if (!tbody) return;
+    const acc = [];
+    function emit(node, depth) {
+        const expandable = node.children && node.children.length > 0;
+        const isOpen = state.expandedMatrix.has(node.key);
+        const arrow = expandable ? (isOpen ? "▾" : "▸") : "";
+        const pad = "&nbsp;".repeat(depth * 4);
+        const bg = depth === 0 ? "background:#eef0fb; font-weight:700;"
+                 : depth === 1 ? "background:#f7f8fd; font-weight:600;"
+                 : depth === 2 ? "background:#fafbff;" : "";
+        acc.push(`<tr data-key="${escapeAttr(node.key)}" data-expandable="${expandable ? 1 : 0}" style="${bg}cursor:${expandable ? "pointer" : "default"};">
+            <td>${pad}<span style="display:inline-block; width:14px; color:#3f51b5;">${arrow}</span> ${escapeHtml(node.label)}</td>
+            <td class="num">${fmtMoneyFull(node.sales)}</td>
+            <td class="num">${node.qty ? fmtInt(node.qty) : ""}</td>
+            <td class="num neg">${node.cost ? "(" + fmtMoneyFull(node.cost) + ")" : ""}</td>
+            <td class="num neg">${node.costNonInv ? "(" + fmtMoneyFull(node.costNonInv) + ")" : ""}</td>
+            <td class="num ${node.gp >= 0 ? "pos" : "neg"}">${fmtMoneyFull(node.gp)}</td>
+            <td class="num">${fmtPct(node.gpPct)}</td>
+            <td class="num">${fmtPct(node.pctGT)}</td>
+        </tr>`);
+        if (expandable && isOpen) for (const c of node.children) emit(c, depth + 1);
+    }
+    for (const r of roots) emit(r, 0);
+    tbody.innerHTML = acc.join("") || '<tr><td colspan="8" class="empty">No data.</td></tr>';
+}
+
+function renderCustomerDrillTree() {
+    const g = state.currentCustomer; if (!g) return;
+    renderDrillTree(buildCustomerDrillTree(g), "#customerDrillTable");
+}
+function renderBranchDrillTree() {
+    renderDrillTree(buildBranchDrillTree(state.filtered), "#branchDrillTable");
+}
+function renderSalespersonDrillTree() {
+    renderDrillTree(buildSalespersonDrillTree(state.filtered), "#salespersonDrillTable");
+}
+
+// ============================================================
 // FILTER DROPDOWNS
 // ============================================================
 function populateFilterDropdowns() {
@@ -2714,6 +2959,23 @@ function wireEvents() {
         else state.expandedMatrix.add(key);
         renderDailySales();
     });
+
+    // Drill-down trees expand/collapse
+    const wireTreeClicks = (tableSelector, rerender) => {
+        const tb = document.querySelector(tableSelector + " tbody");
+        if (!tb) return;
+        tb.addEventListener("click", e => {
+            const tr = e.target.closest("tr[data-key]"); if (!tr) return;
+            if (tr.dataset.expandable !== "1") return;
+            const key = tr.dataset.key;
+            if (state.expandedMatrix.has(key)) state.expandedMatrix.delete(key);
+            else state.expandedMatrix.add(key);
+            rerender();
+        });
+    };
+    wireTreeClicks("#customerDrillTable",    renderCustomerDrillTree);
+    wireTreeClicks("#branchDrillTable",      renderBranchDrillTree);
+    wireTreeClicks("#salespersonDrillTable", renderSalespersonDrillTree);
 }
 
 // ============================================================
