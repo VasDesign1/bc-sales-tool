@@ -406,13 +406,13 @@
                         <table id="customerDrillTable">
                             <thead><tr>
                                 <th>Group / Document / Item</th>
-                                <th class="num">Sales (LCY)</th>
-                                <th class="num">Qty</th>
-                                <th class="num">Adj Cost</th>
-                                <th class="num">Cost Non-Inv</th>
-                                <th class="num">Adj Profit</th>
-                                <th class="num">Margin %</th>
-                                <th class="num">% of GT</th>
+                                <th class="num" data-tree-sort="sales">Sales (LCY)</th>
+                                <th class="num" data-tree-sort="qty">Qty</th>
+                                <th class="num" data-tree-sort="cost">Adj Cost</th>
+                                <th class="num" data-tree-sort="costNonInv">Cost Non-Inv</th>
+                                <th class="num" data-tree-sort="gp">Adj Profit</th>
+                                <th class="num" data-tree-sort="gpPct">Margin %</th>
+                                <th class="num" data-tree-sort="pctGT">% of GT</th>
                             </tr></thead>
                             <tbody></tbody>
                         </table>
@@ -618,13 +618,13 @@
                         <table id="branchDrillTable">
                             <thead><tr>
                                 <th>Branch / Document / Item</th>
-                                <th class="num">Sales (LCY)</th>
-                                <th class="num">Qty</th>
-                                <th class="num">Adj Cost</th>
-                                <th class="num">Cost Non-Inv</th>
-                                <th class="num">Adj Profit</th>
-                                <th class="num">Margin %</th>
-                                <th class="num">% of GT</th>
+                                <th class="num" data-tree-sort="sales">Sales (LCY)</th>
+                                <th class="num" data-tree-sort="qty">Qty</th>
+                                <th class="num" data-tree-sort="cost">Adj Cost</th>
+                                <th class="num" data-tree-sort="costNonInv">Cost Non-Inv</th>
+                                <th class="num" data-tree-sort="gp">Adj Profit</th>
+                                <th class="num" data-tree-sort="gpPct">Margin %</th>
+                                <th class="num" data-tree-sort="pctGT">% of GT</th>
                             </tr></thead>
                             <tbody></tbody>
                         </table>
@@ -664,13 +664,13 @@
                         <table id="salespersonDrillTable">
                             <thead><tr>
                                 <th>Salesperson / Customer / Document / Item</th>
-                                <th class="num">Sales (LCY)</th>
-                                <th class="num">Qty</th>
-                                <th class="num">Adj Cost</th>
-                                <th class="num">Cost Non-Inv</th>
-                                <th class="num">Adj Profit</th>
-                                <th class="num">Margin %</th>
-                                <th class="num">% of GT</th>
+                                <th class="num" data-tree-sort="sales">Sales (LCY)</th>
+                                <th class="num" data-tree-sort="qty">Qty</th>
+                                <th class="num" data-tree-sort="cost">Adj Cost</th>
+                                <th class="num" data-tree-sort="costNonInv">Cost Non-Inv</th>
+                                <th class="num" data-tree-sort="gp">Adj Profit</th>
+                                <th class="num" data-tree-sort="gpPct">Margin %</th>
+                                <th class="num" data-tree-sort="pctGT">% of GT</th>
                             </tr></thead>
                             <tbody></tbody>
                         </table>
@@ -1400,6 +1400,7 @@ const state = {
     sortBranch: { key: "salesAmount", dir: "desc" },
     sortSales: { key: "salesAmount", dir: "desc" },
     sortItems: { key: "revenue", dir: "desc" },
+    treeSort: { key: "sales", dir: "desc" },
     custFilter: "", itemFilter: "", eomFilter: "",
     filters: { location: "", salesperson: "" },
     charts: {},
@@ -3898,9 +3899,22 @@ function buildSalespersonDrillTree(_invoices) {
     return roots;
 }
 
+function _sortNodesRecursive(nodes, key, dir) {
+    if (!nodes || !nodes.length) return;
+    const mul = dir === "asc" ? 1 : -1;
+    nodes.sort((a, b) => {
+        let av = a[key], bv = b[key];
+        if (key === "label") return String(av || "").localeCompare(String(bv || "")) * mul;
+        av = av == null ? 0 : av;
+        bv = bv == null ? 0 : bv;
+        return (av - bv) * mul;
+    });
+    for (const n of nodes) if (n.children) _sortNodesRecursive(n.children, key, dir);
+}
 function renderDrillTree(roots, tableSelector) {
     const tbody = document.querySelector(tableSelector + " tbody");
     if (!tbody) return;
+    _sortNodesRecursive(roots, state.treeSort.key, state.treeSort.dir);
     const acc = [];
     function emit(node, depth) {
         const expandable = node.children && node.children.length > 0;
@@ -3924,6 +3938,13 @@ function renderDrillTree(roots, tableSelector) {
     }
     for (const r of roots) emit(r, 0);
     tbody.innerHTML = acc.join("") || '<tr><td colspan="8" class="empty">No data.</td></tr>';
+    // Refresh sort indicators on the headers of THIS table
+    document.querySelectorAll(tableSelector + " th[data-tree-sort]").forEach(th => {
+        th.classList.remove("sorted-asc", "sorted-desc");
+        if (th.dataset.treeSort === state.treeSort.key) {
+            th.classList.add(state.treeSort.dir === "asc" ? "sorted-asc" : "sorted-desc");
+        }
+    });
 }
 
 function renderCustomerDrillTree() {
@@ -4174,6 +4195,26 @@ function wireEvents() {
     wireTreeClicks("#customerDrillTable",    renderCustomerDrillTree);
     wireTreeClicks("#branchDrillTable",      renderBranchDrillTree);
     wireTreeClicks("#salespersonDrillTable", renderSalespersonDrillTree);
+
+    // Sort headers in drill trees
+    const wireTreeSort = (tableSelector, rerender) => {
+        document.querySelectorAll(tableSelector + " th[data-tree-sort]").forEach(th => {
+            th.addEventListener("click", () => {
+                const key = th.dataset.treeSort;
+                if (state.treeSort.key === key) {
+                    state.treeSort.dir = state.treeSort.dir === "asc" ? "desc" : "asc";
+                } else {
+                    state.treeSort.key = key;
+                    // numeric defaults to desc; label defaults to asc
+                    state.treeSort.dir = key === "label" ? "asc" : "desc";
+                }
+                rerender();
+            });
+        });
+    };
+    wireTreeSort("#customerDrillTable",    renderCustomerDrillTree);
+    wireTreeSort("#branchDrillTable",      renderBranchDrillTree);
+    wireTreeSort("#salespersonDrillTable", renderSalespersonDrillTree);
 }
 
 // ============================================================
