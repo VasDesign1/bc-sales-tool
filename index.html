@@ -279,6 +279,13 @@
             <a data-tab="byItem">Sales by Item</a>
             <a data-tab="eom">EOM Report</a>
 
+            <div class="group-label">Time Analytics</div>
+            <a data-tab="mtd">Month-to-Date</a>
+            <a data-tab="mat">Moving Annual Total</a>
+            <a data-tab="pop">Period-over-Period</a>
+            <a data-tab="dailySales">Daily Sales Matrix</a>
+            <a data-tab="demographics">Sales Demographics</a>
+
             <div class="group-label">Targets &amp; Run Rate</div>
             <a data-tab="branchTarget" class="stub">Branch Sales &amp; Targets</a>
             <a data-tab="branchMarginRate" class="stub">Branch Margin Run Rate</a>
@@ -676,6 +683,140 @@
                 </div>
             </section>
 
+            <!-- TAB: Month-to-Date -->
+            <section data-tab-content="mtd" style="display:none;">
+                <div class="kpi-row">
+                    <div class="kpi k-rev"><div class="label">MTD Sales</div><div class="value" id="mtdSales">—</div><div class="sub" id="mtdSalesSub">&nbsp;</div></div>
+                    <div class="kpi k-gp"><div class="label">MTD Gross Profit</div><div class="value" id="mtdGp">—</div><div class="sub">&nbsp;</div></div>
+                    <div class="kpi k-gpp"><div class="label">MTD GP %</div><div class="value" id="mtdGpp">—</div><div class="sub">&nbsp;</div></div>
+                    <div class="kpi k-inv"><div class="label">MTD Invoices</div><div class="value" id="mtdInv">—</div><div class="sub">&nbsp;</div></div>
+                </div>
+                <div class="chart-grid">
+                    <div class="card span-12">
+                        <div class="head"><h3>Month-to-Date Sales Performance (cumulative)</h3><div class="meta" id="mtdMeta"></div></div>
+                        <div class="chart-wrap" style="min-height:320px;"><canvas id="mtdChart"></canvas></div>
+                    </div>
+                </div>
+                <div class="panel">
+                    <div class="panel-header"><h2>MTD Details (by day)</h2></div>
+                    <div class="table-scroll">
+                        <table id="mtdTable">
+                            <thead><tr><th>Date</th><th class="num">Sales</th><th class="num">MTD Sales</th><th class="num">MTD GP</th><th class="num">Invoices</th></tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB: Moving Annual Total -->
+            <section data-tab-content="mat" style="display:none;">
+                <div class="hint" id="matHint" style="display:none;"></div>
+                <div class="chart-grid">
+                    <div class="card span-12">
+                        <div class="head"><h3>Monthly Comparison: MAT vs Previous-Year MAT</h3><div class="meta">12-month rolling sum at each month-end</div></div>
+                        <div class="chart-wrap" style="min-height:320px;"><canvas id="matChart"></canvas></div>
+                    </div>
+                </div>
+                <div class="panel">
+                    <div class="panel-header"><h2>Moving Annual Total Details</h2></div>
+                    <div class="table-scroll">
+                        <table id="matTable">
+                            <thead><tr>
+                                <th>Month</th>
+                                <th class="num">Sales</th>
+                                <th class="num">MAT</th>
+                                <th class="num">PY-MAT</th>
+                                <th class="num">Growth $</th>
+                                <th class="num">Growth %</th>
+                            </tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB: Period-over-Period -->
+            <section data-tab-content="pop" style="display:none;">
+                <div class="chart-grid">
+                    <div class="card span-12">
+                        <div class="head"><h3>Monthly Sales — current vs prior month</h3><div class="meta">growth Δ% next to each bar</div></div>
+                        <div class="chart-wrap" style="min-height:320px;"><canvas id="popChart"></canvas></div>
+                    </div>
+                </div>
+                <div class="panel">
+                    <div class="panel-header"><h2>Period-over-Period Growth Details</h2></div>
+                    <div class="table-scroll">
+                        <table id="popTable">
+                            <thead><tr>
+                                <th>Month</th>
+                                <th class="num">Sales</th>
+                                <th class="num">Prior Month</th>
+                                <th class="num">Growth $</th>
+                                <th class="num">Growth %</th>
+                                <th class="num">GP $</th>
+                                <th class="num">GP %</th>
+                            </tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB: Daily Sales Matrix -->
+            <section data-tab-content="dailySales" style="display:none;">
+                <div class="hint">FY → Quarter → Month → Week → Day, broken down by day-of-week. Click ▸ to expand a level. Australian fiscal year (July–June).</div>
+                <div class="panel">
+                    <div class="panel-header"><h2>Daily Sales by Date</h2><div class="meta" id="dailySalesMeta"></div></div>
+                    <div class="table-scroll">
+                        <table id="dailySalesTable">
+                            <thead><tr>
+                                <th>Period</th>
+                                <th class="num">Mon</th>
+                                <th class="num">Tue</th>
+                                <th class="num">Wed</th>
+                                <th class="num">Thu</th>
+                                <th class="num">Fri</th>
+                                <th class="num">Sat</th>
+                                <th class="num">Sun</th>
+                                <th class="num">Total</th>
+                            </tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB: Sales Demographics -->
+            <section data-tab-content="demographics" style="display:none;">
+                <div class="chart-grid">
+                    <div class="card span-6">
+                        <div class="head"><h3>Sales by Item Category</h3><div class="meta">top 20 by sales · GP overlay</div></div>
+                        <div class="chart-wrap" style="min-height:380px;"><canvas id="demoCategoryChart"></canvas></div>
+                    </div>
+                    <div class="card span-6">
+                        <div class="head"><h3>Sales by Customer City</h3><div class="meta">top 15 by sales</div></div>
+                        <div class="chart-wrap" style="min-height:380px;"><canvas id="demoCityChart"></canvas></div>
+                    </div>
+                </div>
+                <div class="panel">
+                    <div class="panel-header"><h2>Sales by Customer Posting Group</h2><div class="meta" id="demoCpgMeta"></div></div>
+                    <div class="table-scroll">
+                        <table id="demoCpgTable">
+                            <thead><tr>
+                                <th>Customer Posting Group</th>
+                                <th class="num">Customers</th>
+                                <th class="num">Invoices</th>
+                                <th class="num">Sales $</th>
+                                <th class="num">GP $</th>
+                                <th class="num">GP %</th>
+                                <th class="num">% of total</th>
+                            </tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
             <!-- TAB: placeholders -->
             <section data-tab-content="branchTarget" style="display:none;">
                 <div class="placeholder">
@@ -854,14 +995,23 @@ async function fetchInvoiceLines(invoiceId) {
     const compId = await bcGetCompanyId();
     return bcFetchAll(BC_API_URL + "/companies(" + compId + ")/salesInvoices(" + invoiceId + ")/salesInvoiceLines?$top=10000", "Invoice lines");
 }
+async function fetchCustomers() {
+    const compId = await bcGetCompanyId();
+    try {
+        return await bcFetchAll(BC_API_URL + "/companies(" + compId + ")/customers?$top=10000", "Customers");
+    } catch (e) { console.warn("Customers fetch failed:", e.message); return []; }
+}
 
 // ============================================================
 // STATE
 // ============================================================
 const state = {
-    invoices: [], filtered: [], iles: [], items: [],
+    invoices: [], filtered: [], iles: [], items: [], customers: [],
     locations: new Map(),    // locId -> code
     itemCategory: new Map(), // itemNumber -> category code
+    custPostingGroup: new Map(), // customerNumber -> posting group code
+    custCity: new Map(),     // customerNumber -> city
+    expandedMatrix: new Set(), // keys of expanded matrix rows
     costByInvoiceNo: new Map(), // invoice.number -> cost total (abs)
     costByItemInvoiceNo: new Map(), // (invoice.number||"") + "|" + itemNumber -> cost
     byCustomer: new Map(), byItem: new Map(), byLocation: new Map(), bySalesperson: new Map(),
@@ -886,6 +1036,11 @@ const TAB_TITLES = {
     salesperson: "Salesperson Sales",
     byItem: "Sales by Item",
     eom: "EOM Report",
+    mtd: "Month-to-Date",
+    mat: "Moving Annual Total",
+    pop: "Period-over-Period",
+    dailySales: "Daily Sales Matrix",
+    demographics: "Sales Demographics",
     branchTarget: "Branch Sales & Targets",
     branchMarginRate: "Branch Margin Run Rate",
     salespersonSalesRate: "Salesperson Sales Run Rate",
@@ -1343,6 +1498,11 @@ function renderCurrentTab() {
         case "salesperson": renderSalesperson(); break;
         case "byItem":      renderByItem();   break;
         case "eom":         renderEOM();      break;
+        case "mtd":         renderMTD();      break;
+        case "mat":         renderMAT();      break;
+        case "pop":         renderPoP();      break;
+        case "dailySales":  renderDailySales(); break;
+        case "demographics":renderDemographics(); break;
     }
 }
 
@@ -1948,6 +2108,410 @@ async function showInvoice(invoiceId) {
 }
 
 // ============================================================
+// TIME / FISCAL HELPERS
+// ============================================================
+function fiscalQuarter(iso) {
+    const d = new Date(iso);
+    if (isNaN(d)) return null;
+    const m = d.getMonth(); // 0=Jan
+    // AU FY July-June: FQ1=Jul-Sep, FQ2=Oct-Dec, FQ3=Jan-Mar, FQ4=Apr-Jun
+    if (m >= 6 && m <= 8)  return 1;
+    if (m >= 9 && m <= 11) return 2;
+    if (m >= 0 && m <= 2)  return 3;
+    return 4;
+}
+function fyMonthIndex(iso) {
+    const d = new Date(iso);
+    if (isNaN(d)) return null;
+    const m = d.getMonth();
+    return m >= 6 ? m - 6 : m + 6; // 0..11 from July
+}
+function fiscalWeek(iso) {
+    const d = new Date(iso);
+    if (isNaN(d)) return null;
+    const fy = fiscalYear(iso);
+    const fyStart = new Date(fy - 1, 6, 1); // July 1 of FY start
+    const diffDays = Math.floor((d - fyStart) / 86400000);
+    return Math.floor(diffDays / 7) + 1;
+}
+function isoDay(iso) {
+    const d = new Date(iso);
+    if (isNaN(d)) return -1;
+    return (d.getUTCDay() + 6) % 7; // 0=Mon..6=Sun
+}
+function startOfMonth(d) { return new Date(d.getFullYear(), d.getMonth(), 1); }
+
+// ============================================================
+// MTD TAB
+// ============================================================
+function renderMTD() {
+    renderFilterChips();
+    const today = new Date();
+    const mStart = startOfMonth(today);
+    const rows = state.filtered.filter(inv => {
+        const d = new Date(inv.postingDate);
+        return d >= mStart && d <= today;
+    });
+    // Group by date
+    const byDate = new Map();
+    for (const inv of rows) {
+        const day = (inv.postingDate || "").slice(0, 10);
+        const cur = byDate.get(day) || { day, sales: 0, gp: 0, invCount: 0 };
+        const s = invoiceSalesAmount(inv);
+        const gp = invoiceGPInContext(inv);
+        cur.sales += s; cur.gp += gp; cur.invCount += 1;
+        byDate.set(day, cur);
+    }
+    const daily = [...byDate.values()].sort((a, b) => a.day < b.day ? -1 : 1);
+    let cumSales = 0, cumGp = 0;
+    const labels = [], cumLine = [], dailyBar = [];
+    const tblRows = [];
+    for (const r of daily) {
+        cumSales += r.sales; cumGp += r.gp;
+        labels.push(r.day.slice(8) + "/" + r.day.slice(5, 7));
+        cumLine.push(cumSales);
+        dailyBar.push(r.sales);
+        tblRows.push({ ...r, mtdSales: cumSales, mtdGp: cumGp });
+    }
+    const totSales = cumSales, totGp = cumGp;
+    const totInv = rows.length;
+    document.getElementById("mtdSales").textContent = fmtMoneyFull(totSales);
+    document.getElementById("mtdSalesSub").textContent = mStart.toLocaleDateString("en-AU", { month: "long", year: "numeric" });
+    document.getElementById("mtdGp").textContent  = fmtMoneyFull(totGp);
+    document.getElementById("mtdGpp").textContent = fmtPct(totSales ? totGp / totSales : 0);
+    document.getElementById("mtdInv").textContent = fmtInt(totInv);
+    document.getElementById("mtdMeta").textContent = daily.length + " day" + (daily.length === 1 ? "" : "s") + " with sales";
+
+    destroyChart("mtd");
+    const ctx = document.getElementById("mtdChart").getContext("2d");
+    state.charts.mtd = new Chart(ctx, {
+        data: {
+            labels,
+            datasets: [
+                { type: "bar", label: "Daily Sales", data: dailyBar, backgroundColor: "rgba(63,81,181,0.4)", yAxisID: "y", borderRadius: 4 },
+                { type: "line", label: "MTD Cumulative", data: cumLine, borderColor: "#00897b", backgroundColor: "rgba(0,137,123,0.15)", fill: true, tension: 0.2, pointRadius: 3, yAxisID: "y" },
+            ],
+        },
+        options: chartBase({
+            plugins: { legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } },
+                       tooltip: { callbacks: { label: c => c.dataset.label + ": " + fmtMoneyFull(c.parsed.y) } } },
+            scales: { y: { ticks: { callback: v => fmtMoney(v) } } }
+        })
+    });
+
+    const tbody = document.querySelector("#mtdTable tbody");
+    tbody.innerHTML = tblRows.slice().reverse().map(r => `
+        <tr>
+            <td>${fmtDate(r.day)}</td>
+            <td class="num">${fmtMoneyFull(r.sales)}</td>
+            <td class="num">${fmtMoneyFull(r.mtdSales)}</td>
+            <td class="num ${r.mtdGp >= 0 ? "pos" : "neg"}">${fmtMoneyFull(r.mtdGp)}</td>
+            <td class="num">${fmtInt(r.invCount)}</td>
+        </tr>
+    `).join("") || '<tr><td colspan="5" class="empty">No sales this month.</td></tr>';
+}
+
+// ============================================================
+// MAT TAB
+// ============================================================
+function renderMAT() {
+    renderFilterChips();
+    // Aggregate by month
+    const byMonth = new Map();
+    for (const inv of state.filtered) {
+        const k = monthKey(inv.postingDate);
+        const cur = byMonth.get(k) || { key: k, sales: 0 };
+        cur.sales += invoiceSalesAmount(inv);
+        byMonth.set(k, cur);
+    }
+    const months = [...byMonth.keys()].sort();
+    if (!months.length) {
+        document.getElementById("matHint").style.display = "block";
+        document.getElementById("matHint").textContent = "No data loaded.";
+        destroyChart("mat");
+        document.querySelector("#matTable tbody").innerHTML = '<tr><td colspan="6" class="empty">No data.</td></tr>';
+        return;
+    }
+    const totalMonths = months.length;
+    const hintEl = document.getElementById("matHint");
+    if (totalMonths < 12) {
+        hintEl.style.display = "block";
+        hintEl.textContent = "Only " + totalMonths + " months loaded. MAT needs 12 months and PY-MAT needs 24 — load a longer range with the Quick Range dropdown to see meaningful values.";
+    } else if (totalMonths < 24) {
+        hintEl.style.display = "block";
+        hintEl.textContent = totalMonths + " months loaded. MAT will compute from month 12. PY-MAT needs 24+ months for the full comparison.";
+    } else {
+        hintEl.style.display = "none";
+    }
+
+    const labels = [], matVals = [], pyMatVals = [];
+    const tblRows = [];
+    for (let i = 0; i < months.length; i++) {
+        let mat = null, pyMat = null;
+        if (i >= 11) {
+            mat = 0;
+            for (let j = i - 11; j <= i; j++) mat += byMonth.get(months[j]).sales;
+        }
+        if (i >= 23) {
+            pyMat = 0;
+            for (let j = i - 23; j <= i - 12; j++) pyMat += byMonth.get(months[j]).sales;
+        }
+        labels.push(months[i]);
+        matVals.push(mat);
+        pyMatVals.push(pyMat);
+        const growth = (mat != null && pyMat != null) ? (mat - pyMat) : null;
+        const growthPct = (growth != null && pyMat) ? growth / pyMat : null;
+        tblRows.push({ month: months[i], sales: byMonth.get(months[i]).sales, mat, pyMat, growth, growthPct });
+    }
+
+    destroyChart("mat");
+    const ctx = document.getElementById("matChart").getContext("2d");
+    state.charts.mat = new Chart(ctx, {
+        data: {
+            labels,
+            datasets: [
+                { type: "bar", label: "MAT", data: matVals, backgroundColor: "rgba(63,81,181,0.85)", borderRadius: 4 },
+                { type: "line", label: "PY-MAT", data: pyMatVals, borderColor: "#888", backgroundColor: "rgba(120,120,120,0.10)", fill: false, tension: 0.2, pointRadius: 3, borderDash: [5, 5] },
+            ]
+        },
+        options: chartBase({
+            plugins: { legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } },
+                       tooltip: { callbacks: { label: c => c.dataset.label + ": " + (c.parsed.y == null ? "—" : fmtMoneyFull(c.parsed.y)) } } },
+            scales: { y: { ticks: { callback: v => fmtMoney(v) } } }
+        })
+    });
+
+    const tbody = document.querySelector("#matTable tbody");
+    tbody.innerHTML = tblRows.slice().reverse().map(r => `
+        <tr>
+            <td>${monthLabelFromKey(r.month)}</td>
+            <td class="num">${fmtMoneyFull(r.sales)}</td>
+            <td class="num">${r.mat == null ? "—" : fmtMoneyFull(r.mat)}</td>
+            <td class="num">${r.pyMat == null ? "—" : fmtMoneyFull(r.pyMat)}</td>
+            <td class="num ${r.growth != null && r.growth >= 0 ? "pos" : (r.growth != null ? "neg" : "")}">${r.growth == null ? "—" : fmtMoneyFull(r.growth)}</td>
+            <td class="num ${r.growthPct != null && r.growthPct >= 0 ? "pos" : (r.growthPct != null ? "neg" : "")}">${r.growthPct == null ? "—" : fmtPct(r.growthPct)}</td>
+        </tr>
+    `).join("");
+}
+
+// ============================================================
+// PERIOD-OVER-PERIOD TAB
+// ============================================================
+function renderPoP() {
+    renderFilterChips();
+    const byMonth = new Map();
+    for (const inv of state.filtered) {
+        const k = monthKey(inv.postingDate);
+        const cur = byMonth.get(k) || { key: k, sales: 0, gp: 0 };
+        cur.sales += invoiceSalesAmount(inv);
+        cur.gp    += invoiceGPInContext(inv);
+        byMonth.set(k, cur);
+    }
+    const months = [...byMonth.keys()].sort();
+    const rows = months.map((k, i) => {
+        const cur = byMonth.get(k);
+        const prior = i > 0 ? byMonth.get(months[i - 1]).sales : null;
+        const growth = prior != null ? cur.sales - prior : null;
+        const growthPct = (prior != null && prior !== 0) ? growth / prior : null;
+        return { month: k, sales: cur.sales, prior, growth, growthPct, gp: cur.gp, gpPct: cur.sales ? cur.gp / cur.sales : 0 };
+    });
+
+    destroyChart("pop");
+    const ctx = document.getElementById("popChart").getContext("2d");
+    state.charts.pop = new Chart(ctx, {
+        type: "bar",
+        data: {
+            labels: rows.map(r => monthLabelFromKey(r.month)),
+            datasets: [
+                { label: "Sales", data: rows.map(r => r.sales), backgroundColor: rows.map(r => r.growth == null ? "#3f51b5" : (r.growth >= 0 ? "#2e7d32" : "#c62828")), borderRadius: 4 },
+            ],
+        },
+        options: chartBase({
+            plugins: { legend: { display: false },
+                       tooltip: { callbacks: { label: c => fmtMoneyFull(c.parsed.y) + (rows[c.dataIndex].growthPct == null ? "" : "  (Δ " + fmtPct(rows[c.dataIndex].growthPct) + ")") } } },
+            scales: { y: { ticks: { callback: v => fmtMoney(v) } } }
+        })
+    });
+
+    const tbody = document.querySelector("#popTable tbody");
+    tbody.innerHTML = rows.slice().reverse().map(r => `
+        <tr>
+            <td>${monthLabelFromKey(r.month)}</td>
+            <td class="num">${fmtMoneyFull(r.sales)}</td>
+            <td class="num">${r.prior == null ? "—" : fmtMoneyFull(r.prior)}</td>
+            <td class="num ${r.growth != null && r.growth >= 0 ? "pos" : (r.growth != null ? "neg" : "")}">${r.growth == null ? "—" : fmtMoneyFull(r.growth)}</td>
+            <td class="num ${r.growthPct != null && r.growthPct >= 0 ? "pos" : (r.growthPct != null ? "neg" : "")}">${r.growthPct == null ? "—" : fmtPct(r.growthPct)}</td>
+            <td class="num ${r.gp >= 0 ? "pos" : "neg"}">${fmtMoneyFull(r.gp)}</td>
+            <td class="num">${fmtPct(r.gpPct)}</td>
+        </tr>
+    `).join("") || '<tr><td colspan="7" class="empty">No data.</td></tr>';
+}
+
+// ============================================================
+// DAILY SALES MATRIX TAB
+// ============================================================
+function buildDailySalesTree(invoices) {
+    // tree: fy -> fq -> fm -> fw -> day, each with dow array [Mon..Sun]
+    const fyMap = new Map();
+    for (const inv of invoices) {
+        const fy = fiscalYear(inv.postingDate);
+        const fq = fiscalQuarter(inv.postingDate);
+        const fm = monthKey(inv.postingDate);
+        const fw = fiscalWeek(inv.postingDate);
+        const day = (inv.postingDate || "").slice(0, 10);
+        const dow = isoDay(inv.postingDate);
+        if (fy == null || dow < 0) continue;
+        const sales = invoiceSalesAmount(inv);
+        const ensure = (map, key, init) => { if (!map.has(key)) map.set(key, init()); return map.get(key); };
+        const fyNode = ensure(fyMap, fy, () => ({ key: "FY" + fy, label: "FY " + fy, dow: [0,0,0,0,0,0,0], children: new Map() }));
+        const fqNode = ensure(fyNode.children, fq, () => ({ key: "FY" + fy + "-FQ" + fq, label: "FQ" + fq + " " + fy, dow: [0,0,0,0,0,0,0], children: new Map() }));
+        const fmNode = ensure(fqNode.children, fm, () => ({ key: "FY" + fy + "-FM" + fm, label: monthLabelFromKey(fm), dow: [0,0,0,0,0,0,0], children: new Map() }));
+        const fwNode = ensure(fmNode.children, fw, () => ({ key: "FY" + fy + "-FW" + fw + "-" + fm, label: "FW" + String(fw).padStart(2,"0") + "-" + fy, dow: [0,0,0,0,0,0,0], children: new Map() }));
+        const dayNode = ensure(fwNode.children, day, () => ({ key: "DAY-" + day, label: fmtDate(day), dow: [0,0,0,0,0,0,0], children: null }));
+        for (const node of [fyNode, fqNode, fmNode, fwNode, dayNode]) node.dow[dow] += sales;
+    }
+    return fyMap;
+}
+
+function renderDailySalesRow(node, depth) {
+    const total = node.dow.reduce((s, x) => s + x, 0);
+    const expandable = node.children && node.children.size > 0;
+    const isOpen = state.expandedMatrix.has(node.key);
+    const arrow = expandable ? (isOpen ? "▾" : "▸") : "·";
+    const pad = "&nbsp;".repeat(depth * 4);
+    const cls = depth === 0 ? "font-weight:700; background:#f3f5fc;" : "";
+    return `<tr data-key="${escapeAttr(node.key)}" data-expandable="${expandable ? 1 : 0}" style="${cls}cursor:${expandable ? "pointer" : "default"};">
+        <td>${pad}<span style="display:inline-block; width:14px; color:#3f51b5;">${arrow}</span> ${escapeHtml(node.label)}</td>
+        ${node.dow.map(v => '<td class="num">' + (v ? fmtMoney(v) : "") + '</td>').join("")}
+        <td class="num" style="font-weight:600;">${fmtMoneyFull(total)}</td>
+    </tr>`;
+}
+
+function renderDailySalesNode(node, depth, acc) {
+    acc.push(renderDailySalesRow(node, depth));
+    if (node.children && state.expandedMatrix.has(node.key)) {
+        const childArr = [...node.children.values()].sort((a, b) => a.key < b.key ? -1 : 1);
+        for (const ch of childArr) renderDailySalesNode(ch, depth + 1, acc);
+    }
+}
+
+function renderDailySales() {
+    renderFilterChips();
+    const tree = buildDailySalesTree(state.filtered);
+    const fys = [...tree.values()].sort((a, b) => a.key < b.key ? 1 : -1); // most recent FY first
+    const acc = [];
+    for (const fy of fys) renderDailySalesNode(fy, 0, acc);
+    const tbody = document.querySelector("#dailySalesTable tbody");
+    tbody.innerHTML = acc.join("") || '<tr><td colspan="9" class="empty">No data.</td></tr>';
+    document.getElementById("dailySalesMeta").textContent = fys.length + " fiscal year" + (fys.length === 1 ? "" : "s") + " · click a row to expand";
+}
+
+// ============================================================
+// SALES DEMOGRAPHICS TAB
+// ============================================================
+function aggregateByCategory(invoices) {
+    const map = new Map();
+    for (const inv of invoices) {
+        for (const ln of (inv.salesInvoiceLines || [])) {
+            if (state.filters.location && locationCode(ln.locationId) !== state.filters.location) continue;
+            const itemNo = ln.lineObjectNumber || ln.itemId || "";
+            const cat = state.itemCategory.get(itemNo) || "(no category)";
+            const cur = map.get(cat) || { cat, sales: 0, cost: 0, qty: 0 };
+            cur.sales += num(ln.amountExcludingTax);
+            cur.cost  += lineCost(inv.number, itemNo);
+            cur.qty   += num(ln.quantity);
+            map.set(cat, cur);
+        }
+    }
+    return [...map.values()].map(r => ({ ...r, gp: r.sales - r.cost, gpPct: r.sales ? (r.sales - r.cost) / r.sales : 0 }));
+}
+function aggregateByCity(invoices) {
+    const map = new Map();
+    for (const inv of invoices) {
+        const city = state.custCity.get(inv.customerNumber) || "(unknown)";
+        const cur = map.get(city) || { city, sales: 0, invoiceCount: 0 };
+        cur.sales += invoiceSalesAmount(inv);
+        cur.invoiceCount += 1;
+        map.set(city, cur);
+    }
+    return [...map.values()];
+}
+function aggregateByCustPostingGroup(invoices) {
+    const map = new Map();
+    for (const inv of invoices) {
+        const cpg = state.custPostingGroup.get(inv.customerNumber) || "(unknown)";
+        const cur = map.get(cpg) || { cpg, customers: new Set(), invoiceCount: 0, sales: 0, gp: 0 };
+        if (inv.customerNumber) cur.customers.add(inv.customerNumber);
+        cur.invoiceCount += 1;
+        cur.sales += invoiceSalesAmount(inv);
+        cur.gp    += invoiceGPInContext(inv);
+        map.set(cpg, cur);
+    }
+    return [...map.values()].map(r => ({ ...r, customerCount: r.customers.size, gpPct: r.sales ? r.gp / r.sales : 0 }));
+}
+
+function renderDemographics() {
+    renderFilterChips();
+    // ---- Category chart ----
+    const cats = aggregateByCategory(state.filtered).filter(r => r.sales > 0).sort((a, b) => b.sales - a.sales).slice(0, 20);
+    destroyChart("demoCategory");
+    const cctx = document.getElementById("demoCategoryChart").getContext("2d");
+    state.charts.demoCategory = new Chart(cctx, {
+        type: "bar",
+        data: {
+            labels: cats.map(r => truncate(r.cat, 30)),
+            datasets: [
+                { label: "Sales", data: cats.map(r => r.sales), backgroundColor: "#3f51b5", borderRadius: 4 },
+                { label: "GP$",   data: cats.map(r => r.gp),    backgroundColor: "#00897b", borderRadius: 4 },
+            ],
+        },
+        options: chartBase({
+            indexAxis: "y",
+            plugins: { legend: { position: "bottom", labels: { boxWidth: 10, font: { size: 11 } } },
+                       tooltip: { callbacks: { label: c => c.dataset.label + ": " + fmtMoneyFull(c.parsed.x) + (c.dataset.label === "GP$" ? "  (" + fmtPct(cats[c.dataIndex].gpPct) + ")" : "") } } },
+            scales: { x: { ticks: { callback: v => fmtMoney(v) } } }
+        })
+    });
+
+    // ---- City chart ----
+    const cities = aggregateByCity(state.filtered).filter(r => r.sales > 0).sort((a, b) => b.sales - a.sales).slice(0, 15);
+    destroyChart("demoCity");
+    const ctyctx = document.getElementById("demoCityChart").getContext("2d");
+    state.charts.demoCity = new Chart(ctyctx, {
+        type: "bar",
+        data: {
+            labels: cities.map(r => truncate(r.city, 26)),
+            datasets: [{ data: cities.map(r => r.sales), backgroundColor: cities.map((_, i) => barShade("#6a3ab2", i / Math.max(cities.length, 1))), borderRadius: 4 }],
+        },
+        options: chartBase({
+            indexAxis: "y",
+            plugins: { legend: { display: false },
+                       tooltip: { callbacks: { label: c => fmtMoneyFull(c.parsed.x) + "  (" + cities[c.dataIndex].invoiceCount + " inv)" } } },
+            scales: { x: { ticks: { callback: v => fmtMoney(v) } } }
+        })
+    });
+
+    // ---- Customer Posting Group table ----
+    const cpgRows = aggregateByCustPostingGroup(state.filtered).sort((a, b) => b.sales - a.sales);
+    const totSales = cpgRows.reduce((s, r) => s + r.sales, 0) || 1;
+    const tbody = document.querySelector("#demoCpgTable tbody");
+    tbody.innerHTML = cpgRows.map(r => `
+        <tr>
+            <td>${escapeHtml(r.cpg)}</td>
+            <td class="num">${fmtInt(r.customerCount)}</td>
+            <td class="num">${fmtInt(r.invoiceCount)}</td>
+            <td class="num">${fmtMoneyFull(r.sales)}</td>
+            <td class="num ${r.gp >= 0 ? "pos" : "neg"}">${fmtMoneyFull(r.gp)}</td>
+            <td class="num">${fmtPct(r.gpPct)}</td>
+            <td class="num">${fmtPct(r.sales / totSales)}</td>
+        </tr>
+    `).join("") || '<tr><td colspan="7" class="empty">No data — Customer Posting Group may not be on this BC tenant.</td></tr>';
+
+    const noGroup = cpgRows.length && cpgRows.every(r => r.cpg === "(unknown)");
+    document.getElementById("demoCpgMeta").textContent = noGroup ? "Customer Posting Group field wasn't returned by the BC API — values show as (unknown). Tell me if you want me to fetch it from a different endpoint." : (cpgRows.length + " groups");
+}
+
+// ============================================================
 // FILTER DROPDOWNS
 // ============================================================
 function populateFilterDropdowns() {
@@ -2004,15 +2568,22 @@ async function handleLoad() {
     const btn = document.getElementById("loadBtn");
     btn.disabled = true; btn.textContent = "Loading…";
     try {
-        const [locs, items, invoices, iles] = await Promise.all([
+        const [locs, items, customers, invoices, iles] = await Promise.all([
             fetchLocations(),
             fetchItems(),
+            fetchCustomers(),
             fetchSalesInvoicesWithLines(from, to),
             fetchItemLedgerSales(from, to),
         ]);
         state.locations = new Map(locs.map(l => [l.id, l.code || l.displayName || "(unnamed)"]));
         state.items = items;
         state.itemCategory = new Map(items.map(it => [it.number, it.itemCategoryCode || ""]));
+        state.customers = customers;
+        state.custPostingGroup = new Map(customers.map(c => [
+            c.number || c.id,
+            c.customerPostingGroup || c.customerPostingGroupCode || c.postingGroup || ""
+        ]));
+        state.custCity = new Map(customers.map(c => [c.number || c.id, c.city || ""]));
         state.invoices = invoices;
         state.iles = iles;
         buildCostMaps(iles);
@@ -2133,6 +2704,16 @@ function wireEvents() {
         });
     });
     document.getElementById("ciMetric").addEventListener("change", e => { state.ciMetric = e.target.value; renderCiChart(); });
+
+    // Daily Sales Matrix expand/collapse
+    document.querySelector("#dailySalesTable tbody").addEventListener("click", e => {
+        const tr = e.target.closest("tr[data-key]"); if (!tr) return;
+        if (tr.dataset.expandable !== "1") return;
+        const key = tr.dataset.key;
+        if (state.expandedMatrix.has(key)) state.expandedMatrix.delete(key);
+        else state.expandedMatrix.add(key);
+        renderDailySales();
+    });
 }
 
 // ============================================================
