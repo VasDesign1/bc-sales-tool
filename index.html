@@ -287,12 +287,15 @@
             <a data-tab="pop">Period-over-Period</a>
             <a data-tab="dailySales">Daily Sales Matrix</a>
             <a data-tab="demographics">Sales Demographics</a>
+            <a data-tab="retention">Customer Retention</a>
+            <a data-tab="forecast">Sales Forecasting</a>
 
             <div class="group-label">Targets &amp; Run Rate</div>
-            <a data-tab="branchTarget" class="stub">Branch Sales &amp; Targets</a>
-            <a data-tab="branchMarginRate" class="stub">Branch Margin Run Rate</a>
-            <a data-tab="salespersonSalesRate" class="stub">Salesperson Sales Run Rate</a>
-            <a data-tab="salespersonMarginRate" class="stub">Salesperson Margin Run Rate</a>
+            <a data-tab="branchTarget">Branch Sales &amp; Targets</a>
+            <a data-tab="branchSalesRate">Branch Sales Run Rate</a>
+            <a data-tab="branchMarginRate">Branch Margin Run Rate</a>
+            <a data-tab="salespersonSalesRate">Salesperson Sales Run Rate</a>
+            <a data-tab="salespersonMarginRate">Salesperson Margin Run Rate</a>
 
             <div class="group-label">Lists</div>
             <a data-tab="keyCustomers" class="stub">Key Customer Sales</a>
@@ -946,36 +949,225 @@
                 </div>
             </section>
 
-            <!-- TAB: placeholders -->
+            <!-- TAB: Customer Retention -->
+            <section data-tab-content="retention" style="display:none;">
+                <div class="kpi-row">
+                    <div class="kpi k-cust"><div class="label">Customers (in period)</div><div class="value" id="retKpiCust">—</div></div>
+                    <div class="kpi k-rev"><div class="label">New customers</div><div class="value" id="retKpiNew">—</div></div>
+                    <div class="kpi k-gp"><div class="label">Returning customers</div><div class="value" id="retKpiReturning">—</div></div>
+                    <div class="kpi k-avg"><div class="label">Lost customers</div><div class="value" id="retKpiLost">—</div></div>
+                </div>
+                <div class="chart-grid">
+                    <div class="card span-12">
+                        <div class="head"><h3>New vs Returning Customers by Month</h3><div class="meta">stacked bar</div></div>
+                        <div class="chart-wrap" style="min-height:320px;"><canvas id="retChart"></canvas></div>
+                    </div>
+                </div>
+                <div class="panel">
+                    <div class="panel-header"><h2>Monthly Retention Detail</h2><div class="meta" id="retMeta"></div></div>
+                    <div class="table-scroll">
+                        <table id="retentionTable">
+                            <thead><tr>
+                                <th>Month</th>
+                                <th class="num">Total Customers</th>
+                                <th class="num">New</th>
+                                <th class="num">Returning</th>
+                            </tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB: Sales Forecasting -->
+            <section data-tab-content="forecast" style="display:none;">
+                <div class="hint">Simple forecast based on the monthly history loaded in the date range above. Two methods to pick from:</div>
+                <div class="toolbar">
+                    <div class="field">
+                        <label for="fcMethod">Method</label>
+                        <select id="fcMethod">
+                            <option value="linear" selected>Linear trend (least-squares)</option>
+                            <option value="ma3">3-month moving average</option>
+                            <option value="ma3trend">3-month MA + trend</option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label for="fcHorizon">Horizon (months)</label>
+                        <input type="number" id="fcHorizon" value="6" min="1" max="24" style="min-width:80px;">
+                    </div>
+                    <button class="btn btn-primary" id="fcRerun">Update forecast</button>
+                </div>
+                <div class="chart-grid">
+                    <div class="card span-12">
+                        <div class="head"><h3>Actual + Forecast (monthly sales)</h3><div class="meta" id="fcMeta"></div></div>
+                        <div class="chart-wrap" style="min-height:320px;"><canvas id="fcChart"></canvas></div>
+                    </div>
+                </div>
+                <div class="panel">
+                    <div class="panel-header"><h2>Forecast detail</h2></div>
+                    <div class="table-scroll">
+                        <table id="forecastTable">
+                            <thead><tr>
+                                <th>Month</th>
+                                <th class="num">Actual</th>
+                                <th class="num">Forecast</th>
+                            </tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB: Branch Sales & Targets -->
             <section data-tab-content="branchTarget" style="display:none;">
-                <div class="placeholder">
-                    <h2>Branch Sales &amp; Targets</h2>
-                    <p>Mirrors your Power BI "BRANCH SALES &amp; TARGET" page: per-branch monthly Sales$, GP$, GP%, Sales Target$, GP Target$, side-by-side for the current and prior fiscal year.</p>
-                    <div class="need"><strong>Needs:</strong> a source of monthly Sales and GP targets per branch. Where do these live? BC G/L Budget? An Excel file? A custom table? Tell me and I'll wire it up.</div>
+                <div class="kpi-row">
+                    <div class="kpi k-rev"><div class="label">Sales</div><div class="value" id="btKpiSales">—</div></div>
+                    <div class="kpi k-qty"><div class="label">Sales Quantity</div><div class="value" id="btKpiQty">—</div></div>
+                    <div class="kpi k-gp"><div class="label">Gross Profit</div><div class="value" id="btKpiGp">—</div></div>
+                    <div class="kpi k-gpp"><div class="label">Gross Profit Margin</div><div class="value" id="btKpiGpp">—</div></div>
+                </div>
+                <div class="hint">Type a value in the Sales $ Target / GP $ Target cells — saved to this browser only (localStorage). They persist across reloads but won't sync to other machines.</div>
+                <div class="panel">
+                    <div class="panel-header"><h2>Fiscal Year × Month × Branch — Sales vs Targets</h2></div>
+                    <div class="table-scroll">
+                        <table id="branchTargetTable">
+                            <thead><tr>
+                                <th>Fiscal Year</th>
+                                <th>Month</th>
+                                <th>Branch</th>
+                                <th class="num">Sales $</th>
+                                <th class="num">GP $</th>
+                                <th class="num">GP %</th>
+                                <th class="num">Sales $ Target</th>
+                                <th class="num">GP $ Target</th>
+                            </tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
                 </div>
             </section>
 
+            <!-- TAB: Branch Sales Run Rate -->
+            <section data-tab-content="branchSalesRate" style="display:none;">
+                <div class="hint">Run-rate for the current month (<strong id="brsrMonth">—</strong>). Selling days = Mon–Fri minus Victorian public holidays. Enter targets in the Sales Target column; they save automatically to this browser.</div>
+                <div class="kpi-row">
+                    <div class="kpi k-rev"><div class="label">Total Selling Days</div><div class="value" id="brsrSdTotal">—</div></div>
+                    <div class="kpi k-inv"><div class="label">Selling Days Passed</div><div class="value" id="brsrSdPassed">—</div></div>
+                    <div class="kpi k-cust"><div class="label">Remaining Selling Days</div><div class="value" id="brsrSdRemaining">—</div></div>
+                    <div class="kpi k-gpp"><div class="label">% Month Passed</div><div class="value" id="brsrSdPct">—</div></div>
+                </div>
+                <div class="panel">
+                    <div class="panel-header"><h2>Sales Run Rate · by Branch</h2></div>
+                    <div class="table-scroll">
+                        <table id="brsrTable">
+                            <thead><tr>
+                                <th>Branch</th>
+                                <th class="num">Sales For Month PY</th>
+                                <th class="num">Sales Target</th>
+                                <th class="num">Sales For Month</th>
+                                <th class="num">Target Run Rate</th>
+                                <th class="num">Actual Run Rate</th>
+                                <th class="num">Balance</th>
+                                <th class="num">Required Daily</th>
+                                <th>Status</th>
+                                <th class="num">% Achieved</th>
+                            </tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB: Branch Margin Run Rate -->
             <section data-tab-content="branchMarginRate" style="display:none;">
-                <div class="placeholder">
-                    <h2>Branch Margin Run Rate</h2>
-                    <p>Mirrors your "Branch MARGIN Run Rate For Month" page: for the current month, per branch — GM$ For Month PY, GM$ Target, GM$ for the Month, Target Run Rate at Start of Month, Actual Run Rate after current day, Balance of Target, Required Run Rate, Run Rate Status, % achieved.</p>
-                    <div class="need"><strong>Needs:</strong> (1) monthly GP target per branch, (2) the selling-day calendar (is Mon–Fri minus Victorian public holidays correct, or do you have a custom calendar?).</div>
+                <div class="hint">Margin (GP$) run-rate for the current month (<strong id="brmrMonth">—</strong>). Selling days = Mon–Fri minus Vic public holidays.</div>
+                <div class="kpi-row">
+                    <div class="kpi k-rev"><div class="label">Total Selling Days</div><div class="value" id="brmrSdTotal">—</div></div>
+                    <div class="kpi k-inv"><div class="label">Selling Days Passed</div><div class="value" id="brmrSdPassed">—</div></div>
+                    <div class="kpi k-cust"><div class="label">Remaining Selling Days</div><div class="value" id="brmrSdRemaining">—</div></div>
+                    <div class="kpi k-gpp"><div class="label">% Month Passed</div><div class="value" id="brmrSdPct">—</div></div>
+                </div>
+                <div class="panel">
+                    <div class="panel-header"><h2>Margin Run Rate · by Branch</h2></div>
+                    <div class="table-scroll">
+                        <table id="brmrTable">
+                            <thead><tr>
+                                <th>Branch</th>
+                                <th class="num">GM $ For Month PY</th>
+                                <th class="num">GM $ Target</th>
+                                <th class="num">GM $ For Month</th>
+                                <th class="num">Target Run Rate</th>
+                                <th class="num">Actual Run Rate</th>
+                                <th class="num">Balance</th>
+                                <th class="num">Required Daily</th>
+                                <th>Status</th>
+                                <th class="num">% Achieved</th>
+                            </tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
                 </div>
             </section>
 
+            <!-- TAB: Salesperson Sales Run Rate -->
             <section data-tab-content="salespersonSalesRate" style="display:none;">
-                <div class="placeholder">
-                    <h2>Salesperson Sales Run Rate</h2>
-                    <p>Mirrors your "Salesperson SALES Run Rate For Month" page: per salesperson — Sales Amount For Month PY, Sales Target, Sales as @ Current Day, Target/Actual Run Rate, Balance, Required Run Rate, Status, % achieved.</p>
-                    <div class="need"><strong>Needs:</strong> monthly sales target per salesperson, plus the selling-day calendar.</div>
+                <div class="hint">Sales run-rate for the current month (<strong id="spsrMonth">—</strong>). Selling days = Mon–Fri minus Vic public holidays.</div>
+                <div class="kpi-row">
+                    <div class="kpi k-rev"><div class="label">Total Selling Days</div><div class="value" id="spsrSdTotal">—</div></div>
+                    <div class="kpi k-inv"><div class="label">Selling Days Passed</div><div class="value" id="spsrSdPassed">—</div></div>
+                    <div class="kpi k-cust"><div class="label">Remaining Selling Days</div><div class="value" id="spsrSdRemaining">—</div></div>
+                    <div class="kpi k-gpp"><div class="label">% Month Passed</div><div class="value" id="spsrSdPct">—</div></div>
+                </div>
+                <div class="panel">
+                    <div class="panel-header"><h2>Sales Run Rate · by Salesperson</h2></div>
+                    <div class="table-scroll">
+                        <table id="spsrTable">
+                            <thead><tr>
+                                <th>Salesperson</th>
+                                <th class="num">Sales For Month PY</th>
+                                <th class="num">Sales Target</th>
+                                <th class="num">Sales For Month</th>
+                                <th class="num">Target Run Rate</th>
+                                <th class="num">Actual Run Rate</th>
+                                <th class="num">Balance</th>
+                                <th class="num">Required Daily</th>
+                                <th>Status</th>
+                                <th class="num">% Achieved</th>
+                            </tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
                 </div>
             </section>
 
+            <!-- TAB: Salesperson Margin Run Rate -->
             <section data-tab-content="salespersonMarginRate" style="display:none;">
-                <div class="placeholder">
-                    <h2>Salesperson Margin Run Rate</h2>
-                    <p>Mirrors your "Salesperson MARGIN Run Rate For Month" page: per salesperson GM$ run-rate math.</p>
-                    <div class="need"><strong>Needs:</strong> monthly GP target per salesperson + selling-day calendar.</div>
+                <div class="hint">Margin (GP$) run-rate for the current month (<strong id="spmrMonth">—</strong>).</div>
+                <div class="kpi-row">
+                    <div class="kpi k-rev"><div class="label">Total Selling Days</div><div class="value" id="spmrSdTotal">—</div></div>
+                    <div class="kpi k-inv"><div class="label">Selling Days Passed</div><div class="value" id="spmrSdPassed">—</div></div>
+                    <div class="kpi k-cust"><div class="label">Remaining Selling Days</div><div class="value" id="spmrSdRemaining">—</div></div>
+                    <div class="kpi k-gpp"><div class="label">% Month Passed</div><div class="value" id="spmrSdPct">—</div></div>
+                </div>
+                <div class="panel">
+                    <div class="panel-header"><h2>Margin Run Rate · by Salesperson</h2></div>
+                    <div class="table-scroll">
+                        <table id="spmrTable">
+                            <thead><tr>
+                                <th>Salesperson</th>
+                                <th class="num">GM $ For Month PY</th>
+                                <th class="num">GM $ Target</th>
+                                <th class="num">GM $ For Month</th>
+                                <th class="num">Target Run Rate</th>
+                                <th class="num">Actual Run Rate</th>
+                                <th class="num">Balance</th>
+                                <th class="num">Required Daily</th>
+                                <th>Status</th>
+                                <th class="num">% Achieved</th>
+                            </tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
                 </div>
             </section>
 
@@ -1215,7 +1407,10 @@ const TAB_TITLES = {
     pop: "Period-over-Period",
     dailySales: "Daily Sales Matrix",
     demographics: "Sales Demographics",
+    retention: "Customer Retention",
+    forecast: "Sales Forecasting",
     branchTarget: "Branch Sales & Targets",
+    branchSalesRate: "Branch Sales Run Rate",
     branchMarginRate: "Branch Margin Run Rate",
     salespersonSalesRate: "Salesperson Sales Run Rate",
     salespersonMarginRate: "Salesperson Margin Run Rate",
@@ -1705,6 +1900,13 @@ function renderCurrentTab() {
         case "pop":         renderPoP();      break;
         case "dailySales":  renderDailySales(); break;
         case "demographics":renderDemographics(); break;
+        case "retention":   renderRetention(); break;
+        case "forecast":    renderForecast(); break;
+        case "branchTarget":           renderBranchTargets(); break;
+        case "branchSalesRate":        renderBranchSalesRunRate(); break;
+        case "branchMarginRate":       renderBranchMarginRunRate(); break;
+        case "salespersonSalesRate":   renderSalespersonSalesRunRate(); break;
+        case "salespersonMarginRate":  renderSalespersonMarginRunRate(); break;
     }
 }
 
@@ -2330,6 +2532,367 @@ function renderReturns() {
 }
 
 // ============================================================
+// RUN-RATE TABS (4 tabs share this engine)
+// ============================================================
+function renderRunRateTab(opts) {
+    // opts: { metric: "sales"|"margin", entity: "branch"|"salesperson", prefix }
+    renderFilterChips();
+    const today = new Date();
+    const sd = sellingDaysForMonth(today);
+    const fy = fiscalYear(today.toISOString().slice(0, 10));
+    const mk = monthKey(today.toISOString().slice(0, 10));
+    const monthLbl = today.toLocaleDateString("en-AU", { month: "long", year: "numeric" });
+
+    document.getElementById(opts.prefix + "Month").textContent = monthLbl;
+    document.getElementById(opts.prefix + "SdTotal").textContent = fmtInt(sd.total);
+    document.getElementById(opts.prefix + "SdPassed").textContent = fmtInt(sd.passed);
+    document.getElementById(opts.prefix + "SdRemaining").textContent = fmtInt(sd.remaining);
+    document.getElementById(opts.prefix + "SdPct").textContent = sd.total ? fmtPct(sd.passed / sd.total) : "—";
+
+    const inMonth = (inv, yearOffset) => {
+        const d = new Date(inv.postingDate);
+        return d.getFullYear() === today.getFullYear() - yearOffset && d.getMonth() === today.getMonth();
+    };
+    const cyByEntity = new Map(), pyByEntity = new Map();
+
+    const aggregate = (invs, map) => {
+        for (const inv of invs) {
+            if (state.filters.salesperson && (inv.salesperson || "(unassigned)") !== state.filters.salesperson) continue;
+            if (opts.entity === "salesperson") {
+                if (state.filters.location && !(inv.salesInvoiceLines || []).some(ln => locationCode(ln.locationId) === state.filters.location)) continue;
+                const sales = invoiceSalesAmount(inv);
+                const totalSales = num(inv.totalAmountExcludingTax);
+                const cost = invoiceCost(inv) * (totalSales ? (sales / totalSales) : 1);
+                const ent = inv.salesperson || "(unassigned)";
+                const cur = map.get(ent) || { sales: 0, cost: 0 };
+                cur.sales += sales; cur.cost += cost;
+                map.set(ent, cur);
+            } else {
+                for (const ln of (inv.salesInvoiceLines || [])) {
+                    const ent = locationCode(ln.locationId);
+                    if (state.filters.location && ent !== state.filters.location) continue;
+                    const cur = map.get(ent) || { sales: 0, cost: 0 };
+                    const itemNo = ln.lineObjectNumber || ln.itemId || "";
+                    cur.sales += num(ln.amountExcludingTax);
+                    cur.cost  += lineCost(inv.number, itemNo);
+                    map.set(ent, cur);
+                }
+            }
+        }
+    };
+    aggregate(state.invoices.filter(i => inMonth(i, 0)), cyByEntity);
+    aggregate(state.invoices.filter(i => inMonth(i, 1)), pyByEntity);
+
+    const entities = [...new Set([...cyByEntity.keys(), ...pyByEntity.keys()])].sort();
+    const metricKey = opts.entity + (opts.metric === "sales" ? "Sales" : "Margin");
+    const rows = entities.map(ent => {
+        const cy = cyByEntity.get(ent) || { sales: 0, cost: 0 };
+        const py = pyByEntity.get(ent) || { sales: 0, cost: 0 };
+        const cyVal = opts.metric === "sales" ? cy.sales : (cy.sales - cy.cost);
+        const pyVal = opts.metric === "sales" ? py.sales : (py.sales - py.cost);
+        const target = getTarget(metricKey, fy, mk, ent) || 0;
+        const rr = computeRunRate(cyVal, target, sd.total, sd.passed, sd.remaining);
+        return { entity: ent, cyVal, pyVal, target, metricKey, ...rr };
+    }).sort((a, b) => b.cyVal - a.cyVal);
+
+    const tbody = document.querySelector("#" + opts.prefix + "Table tbody");
+    let tCy = 0, tPy = 0, tTarget = 0;
+    const bodyHtml = rows.map(r => {
+        tCy += r.cyVal; tPy += r.pyVal; tTarget += r.target;
+        return `<tr>
+            <td>${escapeHtml(r.entity)}</td>
+            <td class="num">${r.pyVal ? fmtMoneyFull(r.pyVal) : "—"}</td>
+            <td class="num"><input type="number" data-target-metric="${escapeAttr(r.metricKey)}" data-target-fy="${fy}" data-target-mk="${escapeAttr(mk)}" data-target-ent="${escapeAttr(r.entity)}" value="${r.target || ""}" placeholder="—" style="width:110px; text-align:right; border:1px solid #d6d8eb; border-radius:6px; padding:4px;"></td>
+            <td class="num">${r.cyVal ? fmtMoneyFull(r.cyVal) : "—"}</td>
+            <td class="num">${r.target ? fmtMoneyFull(r.targetDaily) : "—"}</td>
+            <td class="num">${r.actualDaily ? fmtMoneyFull(r.actualDaily) : "—"}</td>
+            <td class="num">${r.target ? fmtMoneyFull(r.balance) : "—"}</td>
+            <td class="num">${r.target ? fmtMoneyFull(r.requiredDaily) : "—"}</td>
+            <td>${statusBadgeRunRate(r.status)}</td>
+            <td class="num">${r.pctAchieved == null ? "—" : fmtPct(r.pctAchieved)}</td>
+        </tr>`;
+    }).join("");
+    const totalHtml = `<tr style="font-weight:700; background:#eef0fb;">
+        <td>Total</td>
+        <td class="num">${tPy ? fmtMoneyFull(tPy) : "—"}</td>
+        <td class="num">${tTarget ? fmtMoneyFull(tTarget) : "—"}</td>
+        <td class="num">${fmtMoneyFull(tCy)}</td>
+        <td colspan="6"></td>
+    </tr>`;
+    tbody.innerHTML = (bodyHtml || '<tr><td colspan="10" class="empty">No data this month.</td></tr>') + (bodyHtml ? totalHtml : "");
+
+    tbody.querySelectorAll("input[data-target-metric]").forEach(inp => {
+        inp.addEventListener("change", e => {
+            const m = e.target.dataset.targetMetric;
+            const fy_ = parseInt(e.target.dataset.targetFy);
+            const mk_ = e.target.dataset.targetMk;
+            const ent_ = e.target.dataset.targetEnt;
+            const v = e.target.value === "" ? null : parseFloat(e.target.value);
+            setTarget(m, fy_, mk_, ent_, v);
+            renderCurrentTab();
+        });
+    });
+}
+function renderBranchSalesRunRate()       { renderRunRateTab({ metric: "sales",  entity: "branch",      prefix: "brsr" }); }
+function renderBranchMarginRunRate()      { renderRunRateTab({ metric: "margin", entity: "branch",      prefix: "brmr" }); }
+function renderSalespersonSalesRunRate()  { renderRunRateTab({ metric: "sales",  entity: "salesperson", prefix: "spsr" }); }
+function renderSalespersonMarginRunRate() { renderRunRateTab({ metric: "margin", entity: "salesperson", prefix: "spmr" }); }
+
+// ============================================================
+// BRANCH SALES & TARGETS (multi-month with editable targets)
+// ============================================================
+function renderBranchTargets() {
+    renderFilterChips();
+    // KPIs across the loaded period
+    const groups = aggregateBranchMonthly(state.filtered);
+    const totSales = groups.reduce((s, r) => s + r.sales, 0);
+    const totGp    = groups.reduce((s, r) => s + r.gp, 0);
+    const totQty   = groups.reduce((s, r) => s + r.qty, 0);
+    document.getElementById("btKpiSales").textContent = fmtMoneyFull(totSales);
+    document.getElementById("btKpiQty").textContent   = fmtInt(totQty);
+    document.getElementById("btKpiGp").textContent    = fmtMoneyFull(totGp);
+    document.getElementById("btKpiGpp").textContent   = fmtPct(totSales ? totGp / totSales : 0);
+
+    // Group rows by (FY, monthKey) → branch list
+    const map = new Map(); // fy -> Map<monthKey, Map<branch, {sales,gp,gpPct,qty}>>
+    for (const r of groups) {
+        if (!map.has(r.fy)) map.set(r.fy, new Map());
+        const monthM = map.get(r.fy);
+        if (!monthM.has(r.monthKey)) monthM.set(r.monthKey, new Map());
+        monthM.get(r.monthKey).set(r.branch, r);
+    }
+    // Sort FYs descending, months ascending within FY
+    const fys = [...map.keys()].sort((a, b) => b - a);
+    const tbody = document.querySelector("#branchTargetTable tbody");
+    const rowsHtml = [];
+    for (const fy of fys) {
+        const monthM = map.get(fy);
+        const months = [...monthM.keys()].sort();
+        for (const mk of months) {
+            const bMap = monthM.get(mk);
+            const branches = [...bMap.keys()].sort();
+            let fySales = 0, fyGp = 0, fyTgtSales = 0, fyTgtGp = 0;
+            // Month-total row
+            const monthTotals = { sales: 0, gp: 0, qty: 0 };
+            for (const b of branches) {
+                const r = bMap.get(b);
+                monthTotals.sales += r.sales;
+                monthTotals.gp    += r.gp;
+                monthTotals.qty   += r.qty;
+            }
+            rowsHtml.push(`<tr style="background:#eef0fb; font-weight:700;">
+                <td>FY ${fy}</td>
+                <td>${escapeHtml(monthLabelFromKey(mk))}</td>
+                <td>— all branches —</td>
+                <td class="num">${fmtMoneyFull(monthTotals.sales)}</td>
+                <td class="num ${monthTotals.gp >= 0 ? "pos" : "neg"}">${fmtMoneyFull(monthTotals.gp)}</td>
+                <td class="num">${fmtPct(monthTotals.sales ? monthTotals.gp / monthTotals.sales : 0)}</td>
+                <td class="num"></td>
+                <td class="num"></td>
+            </tr>`);
+            for (const b of branches) {
+                const r = bMap.get(b);
+                const tgtSales = getTarget("branchSalesTarget", fy, mk, b) || "";
+                const tgtGp    = getTarget("branchGpTarget",    fy, mk, b) || "";
+                rowsHtml.push(`<tr>
+                    <td></td>
+                    <td></td>
+                    <td>${escapeHtml(b)}</td>
+                    <td class="num">${fmtMoneyFull(r.sales)}</td>
+                    <td class="num ${r.gp >= 0 ? "pos" : "neg"}">${fmtMoneyFull(r.gp)}</td>
+                    <td class="num">${fmtPct(r.gpPct)}</td>
+                    <td class="num"><input type="number" data-tgt-metric="branchSalesTarget" data-tgt-fy="${fy}" data-tgt-mk="${escapeAttr(mk)}" data-tgt-ent="${escapeAttr(b)}" value="${tgtSales}" placeholder="—" style="width:110px; text-align:right; border:1px solid #d6d8eb; border-radius:6px; padding:4px;"></td>
+                    <td class="num"><input type="number" data-tgt-metric="branchGpTarget"    data-tgt-fy="${fy}" data-tgt-mk="${escapeAttr(mk)}" data-tgt-ent="${escapeAttr(b)}" value="${tgtGp}"    placeholder="—" style="width:110px; text-align:right; border:1px solid #d6d8eb; border-radius:6px; padding:4px;"></td>
+                </tr>`);
+            }
+        }
+    }
+    tbody.innerHTML = rowsHtml.join("") || '<tr><td colspan="8" class="empty">No data.</td></tr>';
+    tbody.querySelectorAll("input[data-tgt-metric]").forEach(inp => {
+        inp.addEventListener("change", e => {
+            const m = e.target.dataset.tgtMetric;
+            const fy_ = parseInt(e.target.dataset.tgtFy);
+            const mk_ = e.target.dataset.tgtMk;
+            const ent_ = e.target.dataset.tgtEnt;
+            const v = e.target.value === "" ? null : parseFloat(e.target.value);
+            setTarget(m, fy_, mk_, ent_, v);
+        });
+    });
+}
+
+// ============================================================
+// CUSTOMER RETENTION TAB
+// ============================================================
+function renderRetention() {
+    renderFilterChips();
+    // Build first/last purchase month per customer
+    const firstMonth = new Map(), lastMonth = new Map(); // custKey -> monthKey
+    const monthCustomers = new Map(); // monthKey -> Set<custKey>
+    for (const inv of state.filtered) {
+        const k = inv.customerNumber || "(unknown)";
+        const mk = monthKey(inv.postingDate);
+        if (!firstMonth.has(k) || mk < firstMonth.get(k)) firstMonth.set(k, mk);
+        if (!lastMonth.has(k) || mk > lastMonth.get(k)) lastMonth.set(k, mk);
+        if (!monthCustomers.has(mk)) monthCustomers.set(mk, new Set());
+        monthCustomers.get(mk).add(k);
+    }
+    const months = [...monthCustomers.keys()].sort();
+    // Per-month metrics
+    const rows = months.map((mk, i) => {
+        const custs = monthCustomers.get(mk);
+        let newC = 0, returningC = 0;
+        for (const c of custs) {
+            if (firstMonth.get(c) === mk) newC++; else returningC++;
+        }
+        return { monthKey: mk, total: custs.size, newC, returningC };
+    });
+
+    // Lost / Recovered (relative to today): a customer is "lost" if last purchase >= 6 months ago
+    const today = new Date();
+    const thresholdMs = 6 * 30 * 24 * 60 * 60 * 1000;
+    let lost = 0, active = 0;
+    for (const [c, mk] of lastMonth) {
+        const lastDate = new Date(mk + "-01");
+        if ((today - lastDate) > thresholdMs) lost++; else active++;
+    }
+    const totalCustomers = lastMonth.size;
+    const totalNew = rows.reduce((s, r) => s + r.newC, 0);
+    const totalReturning = rows.reduce((s, r) => s + r.returningC, 0);
+
+    document.getElementById("retKpiCust").textContent     = fmtInt(totalCustomers);
+    document.getElementById("retKpiNew").textContent      = fmtInt(totalNew);
+    document.getElementById("retKpiReturning").textContent = fmtInt(totalReturning);
+    document.getElementById("retKpiLost").textContent     = fmtInt(lost);
+
+    // Stacked chart: new vs returning per month
+    destroyChart("ret");
+    const ctx = document.getElementById("retChart").getContext("2d");
+    state.charts.ret = new Chart(ctx, {
+        type: "bar",
+        data: {
+            labels: rows.map(r => monthLabelFromKey(r.monthKey)),
+            datasets: [
+                { label: "New",       data: rows.map(r => r.newC),       backgroundColor: "#3f51b5", stack: "c" },
+                { label: "Returning", data: rows.map(r => r.returningC), backgroundColor: "#00897b", stack: "c" },
+            ]
+        },
+        options: chartBase({
+            plugins: { legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } } },
+            scales: { x: { stacked: true }, y: { stacked: true, ticks: { precision: 0 } } }
+        })
+    });
+
+    // Table
+    const tbody = document.querySelector("#retentionTable tbody");
+    tbody.innerHTML = rows.slice().reverse().map(r => `
+        <tr>
+            <td>${monthLabelFromKey(r.monthKey)}</td>
+            <td class="num">${fmtInt(r.total)}</td>
+            <td class="num">${fmtInt(r.newC)}</td>
+            <td class="num">${fmtInt(r.returningC)}</td>
+        </tr>
+    `).join("") || '<tr><td colspan="4" class="empty">No data.</td></tr>';
+    document.getElementById("retMeta").textContent = "Lost = last purchase > 6 months ago from today (" + fmtDate(today.toISOString().slice(0, 10)) + ")";
+}
+
+// ============================================================
+// SALES FORECASTING TAB
+// ============================================================
+function renderForecast() {
+    renderFilterChips();
+    // Monthly sales series from loaded data
+    const byMonth = new Map();
+    for (const inv of state.filtered) {
+        const k = monthKey(inv.postingDate);
+        byMonth.set(k, (byMonth.get(k) || 0) + invoiceSalesAmount(inv));
+    }
+    const months = [...byMonth.keys()].sort();
+    const actuals = months.map(k => byMonth.get(k));
+
+    // Linear regression on month index → sales
+    const n = months.length;
+    let slope = 0, intercept = 0;
+    if (n >= 2) {
+        let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
+        for (let i = 0; i < n; i++) { sumX += i; sumY += actuals[i]; sumXY += i * actuals[i]; sumXX += i * i; }
+        const denom = (n * sumXX - sumX * sumX);
+        slope = denom === 0 ? 0 : (n * sumXY - sumX * sumY) / denom;
+        intercept = (sumY - slope * sumX) / n;
+    } else if (n === 1) { intercept = actuals[0]; }
+
+    // Trailing 3-month moving average for next horizon
+    const horizonInput = document.getElementById("fcHorizon");
+    const horizon = horizonInput ? Math.max(1, Math.min(24, parseInt(horizonInput.value) || 6)) : 6;
+    const methodSel = document.getElementById("fcMethod");
+    const method = methodSel ? methodSel.value : "linear";
+
+    function nextMonthKey(mk) {
+        const [y, m] = mk.split("-").map(Number);
+        const d = new Date(y, m, 1); // m is 1-based, so this is next month
+        return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
+    }
+    function trailingAvg(arr, k) {
+        if (!arr.length) return 0;
+        const slice = arr.slice(-k);
+        return slice.reduce((s, v) => s + v, 0) / slice.length;
+    }
+
+    let lastKey = months[months.length - 1];
+    const forecastLabels = [];
+    const forecastVals = [];
+    const series = actuals.slice();
+    for (let i = 0; i < horizon; i++) {
+        lastKey = lastKey ? nextMonthKey(lastKey) : new Date().toISOString().slice(0, 7);
+        let v;
+        if (method === "linear") {
+            v = intercept + slope * (n + i);
+        } else if (method === "ma3") {
+            v = trailingAvg(series, 3);
+        } else { // last3-avg-with-trend
+            v = trailingAvg(series, 3) + slope; // mild trend
+        }
+        if (!isFinite(v) || v < 0) v = 0;
+        forecastLabels.push(lastKey);
+        forecastVals.push(v);
+        series.push(v);
+    }
+
+    const labels = months.concat(forecastLabels).map(k => monthLabelFromKey(k));
+    const actualSeries = months.map((_, i) => actuals[i]).concat(forecastLabels.map(() => null));
+    const forecastSeries = months.map(() => null).concat(forecastVals);
+
+    destroyChart("fc");
+    const ctx = document.getElementById("fcChart").getContext("2d");
+    state.charts.fc = new Chart(ctx, {
+        type: "line",
+        data: {
+            labels,
+            datasets: [
+                { label: "Actual",   data: actualSeries,   borderColor: "#3f51b5", backgroundColor: "rgba(63,81,181,0.15)", fill: true, tension: 0.2, pointRadius: 3 },
+                { label: "Forecast", data: forecastSeries, borderColor: "#fb8c00", borderDash: [5, 5], backgroundColor: "rgba(251,140,0,0.10)", fill: true, tension: 0.2, pointRadius: 3 },
+            ]
+        },
+        options: chartBase({
+            plugins: { legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } },
+                       tooltip: { callbacks: { label: c => c.dataset.label + ": " + fmtMoneyFull(c.parsed.y) } } },
+            scales: { y: { ticks: { callback: v => fmtMoney(v) } } }
+        })
+    });
+
+    const tbody = document.querySelector("#forecastTable tbody");
+    const tblRows = months.map((k, i) => ({ month: k, actual: actuals[i], forecast: null }))
+        .concat(forecastLabels.map((k, i) => ({ month: k, actual: null, forecast: forecastVals[i] })));
+    tbody.innerHTML = tblRows.slice().reverse().map(r => `
+        <tr>
+            <td>${monthLabelFromKey(r.month)}</td>
+            <td class="num">${r.actual == null ? "—" : fmtMoneyFull(r.actual)}</td>
+            <td class="num" style="color:#fb8c00;">${r.forecast == null ? "—" : fmtMoneyFull(r.forecast)}</td>
+        </tr>
+    `).join("") || '<tr><td colspan="3" class="empty">No data.</td></tr>';
+    document.getElementById("fcMeta").textContent = n + " month" + (n === 1 ? "" : "s") + " of history · forecasting " + horizon + " month" + (horizon === 1 ? "" : "s") + " ahead";
+}
+
+// ============================================================
 // DRILL: CUSTOMER
 // ============================================================
 function showCustomer(custNumber) {
@@ -2558,6 +3121,87 @@ function isoDay(iso) {
     return (d.getUTCDay() + 6) % 7; // 0=Mon..6=Sun
 }
 function startOfMonth(d) { return new Date(d.getFullYear(), d.getMonth(), 1); }
+
+// ============================================================
+// VICTORIAN PUBLIC HOLIDAYS + SELLING DAYS
+// ============================================================
+// Hardcoded Vic public holidays for 2024-2028 (extend as years pass).
+const VIC_PUBLIC_HOLIDAYS = new Set([
+    // 2024
+    "2024-01-01","2024-01-26","2024-03-11","2024-03-29","2024-03-30","2024-03-31","2024-04-01",
+    "2024-04-25","2024-06-10","2024-09-27","2024-11-05","2024-12-25","2024-12-26",
+    // 2025
+    "2025-01-01","2025-01-27","2025-03-10","2025-04-18","2025-04-19","2025-04-20","2025-04-21",
+    "2025-04-25","2025-06-09","2025-09-26","2025-11-04","2025-12-25","2025-12-26",
+    // 2026
+    "2026-01-01","2026-01-26","2026-03-09","2026-04-03","2026-04-04","2026-04-05","2026-04-06",
+    "2026-04-25","2026-06-08","2026-09-25","2026-11-03","2026-12-25","2026-12-28",
+    // 2027
+    "2027-01-01","2027-01-26","2027-03-08","2027-03-26","2027-03-27","2027-03-28","2027-03-29",
+    "2027-04-26","2027-06-14","2027-09-24","2027-11-02","2027-12-27","2027-12-28",
+    // 2028
+    "2028-01-03","2028-01-26","2028-03-13","2028-04-14","2028-04-15","2028-04-16","2028-04-17",
+    "2028-04-25","2028-06-12","2028-09-29","2028-11-07","2028-12-25","2028-12-26",
+]);
+function localISO(d) {
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+}
+function isSellingDay(d) {
+    const day = d.getDay();
+    if (day === 0 || day === 6) return false;
+    return !VIC_PUBLIC_HOLIDAYS.has(localISO(d));
+}
+function sellingDaysInRange(start, end) {
+    if (start > end) return 0;
+    const d = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+    const e = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+    let c = 0;
+    while (d <= e) { if (isSellingDay(d)) c++; d.setDate(d.getDate() + 1); }
+    return c;
+}
+function sellingDaysForMonth(today) {
+    const start = new Date(today.getFullYear(), today.getMonth(), 1);
+    const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    const cap = today < monthEnd ? today : monthEnd;
+    const total = sellingDaysInRange(start, monthEnd);
+    const passed = sellingDaysInRange(start, cap);
+    return { total, passed, remaining: Math.max(0, total - passed) };
+}
+
+// ============================================================
+// MANUAL TARGETS (persisted to browser localStorage)
+// ============================================================
+function targetKey(metric, fy, mk, entity) {
+    return "bcst-tgt:" + metric + ":" + fy + ":" + mk + ":" + entity;
+}
+function getTarget(metric, fy, mk, entity) {
+    const raw = localStorage.getItem(targetKey(metric, fy, mk, entity));
+    if (raw == null || raw === "") return null;
+    const v = parseFloat(raw);
+    return isNaN(v) ? null : v;
+}
+function setTarget(metric, fy, mk, entity, value) {
+    const k = targetKey(metric, fy, mk, entity);
+    if (value == null || isNaN(value) || value === "") localStorage.removeItem(k);
+    else localStorage.setItem(k, String(value));
+}
+function computeRunRate(actual, target, sdTotal, sdPassed, sdRemain) {
+    const targetDaily = sdTotal ? target / sdTotal : 0;
+    const actualDaily = sdPassed ? actual / sdPassed : 0;
+    const balance = target - actual;
+    const requiredDaily = sdRemain ? balance / sdRemain : 0;
+    const onTrack = target > 0 && actualDaily >= targetDaily;
+    const status = target > 0
+        ? (onTrack ? "ON TRACK" : "BEHIND PLANNED DAILY RUN RATE")
+        : "NO PLAN";
+    const pctAchieved = target > 0 ? actual / target : null;
+    return { targetDaily, actualDaily, balance, requiredDaily, status, pctAchieved };
+}
+function statusBadgeRunRate(status) {
+    if (status === "ON TRACK")    return '<span class="badge badge-paid">ON TRACK</span>';
+    if (status === "NO PLAN")     return '<span class="badge badge-draft">No Plan</span>';
+    return '<span class="badge" style="background:#ffcdd2; color:#b71c1c;">' + escapeHtml(status) + '</span>';
+}
 
 // ============================================================
 // MTD TAB
@@ -3365,6 +4009,14 @@ function wireEvents() {
         else state.expandedMatrix.add(key);
         renderDailySales();
     });
+
+    // Forecast controls
+    const fcMethod = document.getElementById("fcMethod");
+    const fcHorizon = document.getElementById("fcHorizon");
+    const fcRerun = document.getElementById("fcRerun");
+    if (fcMethod) fcMethod.addEventListener("change", () => renderForecast());
+    if (fcHorizon) fcHorizon.addEventListener("change", () => renderForecast());
+    if (fcRerun) fcRerun.addEventListener("click", () => renderForecast());
 
     // Drill-down trees expand/collapse
     const wireTreeClicks = (tableSelector, rerender) => {
