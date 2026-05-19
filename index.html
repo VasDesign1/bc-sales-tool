@@ -278,6 +278,8 @@
             <a data-tab="salesperson">Salesperson Sales</a>
             <a data-tab="byItem">Sales by Item</a>
             <a data-tab="eom">EOM Report</a>
+            <a data-tab="quotes">Sales Quote Overview</a>
+            <a data-tab="returns">Sales Returns Overview</a>
 
             <div class="group-label">Time Analytics</div>
             <a data-tab="mtd">Month-to-Date</a>
@@ -737,6 +739,79 @@
                 </div>
             </section>
 
+            <!-- TAB: Sales Quote Overview -->
+            <section data-tab-content="quotes" style="display:none;">
+                <div class="kpi-row">
+                    <div class="kpi k-rev"><div class="label">Quote Sales (LCY)</div><div class="value" id="qKpiSales">—</div></div>
+                    <div class="kpi k-qty"><div class="label">No. of Sales Quotes</div><div class="value" id="qKpiCount">—</div></div>
+                    <div class="kpi k-inv"><div class="label">Quote Quantity</div><div class="value" id="qKpiQty">—</div></div>
+                    <div class="kpi k-gpp"><div class="label">Avg Quote Value</div><div class="value" id="qKpiAvg">—</div></div>
+                </div>
+                <div class="chart-grid">
+                    <div class="card span-6">
+                        <div class="head"><h3>Quote Amount by Salesperson</h3></div>
+                        <div class="chart-wrap" style="min-height:340px;"><canvas id="qSpChart"></canvas></div>
+                    </div>
+                    <div class="card span-6">
+                        <div class="head"><h3>Quote Amount by Item Category</h3></div>
+                        <div class="chart-wrap" style="min-height:340px;"><canvas id="qCatChart"></canvas></div>
+                    </div>
+                </div>
+                <div class="panel">
+                    <div class="panel-header"><h2>Sales Quotes by Customer</h2><div class="meta" id="qMeta"></div></div>
+                    <div class="table-scroll">
+                        <table id="quotesTable">
+                            <thead><tr>
+                                <th>Customer</th>
+                                <th>Salesperson</th>
+                                <th>Quote No</th>
+                                <th>Document Date</th>
+                                <th class="num">Quantity</th>
+                                <th class="num">Amount (excl. tax)</th>
+                            </tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB: Sales Returns Overview -->
+            <section data-tab-content="returns" style="display:none;">
+                <div class="kpi-row">
+                    <div class="kpi k-rev"><div class="label">Return Rate (Amount)</div><div class="value" id="rKpiRate">—</div><div class="sub">credits / sales</div></div>
+                    <div class="kpi k-qty"><div class="label">Total Credit (Amount)</div><div class="value" id="rKpiAmount">—</div><div class="sub">posted credit memos</div></div>
+                    <div class="kpi k-inv"><div class="label">Total Credit (Qty)</div><div class="value" id="rKpiQty">—</div><div class="sub">units returned</div></div>
+                    <div class="kpi k-gpp"><div class="label">Credit Adj Profit</div><div class="value" id="rKpiGp">—</div><div class="sub">GP impact of returns</div></div>
+                </div>
+                <div class="chart-grid">
+                    <div class="card span-6">
+                        <div class="head"><h3>Return Rate (Amount) by Customer</h3><div class="meta">top 15</div></div>
+                        <div class="chart-wrap" style="min-height:380px;"><canvas id="rCustChart"></canvas></div>
+                    </div>
+                    <div class="card span-6">
+                        <div class="head"><h3>Total Credit (Amount) by Item</h3><div class="meta">top 15</div></div>
+                        <div class="chart-wrap" style="min-height:380px;"><canvas id="rItemChart"></canvas></div>
+                    </div>
+                </div>
+                <div class="panel">
+                    <div class="panel-header"><h2>Credit memo detail</h2><div class="meta" id="rMeta"></div></div>
+                    <div class="table-scroll">
+                        <table id="returnsTable">
+                            <thead><tr>
+                                <th>Customer</th>
+                                <th>Salesperson</th>
+                                <th>CR No</th>
+                                <th>Posting Date</th>
+                                <th class="num">Qty</th>
+                                <th class="num">Credit Amount</th>
+                                <th class="num">GP Impact</th>
+                            </tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
             <!-- TAB: Month-to-Date -->
             <section data-tab-content="mtd" style="display:none;">
                 <div class="kpi-row">
@@ -1055,21 +1130,62 @@ async function fetchCustomers() {
         return await bcFetchAll(BC_API_URL + "/companies(" + compId + ")/customers?$top=10000", "Customers");
     } catch (e) { console.warn("Customers fetch failed:", e.message); return []; }
 }
+async function fetchSalesCreditMemos(fromISO, toISO) {
+    const compId = await bcGetCompanyId();
+    const filter = "postingDate ge " + fromISO + " and postingDate le " + toISO;
+    const url = BC_API_URL + "/companies(" + compId + ")/salesCreditMemos?$filter=" + encodeURIComponent(filter) + "&$expand=salesCreditMemoLines&$top=2000";
+    try { return await bcFetchAll(url, "Sales credit memos"); }
+    catch (e) { console.warn("Credit memos fetch failed:", e.message); return []; }
+}
+async function fetchSalesShipments(fromISO, toISO) {
+    const compId = await bcGetCompanyId();
+    const filter = "postingDate ge " + fromISO + " and postingDate le " + toISO;
+    const url = BC_API_URL + "/companies(" + compId + ")/salesShipments?$filter=" + encodeURIComponent(filter) + "&$expand=salesShipmentLines&$top=2000";
+    try { return await bcFetchAll(url, "Sales shipments"); }
+    catch (e) { console.warn("Shipments fetch failed:", e.message); return []; }
+}
+async function fetchSalesReturnReceipts(fromISO, toISO) {
+    const compId = await bcGetCompanyId();
+    const filter = "postingDate ge " + fromISO + " and postingDate le " + toISO;
+    const tries = [
+        "/salesReturnReceipts?$filter=" + encodeURIComponent(filter) + "&$expand=salesReturnReceiptLines&$top=2000",
+        "/salesReturnReceipts?$filter=" + encodeURIComponent(filter) + "&$top=2000",
+    ];
+    for (const path of tries) {
+        try { return await bcFetchAll(BC_API_URL + "/companies(" + compId + ")" + path, "Sales return receipts"); }
+        catch (e) { console.warn("Return receipts try failed:", e.message); }
+    }
+    return [];
+}
+async function fetchSalesQuotes(fromISO, toISO) {
+    const compId = await bcGetCompanyId();
+    // Quotes use documentDate (not postingDate)
+    const filter = "documentDate ge " + fromISO + " and documentDate le " + toISO;
+    const url = BC_API_URL + "/companies(" + compId + ")/salesQuotes?$filter=" + encodeURIComponent(filter) + "&$expand=salesQuoteLines&$top=2000";
+    try { return await bcFetchAll(url, "Sales quotes"); }
+    catch (e) { console.warn("Quotes fetch failed:", e.message); return []; }
+}
 
 // ============================================================
 // STATE
 // ============================================================
 const state = {
     invoices: [], filtered: [], iles: [], items: [], customers: [],
+    creditMemos: [], shipments: [], returnReceipts: [], quotes: [],
     locations: new Map(),    // locId -> code
     itemCategory: new Map(), // itemNumber -> category code
     custPostingGroup: new Map(), // customerNumber -> posting group code
     custCity: new Map(),     // customerNumber -> city
     expandedMatrix: new Set(), // keys of expanded matrix rows
-    costByInvoiceNo: new Map(), // invoice.number -> cost total (abs)
-    costByItemInvoiceNo: new Map(), // (invoice.number||"") + "|" + itemNumber -> cost
+    costByInvoiceNo: new Map(),
+    costByItemInvoiceNo: new Map(),
     costNonInvByInvoiceNo: new Map(),
     costNonInvByItemInvoiceNo: new Map(),
+    // Generic: keyed by "ileDocType|docNumber" (e.g. "Sales Credit Memo|SCM000123")
+    costByDocKey: new Map(),
+    costByItemDocKey: new Map(),
+    costNonInvByDocKey: new Map(),
+    costNonInvByItemDocKey: new Map(),
     byCustomer: new Map(), byItem: new Map(), byLocation: new Map(), bySalesperson: new Map(),
     currentCustomer: null, currentInvoice: null, currentItem: null,
     dashboardBucket: "month", customerBucket: "month", ciBucket: "month",
@@ -1092,6 +1208,8 @@ const TAB_TITLES = {
     salesperson: "Salesperson Sales",
     byItem: "Sales by Item",
     eom: "EOM Report",
+    quotes: "Sales Quote Overview",
+    returns: "Sales Returns Overview",
     mtd: "Month-to-Date",
     mat: "Moving Annual Total",
     pop: "Period-over-Period",
@@ -1169,20 +1287,38 @@ function buildCostMaps(iles) {
     state.costByItemInvoiceNo.clear();
     state.costNonInvByInvoiceNo.clear();
     state.costNonInvByItemInvoiceNo.clear();
+    state.costByDocKey.clear();
+    state.costByItemDocKey.clear();
+    state.costNonInvByDocKey.clear();
+    state.costNonInvByItemDocKey.clear();
     for (const e of iles) {
-        // We want sales-side invoice entries (not credit memos for now)
         const docType = e.documentType || "";
-        if (docType && !/Sales Invoice/i.test(docType)) continue;
-        const docNo = e.documentNumber || "";
+        const docNo   = e.documentNumber || "";
         if (!docNo) continue;
-        const cost = Math.abs(num(e.costAmountActual));
+        const cost   = Math.abs(num(e.costAmountActual));
         const costNI = Math.abs(num(e.costAmountNonInvtbl));
-        state.costByInvoiceNo.set(docNo, (state.costByInvoiceNo.get(docNo) || 0) + cost);
-        state.costNonInvByInvoiceNo.set(docNo, (state.costNonInvByInvoiceNo.get(docNo) || 0) + costNI);
-        const itemKey = docNo + "|" + (e.itemNumber || "");
-        state.costByItemInvoiceNo.set(itemKey, (state.costByItemInvoiceNo.get(itemKey) || 0) + cost);
-        state.costNonInvByItemInvoiceNo.set(itemKey, (state.costNonInvByItemInvoiceNo.get(itemKey) || 0) + costNI);
+        // Generic doc-keyed maps (any sales doc type)
+        const k  = docType + "|" + docNo;
+        const ki = k + "|" + (e.itemNumber || "");
+        state.costByDocKey.set(k, (state.costByDocKey.get(k) || 0) + cost);
+        state.costNonInvByDocKey.set(k, (state.costNonInvByDocKey.get(k) || 0) + costNI);
+        state.costByItemDocKey.set(ki, (state.costByItemDocKey.get(ki) || 0) + cost);
+        state.costNonInvByItemDocKey.set(ki, (state.costNonInvByItemDocKey.get(ki) || 0) + costNI);
+        // Backward-compat (Sales Invoice only) — used by existing aggregations
+        if (/Sales Invoice/i.test(docType)) {
+            state.costByInvoiceNo.set(docNo, (state.costByInvoiceNo.get(docNo) || 0) + cost);
+            state.costNonInvByInvoiceNo.set(docNo, (state.costNonInvByInvoiceNo.get(docNo) || 0) + costNI);
+            const itemKey = docNo + "|" + (e.itemNumber || "");
+            state.costByItemInvoiceNo.set(itemKey, (state.costByItemInvoiceNo.get(itemKey) || 0) + cost);
+            state.costNonInvByItemInvoiceNo.set(itemKey, (state.costNonInvByItemInvoiceNo.get(itemKey) || 0) + costNI);
+        }
     }
+}
+function lineCostForDoc(ileDocType, docNo, itemNo) {
+    return state.costByItemDocKey.get(ileDocType + "|" + (docNo || "") + "|" + (itemNo || "")) || 0;
+}
+function lineCostNonInvForDoc(ileDocType, docNo, itemNo) {
+    return state.costNonInvByItemDocKey.get(ileDocType + "|" + (docNo || "") + "|" + (itemNo || "")) || 0;
 }
 function invoiceCost(inv) {
     return state.costByInvoiceNo.get(inv.number) || 0;
@@ -1562,6 +1698,8 @@ function renderCurrentTab() {
         case "salesperson": renderSalesperson(); break;
         case "byItem":      renderByItem();   break;
         case "eom":         renderEOM();      break;
+        case "quotes":      renderQuotes();   break;
+        case "returns":     renderReturns();  break;
         case "mtd":         renderMTD();      break;
         case "mat":         renderMAT();      break;
         case "pop":         renderPoP();      break;
@@ -1976,6 +2114,219 @@ function renderEOM() {
         </tr>
     `).join("") || '<tr><td colspan="10" class="empty">No rows.</td></tr>';
     document.getElementById("eomMeta").textContent = rows.length + " line" + (rows.length === 1 ? "" : "s") + (rows.length > 2000 ? " (showing top 2000 — narrow with filters)" : "");
+}
+
+// ============================================================
+// SALES QUOTE OVERVIEW TAB
+// ============================================================
+function renderQuotes() {
+    renderFilterChips();
+    const quotes = (state.quotes || []).filter(q => {
+        if (state.filters.salesperson && (q.salesperson || "(unassigned)") !== state.filters.salesperson) return false;
+        if (state.filters.location) {
+            return (q.salesQuoteLines || []).some(ln => locationCode(ln.locationId) === state.filters.location);
+        }
+        return true;
+    });
+
+    // KPIs
+    let totalAmount = 0, totalQty = 0;
+    const bySp = new Map(), byCat = new Map(), byCust = new Map();
+    const rows = [];
+    for (const q of quotes) {
+        let qAmount = 0, qQty = 0;
+        for (const ln of (q.salesQuoteLines || [])) {
+            if (state.filters.location && locationCode(ln.locationId) !== state.filters.location) continue;
+            const a = num(ln.amountExcludingTax);
+            const ql = num(ln.quantity);
+            qAmount += a; qQty += ql;
+            const itemNo = ln.lineObjectNumber || ln.itemId || "";
+            const cat = state.itemCategory.get(itemNo) || "(no category)";
+            byCat.set(cat, (byCat.get(cat) || 0) + a);
+        }
+        if (!qAmount && q.totalAmountExcludingTax != null) qAmount = num(q.totalAmountExcludingTax);
+        totalAmount += qAmount; totalQty += qQty;
+        const sp = q.salesperson || "(unassigned)";
+        bySp.set(sp, (bySp.get(sp) || 0) + qAmount);
+        const custKey = q.customerNumber || q.customerId || "(unknown)";
+        const custCur = byCust.get(custKey) || { customer: q.customerName || custKey, amount: 0, count: 0 };
+        custCur.amount += qAmount; custCur.count += 1;
+        byCust.set(custKey, custCur);
+        rows.push({
+            customer: q.customerName || q.customerNumber || "(unknown)",
+            salesperson: sp,
+            number: q.number || "",
+            documentDate: q.documentDate || q.invoiceDate || "",
+            qty: qQty,
+            amount: qAmount,
+        });
+    }
+
+    document.getElementById("qKpiSales").textContent = fmtMoneyFull(totalAmount);
+    document.getElementById("qKpiCount").textContent = fmtInt(quotes.length);
+    document.getElementById("qKpiQty").textContent   = fmtInt(totalQty);
+    document.getElementById("qKpiAvg").textContent   = quotes.length ? fmtMoneyFull(totalAmount / quotes.length) : "—";
+
+    // Salesperson chart
+    destroyChart("qSp");
+    const spRows = [...bySp.entries()].map(([k, v]) => ({ name: k, value: v })).sort((a, b) => b.value - a.value);
+    const ctxSp = document.getElementById("qSpChart").getContext("2d");
+    state.charts.qSp = new Chart(ctxSp, {
+        type: "bar",
+        data: { labels: spRows.map(r => r.name),
+                datasets: [{ data: spRows.map(r => r.value), backgroundColor: spRows.map((_, i) => barShade("#3f51b5", i / Math.max(spRows.length, 1))), borderRadius: 4 }] },
+        options: chartBase({
+            indexAxis: "y",
+            plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => fmtMoneyFull(c.parsed.x) } } },
+            scales: { x: { ticks: { callback: v => fmtMoney(v) } } }
+        })
+    });
+
+    // Category chart
+    destroyChart("qCat");
+    const catRows = [...byCat.entries()].map(([k, v]) => ({ name: k, value: v })).filter(r => r.value > 0).sort((a, b) => b.value - a.value).slice(0, 20);
+    const ctxCat = document.getElementById("qCatChart").getContext("2d");
+    state.charts.qCat = new Chart(ctxCat, {
+        type: "bar",
+        data: { labels: catRows.map(r => truncate(r.name, 30)),
+                datasets: [{ data: catRows.map(r => r.value), backgroundColor: catRows.map((_, i) => barShade("#00897b", i / Math.max(catRows.length, 1))), borderRadius: 4 }] },
+        options: chartBase({
+            indexAxis: "y",
+            plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => fmtMoneyFull(c.parsed.x) } } },
+            scales: { x: { ticks: { callback: v => fmtMoney(v) } } }
+        })
+    });
+
+    // Table
+    rows.sort((a, b) => b.amount - a.amount);
+    const tbody = document.querySelector("#quotesTable tbody");
+    tbody.innerHTML = rows.slice(0, 2000).map(r => `
+        <tr>
+            <td>${escapeHtml(r.customer)}</td>
+            <td>${escapeHtml(r.salesperson)}</td>
+            <td>${escapeHtml(r.number)}</td>
+            <td>${fmtDate(r.documentDate)}</td>
+            <td class="num">${fmtInt(r.qty)}</td>
+            <td class="num">${fmtMoneyFull(r.amount)}</td>
+        </tr>
+    `).join("") || '<tr><td colspan="6" class="empty">No quotes loaded for this period.</td></tr>';
+    document.getElementById("qMeta").textContent = quotes.length + " quote" + (quotes.length === 1 ? "" : "s");
+}
+
+// ============================================================
+// SALES RETURNS OVERVIEW TAB
+// ============================================================
+function renderReturns() {
+    renderFilterChips();
+    const cms = (state.creditMemos || []).filter(cm => {
+        if (state.filters.salesperson && (cm.salesperson || "(unassigned)") !== state.filters.salesperson) return false;
+        if (state.filters.location) {
+            return (cm.salesCreditMemoLines || []).some(ln => locationCode(ln.locationId) === state.filters.location);
+        }
+        return true;
+    });
+
+    let totalCredit = 0, totalQty = 0, totalGpImpact = 0;
+    const byCust = new Map();   // custKey -> { customer, sales, credit }
+    const byItem = new Map();   // itemNo -> { number, description, credit, qty }
+    const rows = [];
+
+    // Need sales totals per customer to compute return rate
+    const salesByCust = new Map();
+    for (const inv of state.filtered) {
+        const k = inv.customerNumber || "(unknown)";
+        salesByCust.set(k, (salesByCust.get(k) || 0) + invoiceSalesAmount(inv));
+    }
+
+    for (const cm of cms) {
+        let cmAmount = 0, cmQty = 0, cmCost = 0;
+        for (const ln of (cm.salesCreditMemoLines || [])) {
+            if (state.filters.location && locationCode(ln.locationId) !== state.filters.location) continue;
+            const a = num(ln.amountExcludingTax);
+            const q = num(ln.quantity);
+            const itemNo = ln.lineObjectNumber || ln.itemId || "";
+            const c = lineCostForDoc("Sales Credit Memo", cm.number, itemNo);
+            cmAmount += a; cmQty += q; cmCost += c;
+            const ent = byItem.get(itemNo) || { number: itemNo, description: ln.description || "", credit: 0, qty: 0 };
+            ent.credit += a; ent.qty += q;
+            if (ln.description) ent.description = ln.description;
+            byItem.set(itemNo, ent);
+        }
+        if (!cmAmount && cm.totalAmountExcludingTax != null) cmAmount = num(cm.totalAmountExcludingTax);
+        totalCredit += cmAmount;
+        totalQty += cmQty;
+        // GP impact = credit revenue lost - cost returned (cost flows back to stock, so a "saving")
+        totalGpImpact += (cmAmount - cmCost);
+        const custKey = cm.customerNumber || "(unknown)";
+        const cur = byCust.get(custKey) || { customer: cm.customerName || custKey, sales: salesByCust.get(custKey) || 0, credit: 0 };
+        cur.credit += cmAmount;
+        byCust.set(custKey, cur);
+        rows.push({
+            customer: cm.customerName || cm.customerNumber || "(unknown)",
+            salesperson: cm.salesperson || "(unassigned)",
+            number: cm.number || "",
+            postingDate: cm.postingDate || "",
+            qty: cmQty,
+            amount: cmAmount,
+            gpImpact: cmAmount - cmCost,
+        });
+    }
+
+    const totalSales = [...salesByCust.values()].reduce((s, v) => s + v, 0);
+    document.getElementById("rKpiRate").textContent   = totalSales ? fmtPct(totalCredit / totalSales) : "—";
+    document.getElementById("rKpiAmount").textContent = fmtMoneyFull(-totalCredit);
+    document.getElementById("rKpiQty").textContent    = fmtInt(totalQty);
+    document.getElementById("rKpiGp").textContent     = fmtMoneyFull(-totalGpImpact);
+
+    // Return rate by customer (top 15 by credit)
+    destroyChart("rCust");
+    const custRows = [...byCust.values()].filter(r => r.credit > 0).map(r => ({
+        ...r, rate: r.sales ? r.credit / r.sales : 0
+    })).sort((a, b) => b.credit - a.credit).slice(0, 15);
+    const ctxCu = document.getElementById("rCustChart").getContext("2d");
+    state.charts.rCust = new Chart(ctxCu, {
+        type: "bar",
+        data: { labels: custRows.map(r => truncate(r.customer, 28)),
+                datasets: [{ data: custRows.map(r => r.credit), backgroundColor: "#c62828", borderRadius: 4 }] },
+        options: chartBase({
+            indexAxis: "y",
+            plugins: { legend: { display: false },
+                       tooltip: { callbacks: { label: c => fmtMoneyFull(c.parsed.x) + " · " + fmtPct(custRows[c.dataIndex].rate) + " return rate" } } },
+            scales: { x: { ticks: { callback: v => fmtMoney(v) } } }
+        })
+    });
+
+    // Credit by item
+    destroyChart("rItem");
+    const itemRows = [...byItem.values()].filter(r => r.credit > 0).sort((a, b) => b.credit - a.credit).slice(0, 15);
+    const ctxIt = document.getElementById("rItemChart").getContext("2d");
+    state.charts.rItem = new Chart(ctxIt, {
+        type: "bar",
+        data: { labels: itemRows.map(r => truncate((r.number ? r.number + " — " : "") + (r.description || ""), 30)),
+                datasets: [{ data: itemRows.map(r => r.credit), backgroundColor: "#e65100", borderRadius: 4 }] },
+        options: chartBase({
+            indexAxis: "y",
+            plugins: { legend: { display: false },
+                       tooltip: { callbacks: { label: c => fmtMoneyFull(c.parsed.x) + " · qty " + fmtInt(itemRows[c.dataIndex].qty) } } },
+            scales: { x: { ticks: { callback: v => fmtMoney(v) } } }
+        })
+    });
+
+    // Detail table
+    rows.sort((a, b) => a.postingDate < b.postingDate ? 1 : -1);
+    const tbody = document.querySelector("#returnsTable tbody");
+    tbody.innerHTML = rows.slice(0, 2000).map(r => `
+        <tr>
+            <td>${escapeHtml(r.customer)}</td>
+            <td>${escapeHtml(r.salesperson)}</td>
+            <td>${escapeHtml(r.number)}</td>
+            <td>${fmtDate(r.postingDate)}</td>
+            <td class="num">${fmtInt(r.qty)}</td>
+            <td class="num neg">${fmtMoneyFull(-r.amount)}</td>
+            <td class="num neg">${fmtMoneyFull(-r.gpImpact)}</td>
+        </tr>
+    `).join("") || '<tr><td colspan="7" class="empty">No credit memos loaded for this period.</td></tr>';
+    document.getElementById("rMeta").textContent = cms.length + " credit memo" + (cms.length === 1 ? "" : "s");
 }
 
 // ============================================================
@@ -2584,6 +2935,47 @@ function renderDemographics() {
 function _newNode(key, label) {
     return { key, label, sales: 0, qty: 0, cost: 0, costNonInv: 0, children: [] };
 }
+// Build a unified list of posted-sales documents, each tagged with its
+// display label, ILE doc-type (for cost lookup), and sign (returns are negative).
+function allPostedDocs() {
+    const list = [];
+    for (const inv of state.invoices) {
+        list.push({ type: "Posted Sales Invoice", ileType: "Sales Invoice", sign: 1,
+                    id: inv.id, number: inv.number,
+                    customerNumber: inv.customerNumber, customerName: inv.customerName,
+                    salesperson: inv.salesperson, postingDate: inv.postingDate,
+                    lines: inv.salesInvoiceLines || [] });
+    }
+    for (const cm of state.creditMemos) {
+        list.push({ type: "Posted Sales CR/Adj Note", ileType: "Sales Credit Memo", sign: -1,
+                    id: cm.id, number: cm.number,
+                    customerNumber: cm.customerNumber, customerName: cm.customerName,
+                    salesperson: cm.salesperson, postingDate: cm.postingDate,
+                    lines: cm.salesCreditMemoLines || [] });
+    }
+    for (const s of state.shipments) {
+        list.push({ type: "Posted Sales Shipment", ileType: "Sales Shipment", sign: 1,
+                    id: s.id, number: s.number,
+                    customerNumber: s.customerNumber, customerName: s.customerName,
+                    salesperson: s.salesperson, postingDate: s.postingDate,
+                    lines: s.salesShipmentLines || [] });
+    }
+    for (const r of state.returnReceipts) {
+        list.push({ type: "Posted Sales Return Receipt", ileType: "Sales Return Receipt", sign: -1,
+                    id: r.id, number: r.number,
+                    customerNumber: r.customerNumber, customerName: r.customerName,
+                    salesperson: r.salesperson, postingDate: r.postingDate,
+                    lines: r.salesReturnReceiptLines || [] });
+    }
+    return list;
+}
+function docMatchesFilters(d) {
+    if (state.filters.salesperson && (d.salesperson || "(unassigned)") !== state.filters.salesperson) return false;
+    if (state.filters.location) {
+        return (d.lines || []).some(ln => locationCode(ln.locationId) === state.filters.location);
+    }
+    return true;
+}
 function _finalizeTree(roots, grandTotal) {
     const walk = (n) => {
         n.gp = n.sales - n.cost;
@@ -2602,17 +2994,19 @@ function _grandTotalSales() {
 
 function buildCustomerDrillTree(customer) {
     const dtMap = new Map();
-    for (const inv of customer.invoices) {
-        const docKey = "Posted Sales Invoice";
-        let dt = dtMap.get(docKey);
-        if (!dt) { dt = _newNode("ct-dt-" + docKey, docKey); dtMap.set(docKey, dt); }
-        const docNode = _newNode("ct-inv-" + inv.id, inv.number || "(no number)");
-        for (const ln of (inv.salesInvoiceLines || [])) {
+    const docs = allPostedDocs().filter(d => d.customerNumber === customer.customerNumber).filter(docMatchesFilters);
+    for (const d of docs) {
+        let dt = dtMap.get(d.type);
+        if (!dt) { dt = _newNode("ct-dt-" + d.type, d.type); dtMap.set(d.type, dt); }
+        const docNode = _newNode("ct-doc-" + d.type + "-" + d.id, d.number || "(no number)");
+        for (const ln of d.lines) {
             if (state.filters.location && locationCode(ln.locationId) !== state.filters.location) continue;
             const itemNo = ln.lineObjectNumber || ln.itemId || "";
-            const s = num(ln.amountExcludingTax), q = num(ln.quantity);
-            const c = lineCost(inv.number, itemNo), cn = lineCostNonInv(inv.number, itemNo);
-            const leaf = _newNode("ct-line-" + inv.id + "-" + (ln.id || ln.sequence || itemNo),
+            const s = num(ln.amountExcludingTax) * d.sign;
+            const q = num(ln.quantity) * d.sign;
+            const c = lineCostForDoc(d.ileType, d.number, itemNo) * d.sign;
+            const cn = lineCostNonInvForDoc(d.ileType, d.number, itemNo) * d.sign;
+            const leaf = _newNode("ct-line-" + d.type + "-" + d.id + "-" + (ln.id || ln.sequence || itemNo),
                 (itemNo ? "Item " + itemNo : "(non-item)") + (ln.description ? " · " + ln.description : ""));
             leaf.children = null;
             leaf.sales = s; leaf.qty = q; leaf.cost = c; leaf.costNonInv = cn;
@@ -2626,35 +3020,37 @@ function buildCustomerDrillTree(customer) {
     return roots;
 }
 
-function buildBranchDrillTree(invoices) {
+function buildBranchDrillTree(_invoices) {
     const locMap = new Map();
-    const docByLoc = new Map(); // locCode -> Map<docType, node>
-    const invByLocDt = new Map(); // locCode|docType -> Map<invId, node>
-    for (const inv of invoices) {
-        for (const ln of (inv.salesInvoiceLines || [])) {
+    const dtByLoc = new Map();
+    const docByLocDt = new Map();
+    const docs = allPostedDocs().filter(docMatchesFilters);
+    for (const d of docs) {
+        for (const ln of d.lines) {
             const locCode = locationCode(ln.locationId);
             if (state.filters.location && locCode !== state.filters.location) continue;
             let loc = locMap.get(locCode);
-            if (!loc) { loc = _newNode("bt-loc-" + locCode, locCode); locMap.set(locCode, loc); docByLoc.set(locCode, new Map()); }
-            const docKey = "Posted Sales Invoice";
-            let dt = docByLoc.get(locCode).get(docKey);
+            if (!loc) { loc = _newNode("bt-loc-" + locCode, locCode); locMap.set(locCode, loc); dtByLoc.set(locCode, new Map()); }
+            let dt = dtByLoc.get(locCode).get(d.type);
             if (!dt) {
-                dt = _newNode("bt-dt-" + locCode + "-" + docKey, docKey);
-                docByLoc.get(locCode).set(docKey, dt);
+                dt = _newNode("bt-dt-" + locCode + "-" + d.type, d.type);
+                dtByLoc.get(locCode).set(d.type, dt);
                 loc.children.push(dt);
-                invByLocDt.set(locCode + "|" + docKey, new Map());
+                docByLocDt.set(locCode + "|" + d.type, new Map());
             }
-            const invMap = invByLocDt.get(locCode + "|" + docKey);
-            let docNode = invMap.get(inv.id);
+            const docMap = docByLocDt.get(locCode + "|" + d.type);
+            let docNode = docMap.get(d.id);
             if (!docNode) {
-                docNode = _newNode("bt-inv-" + locCode + "-" + inv.id, inv.number || "(no number)");
-                invMap.set(inv.id, docNode);
+                docNode = _newNode("bt-doc-" + locCode + "-" + d.type + "-" + d.id, d.number || "(no number)");
+                docMap.set(d.id, docNode);
                 dt.children.push(docNode);
             }
             const itemNo = ln.lineObjectNumber || ln.itemId || "";
-            const s = num(ln.amountExcludingTax), q = num(ln.quantity);
-            const c = lineCost(inv.number, itemNo), cn = lineCostNonInv(inv.number, itemNo);
-            const leaf = _newNode("bt-line-" + locCode + "-" + inv.id + "-" + (ln.id || ln.sequence || itemNo),
+            const s = num(ln.amountExcludingTax) * d.sign;
+            const q = num(ln.quantity) * d.sign;
+            const c = lineCostForDoc(d.ileType, d.number, itemNo) * d.sign;
+            const cn = lineCostNonInvForDoc(d.ileType, d.number, itemNo) * d.sign;
+            const leaf = _newNode("bt-line-" + locCode + "-" + d.type + "-" + d.id + "-" + (ln.id || ln.sequence || itemNo),
                 (itemNo ? "Item " + itemNo : "(non-item)") + (ln.description ? " · " + ln.description : ""));
             leaf.children = null;
             leaf.sales = s; leaf.qty = q; leaf.cost = c; leaf.costNonInv = cn;
@@ -2667,44 +3063,46 @@ function buildBranchDrillTree(invoices) {
     return roots;
 }
 
-function buildSalespersonDrillTree(invoices) {
+function buildSalespersonDrillTree(_invoices) {
     const spMap = new Map();
-    const custBySp = new Map(); // sp -> Map<custKey, node>
-    const dtBySpCust = new Map(); // sp|cust -> Map<docType, node>
-    const invBySpCustDt = new Map();
-    for (const inv of invoices) {
-        const sp = inv.salesperson || "(unassigned)";
+    const custBySp = new Map();
+    const dtBySpCust = new Map();
+    const docBySpCustDt = new Map();
+    const docs = allPostedDocs().filter(docMatchesFilters);
+    for (const d of docs) {
+        const sp = d.salesperson || "(unassigned)";
         let spNode = spMap.get(sp);
         if (!spNode) { spNode = _newNode("st-sp-" + sp, sp); spMap.set(sp, spNode); custBySp.set(sp, new Map()); }
-        const custKey = inv.customerNumber || inv.customerId || "(unknown)";
+        const custKey = d.customerNumber || "(unknown)";
         let custNode = custBySp.get(sp).get(custKey);
         if (!custNode) {
-            custNode = _newNode("st-cust-" + sp + "-" + custKey, inv.customerName || custKey);
+            custNode = _newNode("st-cust-" + sp + "-" + custKey, d.customerName || custKey);
             custBySp.get(sp).set(custKey, custNode);
             spNode.children.push(custNode);
             dtBySpCust.set(sp + "|" + custKey, new Map());
         }
-        const docKey = "Posted Sales Invoice";
-        let dt = dtBySpCust.get(sp + "|" + custKey).get(docKey);
+        let dt = dtBySpCust.get(sp + "|" + custKey).get(d.type);
         if (!dt) {
-            dt = _newNode("st-dt-" + sp + "-" + custKey + "-" + docKey, docKey);
-            dtBySpCust.get(sp + "|" + custKey).set(docKey, dt);
+            dt = _newNode("st-dt-" + sp + "-" + custKey + "-" + d.type, d.type);
+            dtBySpCust.get(sp + "|" + custKey).set(d.type, dt);
             custNode.children.push(dt);
-            invBySpCustDt.set(sp + "|" + custKey + "|" + docKey, new Map());
+            docBySpCustDt.set(sp + "|" + custKey + "|" + d.type, new Map());
         }
-        const invMap = invBySpCustDt.get(sp + "|" + custKey + "|" + docKey);
-        let docNode = invMap.get(inv.id);
+        const docMap = docBySpCustDt.get(sp + "|" + custKey + "|" + d.type);
+        let docNode = docMap.get(d.id);
         if (!docNode) {
-            docNode = _newNode("st-inv-" + sp + "-" + inv.id, inv.number || "(no number)");
-            invMap.set(inv.id, docNode);
+            docNode = _newNode("st-doc-" + sp + "-" + d.type + "-" + d.id, d.number || "(no number)");
+            docMap.set(d.id, docNode);
             dt.children.push(docNode);
         }
-        for (const ln of (inv.salesInvoiceLines || [])) {
+        for (const ln of d.lines) {
             if (state.filters.location && locationCode(ln.locationId) !== state.filters.location) continue;
             const itemNo = ln.lineObjectNumber || ln.itemId || "";
-            const s = num(ln.amountExcludingTax), q = num(ln.quantity);
-            const c = lineCost(inv.number, itemNo), cn = lineCostNonInv(inv.number, itemNo);
-            const leaf = _newNode("st-line-" + sp + "-" + inv.id + "-" + (ln.id || ln.sequence || itemNo),
+            const s = num(ln.amountExcludingTax) * d.sign;
+            const q = num(ln.quantity) * d.sign;
+            const c = lineCostForDoc(d.ileType, d.number, itemNo) * d.sign;
+            const cn = lineCostNonInvForDoc(d.ileType, d.number, itemNo) * d.sign;
+            const leaf = _newNode("st-line-" + sp + "-" + d.type + "-" + d.id + "-" + (ln.id || ln.sequence || itemNo),
                 (itemNo ? "Item " + itemNo : "(non-item)") + (ln.description ? " · " + ln.description : ""));
             leaf.children = null;
             leaf.sales = s; leaf.qty = q; leaf.cost = c; leaf.costNonInv = cn;
@@ -2813,13 +3211,21 @@ async function handleLoad() {
     const btn = document.getElementById("loadBtn");
     btn.disabled = true; btn.textContent = "Loading…";
     try {
-        const [locs, items, customers, invoices, iles] = await Promise.all([
+        const [locs, items, customers, invoices, iles, creditMemos, shipments, returnReceipts, quotes] = await Promise.all([
             fetchLocations(),
             fetchItems(),
             fetchCustomers(),
             fetchSalesInvoicesWithLines(from, to),
             fetchItemLedgerSales(from, to),
+            fetchSalesCreditMemos(from, to),
+            fetchSalesShipments(from, to),
+            fetchSalesReturnReceipts(from, to),
+            fetchSalesQuotes(from, to),
         ]);
+        state.creditMemos = creditMemos;
+        state.shipments = shipments;
+        state.returnReceipts = returnReceipts;
+        state.quotes = quotes;
         state.locations = new Map(locs.map(l => [l.id, l.code || l.displayName || "(unnamed)"]));
         state.items = items;
         state.itemCategory = new Map(items.map(it => [it.number, it.itemCategoryCode || ""]));
