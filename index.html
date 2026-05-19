@@ -1610,6 +1610,14 @@ function isItemLine(line) {
     return !!(line.lineObjectNumber || line.itemId);
 }
 
+// Power BI's drill groups lines by "Entry Type" — Item / G/L Account /
+// Resource / Fixed Asset / Charge (Item) / Comment.
+function lineEntryType(ln) {
+    if (!ln) return "Item";
+    if (ln.lineType) return ln.lineType;
+    return (ln.lineObjectNumber || ln.itemId) ? "Item" : "G/L Account";
+}
+
 function costFromLine(line, sign, postingDate, customerNumber) {
     if (!isItemLine(line)) return 0;
     sign = (sign == null) ? 1 : sign;
@@ -3774,30 +3782,46 @@ function _grandTotalSales() {
 }
 
 function buildCustomerDrillTree(customer) {
-    const dtMap = new Map();
+    // Hierarchy: EntryType (Item/G/L/...) -> DocType -> Doc -> Item line
+    const etMap = new Map();
+    const dtByEt = new Map();      // entryType -> Map<docType, dtNode>
+    const docByEtDt = new Map();   // entryType|docType -> Map<docId, docNode>
     const docs = allPostedDocs().filter(d => d.customerNumber === customer.customerNumber).filter(docMatchesFilters);
     for (const d of docs) {
-        let dt = dtMap.get(d.type);
-        if (!dt) { dt = _newNode("ct-dt-" + d.type, d.type); dtMap.set(d.type, dt); }
-        const docNode = _newNode("ct-doc-" + d.type + "-" + d.id, d.number || "(no number)");
         for (const ln of d.lines) {
             if (state.filters.location && locationCode(ln.locationId) !== state.filters.location) continue;
+            const et = lineEntryType(ln);
+            let etNode = etMap.get(et);
+            if (!etNode) { etNode = _newNode("ct-et-" + et, et); etMap.set(et, etNode); dtByEt.set(et, new Map()); }
+            let dt = dtByEt.get(et).get(d.type);
+            if (!dt) {
+                dt = _newNode("ct-et-" + et + "-dt-" + d.type, d.type);
+                dtByEt.get(et).set(d.type, dt);
+                etNode.children.push(dt);
+                docByEtDt.set(et + "|" + d.type, new Map());
+            }
+            const docMap = docByEtDt.get(et + "|" + d.type);
+            let docNode = docMap.get(d.id);
+            if (!docNode) {
+                docNode = _newNode("ct-doc-" + et + "-" + d.type + "-" + d.id, d.number || "(no number)");
+                docMap.set(d.id, docNode);
+                dt.children.push(docNode);
+            }
             const itemNo = ln.lineObjectNumber || ln.itemId || "";
             const mult = d.countsTotal ? 1 : 0;
             const s = lineNetAmount(ln) * d.sign * mult;
             const q = num(ln.quantity) * d.sign * mult;
             const c = costFromLine(ln, d.sign, d.postingDate, d.customerNumber) * mult;
             const cn = costNonInvFromLine(ln, d.sign, d.postingDate, d.customerNumber) * mult;
-            const leaf = _newNode("ct-line-" + d.type + "-" + d.id + "-" + (ln.id || ln.sequence || itemNo),
-                (itemNo ? "Item " + itemNo : "(non-item)") + (ln.description ? " · " + ln.description : ""));
+            const leaf = _newNode("ct-line-" + et + "-" + d.type + "-" + d.id + "-" + (ln.id || ln.sequence || itemNo),
+                (itemNo || (et === "G/L Account" ? "(no account)" : "(no item)")) + (ln.description ? " · " + ln.description : ""));
             leaf.children = null;
             leaf.sales = s; leaf.qty = q; leaf.cost = c; leaf.costNonInv = cn;
             docNode.children.push(leaf);
-            _accumLine([docNode, dt], s, q, c, cn);
+            _accumLine([docNode, dt, etNode], s, q, c, cn);
         }
-        if (docNode.children.length) dt.children.push(docNode);
     }
-    const roots = [...dtMap.values()];
+    const roots = [...etMap.values()];
     _finalizeTree(roots, _grandTotalSales());
     return roots;
 }
@@ -3847,10 +3871,12 @@ function buildBranchDrillTree(_invoices) {
 }
 
 function buildSalespersonDrillTree(_invoices) {
+    // Hierarchy: Salesperson -> Customer -> EntryType -> DocType -> Doc -> Item line
     const spMap = new Map();
-    const custBySp = new Map();
-    const dtBySpCust = new Map();
-    const docBySpCustDt = new Map();
+    const custBySp = new Map();        // sp -> Map<custKey, node>
+    const etBySpCust = new Map();      // sp|cust -> Map<entryType, node>
+    const dtBySpCustEt = new Map();    // sp|cust|et -> Map<docType, node>
+    const docBySpCustEtDt = new Map(); // sp|cust|et|dt -> Map<docId, node>
     const docs = allPostedDocs().filter(docMatchesFilters);
     for (const d of docs) {
         const sp = d.salesperson || "(unassigned)";
@@ -3862,36 +3888,44 @@ function buildSalespersonDrillTree(_invoices) {
             custNode = _newNode("st-cust-" + sp + "-" + custKey, d.customerName || custKey);
             custBySp.get(sp).set(custKey, custNode);
             spNode.children.push(custNode);
-            dtBySpCust.set(sp + "|" + custKey, new Map());
-        }
-        let dt = dtBySpCust.get(sp + "|" + custKey).get(d.type);
-        if (!dt) {
-            dt = _newNode("st-dt-" + sp + "-" + custKey + "-" + d.type, d.type);
-            dtBySpCust.get(sp + "|" + custKey).set(d.type, dt);
-            custNode.children.push(dt);
-            docBySpCustDt.set(sp + "|" + custKey + "|" + d.type, new Map());
-        }
-        const docMap = docBySpCustDt.get(sp + "|" + custKey + "|" + d.type);
-        let docNode = docMap.get(d.id);
-        if (!docNode) {
-            docNode = _newNode("st-doc-" + sp + "-" + d.type + "-" + d.id, d.number || "(no number)");
-            docMap.set(d.id, docNode);
-            dt.children.push(docNode);
+            etBySpCust.set(sp + "|" + custKey, new Map());
         }
         for (const ln of d.lines) {
             if (state.filters.location && locationCode(ln.locationId) !== state.filters.location) continue;
+            const et = lineEntryType(ln);
+            let etNode = etBySpCust.get(sp + "|" + custKey).get(et);
+            if (!etNode) {
+                etNode = _newNode("st-et-" + sp + "-" + custKey + "-" + et, et);
+                etBySpCust.get(sp + "|" + custKey).set(et, etNode);
+                custNode.children.push(etNode);
+                dtBySpCustEt.set(sp + "|" + custKey + "|" + et, new Map());
+            }
+            let dt = dtBySpCustEt.get(sp + "|" + custKey + "|" + et).get(d.type);
+            if (!dt) {
+                dt = _newNode("st-dt-" + sp + "-" + custKey + "-" + et + "-" + d.type, d.type);
+                dtBySpCustEt.get(sp + "|" + custKey + "|" + et).set(d.type, dt);
+                etNode.children.push(dt);
+                docBySpCustEtDt.set(sp + "|" + custKey + "|" + et + "|" + d.type, new Map());
+            }
+            const docMap = docBySpCustEtDt.get(sp + "|" + custKey + "|" + et + "|" + d.type);
+            let docNode = docMap.get(d.id);
+            if (!docNode) {
+                docNode = _newNode("st-doc-" + sp + "-" + custKey + "-" + et + "-" + d.type + "-" + d.id, d.number || "(no number)");
+                docMap.set(d.id, docNode);
+                dt.children.push(docNode);
+            }
             const itemNo = ln.lineObjectNumber || ln.itemId || "";
             const mult = d.countsTotal ? 1 : 0;
             const s = lineNetAmount(ln) * d.sign * mult;
             const q = num(ln.quantity) * d.sign * mult;
             const c = costFromLine(ln, d.sign, d.postingDate, d.customerNumber) * mult;
             const cn = costNonInvFromLine(ln, d.sign, d.postingDate, d.customerNumber) * mult;
-            const leaf = _newNode("st-line-" + sp + "-" + d.type + "-" + d.id + "-" + (ln.id || ln.sequence || itemNo),
-                (itemNo ? "Item " + itemNo : "(non-item)") + (ln.description ? " · " + ln.description : ""));
+            const leaf = _newNode("st-line-" + sp + "-" + custKey + "-" + et + "-" + d.type + "-" + d.id + "-" + (ln.id || ln.sequence || itemNo),
+                (itemNo || (et === "G/L Account" ? "(no account)" : "(no item)")) + (ln.description ? " · " + ln.description : ""));
             leaf.children = null;
             leaf.sales = s; leaf.qty = q; leaf.cost = c; leaf.costNonInv = cn;
             docNode.children.push(leaf);
-            _accumLine([docNode, dt, custNode, spNode], s, q, c, cn);
+            _accumLine([docNode, dt, etNode, custNode, spNode], s, q, c, cn);
         }
     }
     const roots = [...spMap.values()].sort((a, b) => b.sales - a.sales);
