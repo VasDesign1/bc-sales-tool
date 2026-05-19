@@ -1594,7 +1594,19 @@ function buildCostMaps(iles) {
         console.log("[ILE] line-item coverage: " + matched + "/" + lineCount + " (" + pct + "%) sample lines have an avg-cost match");
     }
 }
+// Power BI's "Sales (LCY)" measure only counts value entries from Item-type
+// lines. Non-item lines (G/L Account / Resource / Comment / Fixed Asset / etc.)
+// don't create item ledger entries and don't appear in PBI's sales metric.
+// Match that behavior so our totals reconcile.
+function isItemLine(line) {
+    if (line == null) return false;
+    if (line.lineType) return line.lineType === "Item";
+    // No lineType field → infer from item linkage
+    return !!(line.lineObjectNumber || line.itemId);
+}
+
 function costFromLine(line, sign, postingDate, customerNumber) {
+    if (!isItemLine(line)) return 0;
     sign = (sign == null) ? 1 : sign;
     const itemNo = line.lineObjectNumber || line.itemId || "";
     const qty = Math.abs(num(line.quantity));
@@ -1618,6 +1630,7 @@ function costFromLine(line, sign, postingDate, customerNumber) {
     return uc * qty * sign;
 }
 function costNonInvFromLine(line, sign, postingDate, customerNumber) {
+    if (!isItemLine(line)) return 0;
     sign = (sign == null) ? 1 : sign;
     const itemNo = line.lineObjectNumber || line.itemId || "";
     const qty = Math.abs(num(line.quantity));
@@ -1670,16 +1683,16 @@ function rebuildFiltered() {
 // AGGREGATIONS
 // ============================================================
 function invoiceSalesAmount(inv) {
-    if (state.filters.location) {
-        return (inv.salesInvoiceLines || [])
-            .filter(ln => locationCode(ln.locationId) === state.filters.location)
-            .reduce((s, ln) => s + num(ln.amountExcludingTax), 0);
-    }
-    return num(inv.totalAmountExcludingTax);
+    return (inv.salesInvoiceLines || []).reduce((s, ln) => {
+        if (state.filters.location && locationCode(ln.locationId) !== state.filters.location) return s;
+        if (!isItemLine(ln)) return s;
+        return s + num(ln.amountExcludingTax);
+    }, 0);
 }
 function invoiceQty(inv) {
     return (inv.salesInvoiceLines || []).reduce((s, ln) => {
         if (state.filters.location && locationCode(ln.locationId) !== state.filters.location) return s;
+        if (!isItemLine(ln)) return s;
         return s + num(ln.quantity);
     }, 0);
 }
@@ -1730,6 +1743,7 @@ function aggregateByItem(invoices) {
         const lines = inv.salesInvoiceLines || [];
         for (const ln of lines) {
             if (state.filters.location && locationCode(ln.locationId) !== state.filters.location) continue;
+            if (!isItemLine(ln)) continue;
             const itemNo = ln.lineObjectNumber || ln.itemId || "";
             const key = itemNo || ("(non-item) " + (ln.lineType || "?"));
             let g = map.get(key);
@@ -1759,6 +1773,7 @@ function aggregateByLocation(invoices) {
         for (const ln of lines) {
             const code = locationCode(ln.locationId);
             if (state.filters.location && code !== state.filters.location) continue;
+            if (!isItemLine(ln)) continue;
             let g = map.get(code);
             if (!g) { g = { code, revenue: 0, cost: 0, qty: 0, lineCount: 0 }; map.set(code, g); }
             g.revenue += num(ln.amountExcludingTax);
@@ -1799,6 +1814,7 @@ function aggregateBranchMonthly(invoices) {
         for (const ln of lines) {
             const code = locationCode(ln.locationId);
             if (state.filters.location && code !== state.filters.location) continue;
+            if (!isItemLine(ln)) continue;
             const k = fy + "|" + mk + "|" + code;
             let g = lineGroups.get(k);
             if (!g) { g = { fy, monthKey: mk, branch: code, sales: 0, cost: 0, qty: 0 }; lineGroups.set(k, g); }
@@ -1838,6 +1854,7 @@ function buildEOMRows(invoices) {
     for (const inv of invoices) {
         for (const ln of (inv.salesInvoiceLines || [])) {
             if (state.filters.location && locationCode(ln.locationId) !== state.filters.location) continue;
+            if (!isItemLine(ln)) continue;
             const itemNo = ln.lineObjectNumber || ln.itemId || "";
             const sales = num(ln.amountExcludingTax);
             const cost  = costFromLine(ln, 1, inv.postingDate, inv.customerNumber);
@@ -1897,6 +1914,7 @@ function bucketInvoicesSplitBy(invoices, bucket, dimension) {
             for (const ln of (inv.salesInvoiceLines || [])) {
                 const dk = locationCode(ln.locationId);
                 if (state.filters.location && dk !== state.filters.location) continue;
+                if (!isItemLine(ln)) continue;
                 bMap.set(dk, (bMap.get(dk) || 0) + num(ln.amountExcludingTax));
                 dims.add(dk);
             }
@@ -1935,6 +1953,7 @@ function customerItemHistory(customerNumber, itemKey) {
     for (const inv of g.invoices) {
         for (const ln of (inv.salesInvoiceLines || [])) {
             if (state.filters.location && locationCode(ln.locationId) !== state.filters.location) continue;
+            if (!isItemLine(ln)) continue;
             const k = ln.lineObjectNumber || ln.itemId || ("(non-item) " + (ln.lineType || "?"));
             if (k !== itemKey) continue;
             rows.push({
@@ -2458,6 +2477,7 @@ function renderQuotes() {
         let qAmount = 0, qQty = 0;
         for (const ln of (q.salesQuoteLines || [])) {
             if (state.filters.location && locationCode(ln.locationId) !== state.filters.location) continue;
+            if (!isItemLine(ln)) continue;
             const a = num(ln.amountExcludingTax);
             const ql = num(ln.quantity);
             qAmount += a; qQty += ql;
@@ -2563,6 +2583,7 @@ function renderReturns() {
         let cmAmount = 0, cmQty = 0, cmCost = 0;
         for (const ln of (cm.salesCreditMemoLines || [])) {
             if (state.filters.location && locationCode(ln.locationId) !== state.filters.location) continue;
+            if (!isItemLine(ln)) continue;
             const a = num(ln.amountExcludingTax);
             const q = num(ln.quantity);
             const itemNo = ln.lineObjectNumber || ln.itemId || "";
@@ -2690,6 +2711,7 @@ function renderRunRateTab(opts) {
                 for (const ln of (inv.salesInvoiceLines || [])) {
                     const ent = locationCode(ln.locationId);
                     if (state.filters.location && ent !== state.filters.location) continue;
+                    if (!isItemLine(ln)) continue;
                     const cur = map.get(ent) || { sales: 0, cost: 0 };
                     cur.sales += num(ln.amountExcludingTax);
                     cur.cost  += costFromLine(ln, 1, inv.postingDate, inv.customerNumber);
@@ -3594,6 +3616,7 @@ function aggregateByCategory(invoices) {
     for (const inv of invoices) {
         for (const ln of (inv.salesInvoiceLines || [])) {
             if (state.filters.location && locationCode(ln.locationId) !== state.filters.location) continue;
+            if (!isItemLine(ln)) continue;
             const itemNo = ln.lineObjectNumber || ln.itemId || "";
             const cat = state.itemCategory.get(itemNo) || "(no category)";
             const cur = map.get(cat) || { cat, sales: 0, cost: 0, qty: 0 };
@@ -3766,6 +3789,7 @@ function buildCustomerDrillTree(customer) {
         const docNode = _newNode("ct-doc-" + d.type + "-" + d.id, d.number || "(no number)");
         for (const ln of d.lines) {
             if (state.filters.location && locationCode(ln.locationId) !== state.filters.location) continue;
+            if (!isItemLine(ln)) continue;
             const itemNo = ln.lineObjectNumber || ln.itemId || "";
             const mult = d.countsTotal ? 1 : 0;
             const s = num(ln.amountExcludingTax) * d.sign * mult;
@@ -3864,6 +3888,7 @@ function buildSalespersonDrillTree(_invoices) {
         }
         for (const ln of d.lines) {
             if (state.filters.location && locationCode(ln.locationId) !== state.filters.location) continue;
+            if (!isItemLine(ln)) continue;
             const itemNo = ln.lineObjectNumber || ln.itemId || "";
             const mult = d.countsTotal ? 1 : 0;
             const s = num(ln.amountExcludingTax) * d.sign * mult;
