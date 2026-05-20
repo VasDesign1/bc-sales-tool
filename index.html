@@ -252,6 +252,42 @@
             box-shadow: 0 4px 14px rgba(63,81,181,0.35);
         }
 
+        /* ---------- MODAL ---------- */
+        .modal-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.55);
+            display: flex; align-items: center; justify-content: center;
+            z-index: 9000; padding: 30px;
+        }
+        .modal-card {
+            background: white; border-radius: 14px; width: 100%; max-width: 1200px;
+            max-height: 90vh; display: flex; flex-direction: column;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.4); overflow: hidden;
+        }
+        .modal-header {
+            display: flex; align-items: center; gap: 12px;
+            padding: 14px 20px; border-bottom: 1px solid #eef; flex-shrink: 0;
+        }
+        .modal-header h2 { color: #1a237e; font-size: 16px; font-weight: 700; }
+        .modal-close {
+            background: transparent; border: none; font-size: 24px; cursor: pointer;
+            color: #888; padding: 0 8px;
+        }
+        .modal-close:hover { color: #c62828; }
+        .modal-body {
+            padding: 14px 20px 20px; overflow-y: auto; flex: 1; min-height: 0;
+        }
+        .modal-body .search { margin-bottom: 12px; }
+        .row-action-btn {
+            background: #eef0fb; color: #3f51b5; border: none; padding: 4px 10px;
+            border-radius: 6px; cursor: pointer; font-size: 11px; font-weight: 600;
+        }
+        .row-action-btn:hover { background: #dde0f4; }
+        .card .head .more-btn {
+            background: white; color: #3f51b5; border: 1px solid #d6d8eb;
+            padding: 3px 10px; border-radius: 6px; cursor: pointer; font-size: 11px; font-weight: 600;
+        }
+        .card .head .more-btn:hover { background: #eef0fb; }
+
         /* ---------- PROGRESS ---------- */
         .progress {
             position: fixed; bottom: 20px; right: 20px;
@@ -344,6 +380,15 @@
                 <div class="field">
                     <label for="salespersonFilter">Salesperson</label>
                     <select id="salespersonFilter"><option value="">All salespeople</option></select>
+                </div>
+                <div class="field">
+                    <label for="customerFilter">Customer</label>
+                    <select id="customerFilter"><option value="">All customers</option></select>
+                </div>
+                <div class="field">
+                    <label for="itemFilterBox">Item</label>
+                    <input list="itemFilterList" id="itemFilterBox" placeholder="All items" autocomplete="off">
+                    <datalist id="itemFilterList"></datalist>
                 </div>
                 <button class="btn btn-primary" id="loadBtn" disabled>Load sales</button>
                 <div class="spacer"></div>
@@ -600,19 +645,31 @@
                         <div class="chart-wrap" style="min-height:320px;"><canvas id="trendChart"></canvas></div>
                     </div>
                     <div class="card span-6">
-                        <div class="head"><h3>Top 10 customers</h3><div class="meta">click a bar to drill in</div></div>
+                        <div class="head">
+                            <h3>Top 10 customers</h3>
+                            <button class="more-btn" data-topn="customers">Show more…</button>
+                        </div>
                         <div class="chart-wrap" style="min-height:340px;"><canvas id="topCustomersChart"></canvas></div>
                     </div>
                     <div class="card span-6">
-                        <div class="head"><h3>Top 10 items</h3><div class="meta">click a bar to drill in</div></div>
+                        <div class="head">
+                            <h3>Top 10 items</h3>
+                            <button class="more-btn" data-topn="items">Show more…</button>
+                        </div>
                         <div class="chart-wrap" style="min-height:340px;"><canvas id="topItemsChart"></canvas></div>
                     </div>
                     <div class="card span-6">
-                        <div class="head"><h3>Sales by branch</h3><div class="meta">click a bar to filter</div></div>
+                        <div class="head">
+                            <h3>Sales by branch</h3>
+                            <button class="more-btn" data-topn="branches">Show more…</button>
+                        </div>
                         <div class="chart-wrap" style="min-height:300px;"><canvas id="locationChart"></canvas></div>
                     </div>
                     <div class="card span-6">
-                        <div class="head"><h3>Sales by salesperson</h3><div class="meta">click a bar to filter</div></div>
+                        <div class="head">
+                            <h3>Sales by salesperson</h3>
+                            <button class="more-btn" data-topn="salespeople">Show more…</button>
+                        </div>
                         <div class="chart-wrap" style="min-height:300px;"><canvas id="salespersonChart"></canvas></div>
                     </div>
                     <div class="card span-4">
@@ -622,6 +679,7 @@
                                 <button data-metric="count" class="active">Count</button>
                                 <button data-metric="amount">$ Amount</button>
                             </div>
+                            <button class="more-btn" data-topn="status">Show more…</button>
                         </div>
                         <div class="chart-wrap"><canvas id="statusChart"></canvas></div>
                     </div>
@@ -1278,6 +1336,32 @@
 
 <div class="progress" id="bcProgress"><span id="bcProgressText"></span></div>
 
+<!-- TOP N MODAL -->
+<div class="modal-overlay" id="topNModal" style="display:none;">
+    <div class="modal-card">
+        <div class="modal-header">
+            <h2 id="topNTitle">Top customers</h2>
+            <div class="toggle" id="topNCount">
+                <button data-n="25">Top 25</button>
+                <button data-n="50">Top 50</button>
+                <button data-n="100" class="active">Top 100</button>
+                <button data-n="0">All</button>
+            </div>
+            <span style="flex:1;"></span>
+            <button class="modal-close" id="topNClose" title="Close">×</button>
+        </div>
+        <div class="modal-body">
+            <input type="text" class="search" id="topNSearch" placeholder="Search…" style="margin-bottom: 12px;">
+            <div class="table-scroll" style="max-height: 70vh;">
+                <table id="topNTable">
+                    <thead><tr id="topNHead"></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 // ============================================================
 // BUSINESS CENTRAL / WIISE CONNECTION LAYER
@@ -1480,7 +1564,7 @@ const state = {
     sortItems: { key: "revenue", dir: "desc" },
     treeSort: { key: "sales", dir: "desc" },
     custFilter: "", itemFilter: "", eomFilter: "",
-    filters: { location: "", salesperson: "" },
+    filters: { location: "", salesperson: "", customer: "", customerName: "", item: "", itemDesc: "", status: "" },
     charts: {},
     tab: "overview",
     drill: null, // null | "customer" | "invoice" | "item"
@@ -1757,9 +1841,22 @@ function lineCostNonInvForDoc(_dt, _no, itemNumber) { return state.itemAvgCostNo
 // ============================================================
 function invoiceMatchesFilters(inv) {
     if (state.filters.salesperson && (inv.salesperson || "(unassigned)") !== state.filters.salesperson) return false;
-    if (state.filters.location) {
-        return (inv.salesInvoiceLines || []).some(ln => locationCode(ln.locationId) === state.filters.location);
+    if (state.filters.customer && (inv.customerNumber || "") !== state.filters.customer) return false;
+    if (state.filters.status && (inv.status || "") !== state.filters.status) return false;
+    if (state.filters.location || state.filters.item) {
+        return (inv.salesInvoiceLines || []).some(ln => {
+            if (state.filters.location && locationCode(ln.locationId) !== state.filters.location) return false;
+            if (state.filters.item && (ln.lineObjectNumber || ln.itemId || "") !== state.filters.item) return false;
+            return true;
+        });
     }
+    return true;
+}
+// Single source of truth for "should this line contribute to totals" — covers
+// both the location filter and the item filter for line-level aggregations.
+function lineMatchesFilters(ln) {
+    if (state.filters.location && locationCode(ln.locationId) !== state.filters.location) return false;
+    if (state.filters.item && (ln.lineObjectNumber || ln.itemId || "") !== state.filters.item) return false;
     return true;
 }
 function rebuildFiltered() {
@@ -1775,13 +1872,13 @@ function rebuildFiltered() {
 // ============================================================
 function invoiceSalesAmount(inv) {
     return (inv.salesInvoiceLines || []).reduce((s, ln) => {
-        if (state.filters.location && locationCode(ln.locationId) !== state.filters.location) return s;
+        if (!lineMatchesFilters(ln)) return s;
         return s + lineNetAmount(ln);
     }, 0);
 }
 function invoiceQty(inv) {
     return (inv.salesInvoiceLines || []).reduce((s, ln) => {
-        if (state.filters.location && locationCode(ln.locationId) !== state.filters.location) return s;
+        if (!lineMatchesFilters(ln)) return s;
         return s + num(ln.quantity);
     }, 0);
 }
@@ -1831,7 +1928,7 @@ function aggregateByItem(invoices) {
     for (const inv of invoices) {
         const lines = inv.salesInvoiceLines || [];
         for (const ln of lines) {
-            if (state.filters.location && locationCode(ln.locationId) !== state.filters.location) continue;
+            if (!lineMatchesFilters(ln)) continue;
             const itemNo = ln.lineObjectNumber || ln.itemId || "";
             const key = itemNo || ("(non-item) " + (ln.lineType || "?"));
             let g = map.get(key);
@@ -1861,6 +1958,7 @@ function aggregateByLocation(invoices) {
         for (const ln of lines) {
             const code = locationCode(ln.locationId);
             if (state.filters.location && code !== state.filters.location) continue;
+            if (state.filters.item && (ln.lineObjectNumber || ln.itemId || "") !== state.filters.item) continue;
             let g = map.get(code);
             if (!g) { g = { code, revenue: 0, cost: 0, qty: 0, lineCount: 0 }; map.set(code, g); }
             g.revenue += lineNetAmount(ln);
@@ -1901,6 +1999,7 @@ function aggregateBranchMonthly(invoices) {
         for (const ln of lines) {
             const code = locationCode(ln.locationId);
             if (state.filters.location && code !== state.filters.location) continue;
+            if (state.filters.item && (ln.lineObjectNumber || ln.itemId || "") !== state.filters.item) continue;
             const k = fy + "|" + mk + "|" + code;
             let g = lineGroups.get(k);
             if (!g) { g = { fy, monthKey: mk, branch: code, sales: 0, cost: 0, qty: 0 }; lineGroups.set(k, g); }
@@ -1939,7 +2038,7 @@ function buildEOMRows(invoices) {
     const rows = [];
     for (const inv of invoices) {
         for (const ln of (inv.salesInvoiceLines || [])) {
-            if (state.filters.location && locationCode(ln.locationId) !== state.filters.location) continue;
+            if (!lineMatchesFilters(ln)) continue;
             const itemNo = ln.lineObjectNumber || ln.itemId || "";
             const sales = lineNetAmount(ln);
             const cost  = costFromLine(ln, 1, inv.postingDate, inv.customerNumber);
@@ -1999,7 +2098,8 @@ function bucketInvoicesSplitBy(invoices, bucket, dimension) {
             for (const ln of (inv.salesInvoiceLines || [])) {
                 const dk = locationCode(ln.locationId);
                 if (state.filters.location && dk !== state.filters.location) continue;
-                    bMap.set(dk, (bMap.get(dk) || 0) + lineNetAmount(ln));
+                if (state.filters.item && (ln.lineObjectNumber || ln.itemId || "") !== state.filters.item) continue;
+                bMap.set(dk, (bMap.get(dk) || 0) + lineNetAmount(ln));
                 dims.add(dk);
             }
         }
@@ -2036,7 +2136,7 @@ function customerItemHistory(customerNumber, itemKey) {
     const rows = [];
     for (const inv of g.invoices) {
         for (const ln of (inv.salesInvoiceLines || [])) {
-            if (state.filters.location && locationCode(ln.locationId) !== state.filters.location) continue;
+            if (!lineMatchesFilters(ln)) continue;
             const k = ln.lineObjectNumber || ln.itemId || ("(non-item) " + (ln.lineType || "?"));
             if (k !== itemKey) continue;
             rows.push({
@@ -2137,17 +2237,253 @@ function setPeriodBadge() {
     document.getElementById("periodBadge").textContent = from && to ? (fmtDate(from) + " → " + fmtDate(to)) : "";
 }
 
+// ============================================================
+// TOP N MODAL
+// ============================================================
+const TOPN_DEFS = {
+    customers: {
+        title: "Top customers",
+        get: () => [...state.byCustomer.values()].map(c => ({
+            key: c.customerNumber, name: c.customerName, num: c.customerNumber,
+            sales: c.revenue, gp: c.gp, gpPct: c.gpPct, qty: c.qty, invoiceCount: c.invoiceCount,
+        })),
+        columns: ["Customer No", "Name", "Invoices", "Sales", "GP $", "GP %", "Qty", ""],
+        sortKey: "sales",
+        action: { label: "Drill in", run: r => showCustomer(r.key) },
+    },
+    items: {
+        title: "Top items",
+        get: () => [...state.byItem.values()].map(it => ({
+            key: it.key, name: it.description, num: it.number,
+            sales: it.revenue, gp: it.gp, gpPct: it.gpPct, qty: it.qty,
+        })),
+        columns: ["Item No", "Description", "Sales", "GP $", "GP %", "Qty", ""],
+        sortKey: "sales",
+        action: { label: "Drill in", run: r => showItemDetail({ key: r.key, number: r.num, description: r.name }) },
+    },
+    branches: {
+        title: "Top branches",
+        get: () => [...state.byLocation.values()].map(b => ({
+            key: b.code, name: b.code,
+            sales: b.revenue, gp: b.gp, gpPct: b.gpPct, qty: b.qty,
+        })),
+        columns: ["Branch", "Sales", "GP $", "GP %", "Qty", ""],
+        sortKey: "sales",
+        action: { label: "Filter to this", run: r => {
+            state.filters.location = (state.filters.location === r.key) ? "" : r.key;
+            document.getElementById("locationFilter").value = state.filters.location;
+            rebuildFiltered(); renderCurrentTab(); closeTopNModal();
+        } },
+    },
+    salespeople: {
+        title: "Top salespeople",
+        get: () => [...state.bySalesperson.values()].map(s => ({
+            key: s.code, name: s.code,
+            sales: s.revenue, gp: s.gp, gpPct: s.gpPct, qty: s.qty,
+            invoiceCount: s.invoiceCount, custCount: s.customers ? s.customers.size : 0,
+        })),
+        columns: ["Salesperson", "Customers", "Invoices", "Sales", "GP $", "GP %", "Qty", ""],
+        sortKey: "sales",
+        action: { label: "Filter to this", run: r => {
+            state.filters.salesperson = (state.filters.salesperson === r.key) ? "" : r.key;
+            document.getElementById("salespersonFilter").value = state.filters.salesperson;
+            rebuildFiltered(); renderCurrentTab(); closeTopNModal();
+        } },
+    },
+    status: {
+        title: "Invoice status breakdown",
+        get: () => {
+            const m = new Map();
+            for (const inv of state.filtered) {
+                const k = inv.status || "(unknown)";
+                const cur = m.get(k) || { key: k, name: k, count: 0, sales: 0 };
+                cur.count += 1;
+                cur.sales += invoiceSalesAmount(inv);
+                m.set(k, cur);
+            }
+            return [...m.values()];
+        },
+        columns: ["Status", "Invoices", "Sales", "% of Sales", ""],
+        sortKey: "sales",
+        action: { label: "Filter to this", run: r => {
+            state.filters.status = (state.filters.status === r.key) ? "" : r.key;
+            rebuildFiltered(); renderCurrentTab(); closeTopNModal();
+        } },
+    },
+};
+const topNState = { dim: null, n: 100, search: "", sortKey: "sales", sortDir: "desc" };
+
+function openTopNModal(dimension) {
+    const def = TOPN_DEFS[dimension];
+    if (!def) return;
+    topNState.dim = dimension;
+    topNState.search = "";
+    topNState.sortKey = def.sortKey;
+    topNState.sortDir = "desc";
+    document.getElementById("topNTitle").textContent = def.title;
+    document.getElementById("topNSearch").value = "";
+    document.getElementById("topNSearch").placeholder = "Search " + def.title.toLowerCase() + "…";
+    renderTopNTable();
+    document.getElementById("topNModal").style.display = "flex";
+}
+function closeTopNModal() {
+    document.getElementById("topNModal").style.display = "none";
+    topNState.dim = null;
+}
+function renderTopNTable() {
+    const def = TOPN_DEFS[topNState.dim]; if (!def) return;
+    let rows = def.get();
+    if (topNState.search) {
+        const q = topNState.search.toLowerCase();
+        rows = rows.filter(r => Object.values(r).some(v => v != null && String(v).toLowerCase().includes(q)));
+    }
+    const key = topNState.sortKey;
+    const dirMul = topNState.sortDir === "asc" ? 1 : -1;
+    rows.sort((a, b) => {
+        let av = a[key], bv = b[key];
+        if (av == null) av = (typeof bv === "number") ? 0 : "";
+        if (bv == null) bv = (typeof av === "number") ? 0 : "";
+        if (typeof av === "number" && typeof bv === "number") return (av - bv) * dirMul;
+        return String(av).localeCompare(String(bv)) * dirMul;
+    });
+    if (topNState.n > 0) rows = rows.slice(0, topNState.n);
+    const totalSales = rows.reduce((s, r) => s + (r.sales || 0), 0) || 1;
+    // Build header — clickable keys for sorting
+    const headMap = {
+        "Customer No":  { key: "num" },
+        "Item No":      { key: "num" },
+        "Name":         { key: "name" },
+        "Description":  { key: "name" },
+        "Branch":       { key: "name" },
+        "Salesperson":  { key: "name" },
+        "Status":       { key: "name" },
+        "Customers":    { key: "custCount", num: true },
+        "Invoices":     { key: topNState.dim === "salespeople" || topNState.dim === "status" ? "invoiceCount" : "invoiceCount", num: true },
+        "Sales":        { key: "sales", num: true },
+        "GP $":         { key: "gp", num: true },
+        "GP %":         { key: "gpPct", num: true },
+        "Qty":          { key: "qty", num: true },
+        "% of Sales":   { key: "sales", num: true },
+    };
+    const head = document.getElementById("topNHead");
+    head.innerHTML = def.columns.map(c => {
+        if (c === "") return "<th></th>";
+        const m = headMap[c]; if (!m) return "<th>" + escapeHtml(c) + "</th>";
+        const arrow = topNState.sortKey === m.key ? (topNState.sortDir === "asc" ? " ▲" : " ▼") : "";
+        return `<th class="${m.num ? "num" : ""}" data-topn-sort="${m.key}">${escapeHtml(c)}${arrow}</th>`;
+    }).join("");
+    const tbody = document.querySelector("#topNTable tbody");
+    const fmtRow = r => {
+        const dim = topNState.dim;
+        if (dim === "customers") return `
+            <tr>
+                <td>${escapeHtml(r.num)}</td>
+                <td>${escapeHtml(r.name)}</td>
+                <td class="num">${fmtInt(r.invoiceCount)}</td>
+                <td class="num">${fmtMoneyFull(r.sales)}</td>
+                <td class="num ${r.gp >= 0 ? "pos" : "neg"}">${fmtMoneyFull(r.gp)}</td>
+                <td class="num">${fmtPct(r.gpPct)}</td>
+                <td class="num">${fmtQty(r.qty)}</td>
+                <td><button class="row-action-btn" data-key="${escapeAttr(r.key)}">${def.action.label}</button></td>
+            </tr>`;
+        if (dim === "items") return `
+            <tr>
+                <td>${escapeHtml(r.num)}</td>
+                <td>${escapeHtml(r.name)}</td>
+                <td class="num">${fmtMoneyFull(r.sales)}</td>
+                <td class="num ${r.gp >= 0 ? "pos" : "neg"}">${fmtMoneyFull(r.gp)}</td>
+                <td class="num">${fmtPct(r.gpPct)}</td>
+                <td class="num">${fmtQty(r.qty)}</td>
+                <td><button class="row-action-btn" data-key="${escapeAttr(r.key)}">${def.action.label}</button></td>
+            </tr>`;
+        if (dim === "branches") return `
+            <tr>
+                <td>${escapeHtml(r.name)}</td>
+                <td class="num">${fmtMoneyFull(r.sales)}</td>
+                <td class="num ${r.gp >= 0 ? "pos" : "neg"}">${fmtMoneyFull(r.gp)}</td>
+                <td class="num">${fmtPct(r.gpPct)}</td>
+                <td class="num">${fmtQty(r.qty)}</td>
+                <td><button class="row-action-btn" data-key="${escapeAttr(r.key)}">${def.action.label}</button></td>
+            </tr>`;
+        if (dim === "salespeople") return `
+            <tr>
+                <td>${escapeHtml(r.name)}</td>
+                <td class="num">${fmtInt(r.custCount)}</td>
+                <td class="num">${fmtInt(r.invoiceCount)}</td>
+                <td class="num">${fmtMoneyFull(r.sales)}</td>
+                <td class="num ${r.gp >= 0 ? "pos" : "neg"}">${fmtMoneyFull(r.gp)}</td>
+                <td class="num">${fmtPct(r.gpPct)}</td>
+                <td class="num">${fmtQty(r.qty)}</td>
+                <td><button class="row-action-btn" data-key="${escapeAttr(r.key)}">${def.action.label}</button></td>
+            </tr>`;
+        if (dim === "status") return `
+            <tr>
+                <td>${escapeHtml(r.name)}</td>
+                <td class="num">${fmtInt(r.count)}</td>
+                <td class="num">${fmtMoneyFull(r.sales)}</td>
+                <td class="num">${fmtPct(r.sales / totalSales)}</td>
+                <td><button class="row-action-btn" data-key="${escapeAttr(r.key)}">${def.action.label}</button></td>
+            </tr>`;
+        return "";
+    };
+    tbody.innerHTML = rows.map(fmtRow).join("") || `<tr><td colspan="${def.columns.length}" class="empty">No data.</td></tr>`;
+    // wire row actions
+    tbody.querySelectorAll(".row-action-btn").forEach(btn => {
+        btn.addEventListener("click", e => {
+            e.stopPropagation();
+            const key = btn.dataset.key;
+            const r = def.get().find(x => x.key === key);
+            if (r) def.action.run(r);
+        });
+    });
+    // wire header sort
+    head.querySelectorAll("th[data-topn-sort]").forEach(th => {
+        th.addEventListener("click", () => {
+            const k = th.dataset.topnSort;
+            if (topNState.sortKey === k) topNState.sortDir = topNState.sortDir === "asc" ? "desc" : "asc";
+            else { topNState.sortKey = k; topNState.sortDir = (k === "name" || k === "num") ? "asc" : "desc"; }
+            renderTopNTable();
+        });
+    });
+}
+
 function renderFilterChips() {
     const wrap = document.getElementById("filterChips");
     const chips = [];
     if (state.filters.location)    chips.push('<span class="chip">Branch: ' + escapeHtml(state.filters.location) + ' <span class="x" data-clear="location">×</span></span>');
     if (state.filters.salesperson) chips.push('<span class="chip">Salesperson: ' + escapeHtml(state.filters.salesperson) + ' <span class="x" data-clear="salesperson">×</span></span>');
+    if (state.filters.customer) {
+        const label = (state.filters.customerName || state.filters.customer);
+        chips.push('<span class="chip">Customer: ' + escapeHtml(label) + ' <span class="x" data-clear="customer">×</span></span>');
+    }
+    if (state.filters.item) {
+        const label = state.filters.itemDesc
+            ? (state.filters.item + " — " + state.filters.itemDesc)
+            : state.filters.item;
+        chips.push('<span class="chip">Item: ' + escapeHtml(label) + ' <span class="x" data-clear="item">×</span></span>');
+    }
+    if (state.filters.status) chips.push('<span class="chip">Status: ' + escapeHtml(state.filters.status) + ' <span class="x" data-clear="status">×</span></span>');
+    if (chips.length >= 2) {
+        chips.push('<span class="chip" style="background:#ffebee; color:#c62828;">Clear all <span class="x" data-clear="all">×</span></span>');
+    }
     wrap.innerHTML = chips.join("");
     wrap.querySelectorAll("[data-clear]").forEach(el => {
         el.addEventListener("click", () => {
-            const k = el.dataset.clear; state.filters[k] = "";
-            document.getElementById(k === "location" ? "locationFilter" : "salespersonFilter").value = "";
-            rebuildFiltered(); renderCurrentTab(); renderFilterChips();
+            const k = el.dataset.clear;
+            if (k === "all") {
+                state.filters = { location: "", salesperson: "", customer: "", customerName: "", item: "", itemDesc: "", status: "" };
+                document.getElementById("locationFilter").value = "";
+                document.getElementById("salespersonFilter").value = "";
+                document.getElementById("customerFilter").value = "";
+                document.getElementById("itemFilterBox").value = "";
+            } else {
+                state.filters[k] = "";
+                if (k === "customer") { state.filters.customerName = ""; document.getElementById("customerFilter").value = ""; }
+                if (k === "item")     { state.filters.itemDesc = "";     document.getElementById("itemFilterBox").value = ""; }
+                if (k === "location") document.getElementById("locationFilter").value = "";
+                if (k === "salesperson") document.getElementById("salespersonFilter").value = "";
+            }
+            rebuildFiltered(); renderCurrentTab();
         });
     });
 }
@@ -2342,7 +2678,14 @@ function renderStatusChart() {
                                const m = map.get(c.label);
                                return c.label + ": " + fmtMoneyFull(m.amount) + " · " + fmtInt(m.count) + " inv";
                            }
-                       } } } })
+                       } } },
+            onClick: (_, els) => {
+                if (!els.length) return;
+                const status = labels[els[0].index];
+                state.filters.status = (state.filters.status === status) ? "" : status;
+                rebuildFiltered(); renderCurrentTab();
+            }
+        })
     });
 }
 
@@ -2616,7 +2959,7 @@ function renderQuotes() {
     for (const q of quotes) {
         let qAmount = 0, qQty = 0;
         for (const ln of (q.salesQuoteLines || [])) {
-            if (state.filters.location && locationCode(ln.locationId) !== state.filters.location) continue;
+            if (!lineMatchesFilters(ln)) continue;
             const a = lineNetAmount(ln);
             const ql = num(ln.quantity);
             qAmount += a; qQty += ql;
@@ -2721,7 +3064,7 @@ function renderReturns() {
     for (const cm of cms) {
         let cmAmount = 0, cmQty = 0, cmCost = 0;
         for (const ln of (cm.salesCreditMemoLines || [])) {
-            if (state.filters.location && locationCode(ln.locationId) !== state.filters.location) continue;
+            if (!lineMatchesFilters(ln)) continue;
             const a = lineNetAmount(ln);
             const q = num(ln.quantity);
             const itemNo = ln.lineObjectNumber || ln.itemId || "";
@@ -2849,7 +3192,8 @@ function renderRunRateTab(opts) {
                 for (const ln of (inv.salesInvoiceLines || [])) {
                     const ent = locationCode(ln.locationId);
                     if (state.filters.location && ent !== state.filters.location) continue;
-                            const cur = map.get(ent) || { sales: 0, cost: 0 };
+                    if (state.filters.item && (ln.lineObjectNumber || ln.itemId || "") !== state.filters.item) continue;
+                    const cur = map.get(ent) || { sales: 0, cost: 0 };
                     cur.sales += lineNetAmount(ln);
                     cur.cost  += costFromLine(ln, 1, inv.postingDate, inv.customerNumber);
                     map.set(ent, cur);
@@ -3326,7 +3670,7 @@ function itemHistoryAcrossCustomers(itemKey) {
     const rows = [];
     for (const inv of state.filtered) {
         for (const ln of (inv.salesInvoiceLines || [])) {
-            if (state.filters.location && locationCode(ln.locationId) !== state.filters.location) continue;
+            if (!lineMatchesFilters(ln)) continue;
             const k = ln.lineObjectNumber || ln.itemId || ("(non-item) " + (ln.lineType || "?"));
             if (k !== itemKey) continue;
             rows.push({
@@ -3877,7 +4221,7 @@ function aggregateByCategory(invoices) {
     const map = new Map();
     for (const inv of invoices) {
         for (const ln of (inv.salesInvoiceLines || [])) {
-            if (state.filters.location && locationCode(ln.locationId) !== state.filters.location) continue;
+            if (!lineMatchesFilters(ln)) continue;
             const itemNo = ln.lineObjectNumber || ln.itemId || "";
             const cat = state.itemCategory.get(itemNo) || "(no category)";
             const cur = map.get(cat) || { cat, sales: 0, cost: 0, qty: 0 };
@@ -4049,7 +4393,7 @@ function buildCustomerDrillTree(customer) {
     const docs = allPostedDocs().filter(d => d.customerNumber === customer.customerNumber).filter(docMatchesFilters);
     for (const d of docs) {
         for (const ln of d.lines) {
-            if (state.filters.location && locationCode(ln.locationId) !== state.filters.location) continue;
+            if (!lineMatchesFilters(ln)) continue;
             const et = lineEntryType(ln);
             let etNode = etMap.get(et);
             if (!etNode) { etNode = _newNode("ct-et-" + et, et); etMap.set(et, etNode); dtByEt.set(et, new Map()); }
@@ -4095,6 +4439,7 @@ function buildBranchDrillTree(_invoices) {
         for (const ln of d.lines) {
             const locCode = locationCode(ln.locationId);
             if (state.filters.location && locCode !== state.filters.location) continue;
+            if (state.filters.item && (ln.lineObjectNumber || ln.itemId || "") !== state.filters.item) continue;
             let loc = locMap.get(locCode);
             if (!loc) { loc = _newNode("bt-loc-" + locCode, locCode); locMap.set(locCode, loc); dtByLoc.set(locCode, new Map()); }
             let dt = dtByLoc.get(locCode).get(d.type);
@@ -4151,7 +4496,7 @@ function buildSalespersonDrillTree(_invoices) {
             etBySpCust.set(sp + "|" + custKey, new Map());
         }
         for (const ln of d.lines) {
-            if (state.filters.location && locationCode(ln.locationId) !== state.filters.location) continue;
+            if (!lineMatchesFilters(ln)) continue;
             const et = lineEntryType(ln);
             let etNode = etBySpCust.get(sp + "|" + custKey).get(et);
             if (!etNode) {
@@ -4263,6 +4608,28 @@ function populateFilterDropdowns() {
     for (const inv of state.invoices) ppl.add(inv.salesperson || "(unassigned)");
     const spSel = document.getElementById("salespersonFilter");
     spSel.innerHTML = '<option value="">All salespeople</option>' + [...ppl].sort().map(c => '<option value="' + escapeAttr(c) + '">' + escapeHtml(c) + '</option>').join("");
+    // Customer dropdown (only customers actually billed in this period)
+    const customers = new Map();
+    for (const inv of state.invoices) {
+        if (inv.customerNumber && !customers.has(inv.customerNumber)) {
+            customers.set(inv.customerNumber, inv.customerName || inv.customerNumber);
+        }
+    }
+    const sortedCust = [...customers.entries()].sort((a, b) => (a[1] || "").localeCompare(b[1] || ""));
+    const custSel = document.getElementById("customerFilter");
+    custSel.innerHTML = '<option value="">All customers</option>' +
+        sortedCust.map(([num, name]) => '<option value="' + escapeAttr(num) + '" data-name="' + escapeAttr(name) + '">' + escapeHtml(name) + ' (' + escapeHtml(num) + ')</option>').join("");
+    // Item datalist (only items that actually appeared on a line in this period)
+    const items = new Map();
+    for (const inv of state.invoices) {
+        for (const ln of (inv.salesInvoiceLines || [])) {
+            const no = ln.lineObjectNumber || ln.itemId || "";
+            if (no && !items.has(no)) items.set(no, ln.description || "");
+        }
+    }
+    const sortedItems = [...items.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+    const itemList = document.getElementById("itemFilterList");
+    itemList.innerHTML = sortedItems.map(([no, desc]) => '<option value="' + escapeAttr(no) + '">' + escapeHtml(no + (desc ? " — " + desc : "")) + '</option>').join("");
 }
 
 // ============================================================
@@ -4365,6 +4732,37 @@ function wireEvents() {
     });
     document.getElementById("salespersonFilter").addEventListener("change", e => {
         state.filters.salesperson = e.target.value; rebuildFiltered(); renderCurrentTab();
+    });
+    document.getElementById("customerFilter").addEventListener("change", e => {
+        state.filters.customer = e.target.value;
+        const opt = e.target.selectedOptions[0];
+        state.filters.customerName = opt ? (opt.dataset.name || "") : "";
+        rebuildFiltered(); renderCurrentTab();
+    });
+    document.getElementById("itemFilterBox").addEventListener("change", e => {
+        const v = (e.target.value || "").trim();
+        // Validate against the datalist — accept only if it matches a real item code
+        const opts = [...document.querySelectorAll("#itemFilterList option")];
+        const match = opts.find(o => o.value === v);
+        if (v && !match) {
+            // Try matching by prefix or "code — desc" entry
+            const found = opts.find(o => o.value === v || o.textContent.startsWith(v));
+            if (!found) {
+                state.filters.item = "";
+                state.filters.itemDesc = "";
+            } else {
+                state.filters.item = found.value;
+                state.filters.itemDesc = (found.textContent.split("—")[1] || "").trim();
+                e.target.value = found.value;
+            }
+        } else if (match) {
+            state.filters.item = match.value;
+            state.filters.itemDesc = (match.textContent.split("—")[1] || "").trim();
+        } else {
+            state.filters.item = "";
+            state.filters.itemDesc = "";
+        }
+        rebuildFiltered(); renderCurrentTab();
     });
 
     document.getElementById("signOutBtn").addEventListener("click", () => {
@@ -4533,6 +4931,31 @@ function wireEvents() {
     wireTreeSort("#customerDrillTable",    renderCustomerDrillTree);
     wireTreeSort("#branchDrillTable",      renderBranchDrillTree);
     wireTreeSort("#salespersonDrillTable", renderSalespersonDrillTree);
+
+    // Top N modal — "Show more…" buttons on chart cards
+    document.querySelectorAll("[data-topn]").forEach(btn => {
+        btn.addEventListener("click", () => openTopNModal(btn.dataset.topn));
+    });
+    document.getElementById("topNClose").addEventListener("click", closeTopNModal);
+    document.getElementById("topNModal").addEventListener("click", e => {
+        // Click outside modal-card (i.e., on the overlay backdrop) closes
+        if (e.target.id === "topNModal") closeTopNModal();
+    });
+    document.querySelectorAll("#topNCount button").forEach(btn => {
+        btn.addEventListener("click", () => {
+            document.querySelectorAll("#topNCount button").forEach(b => b.classList.remove("active"));
+            btn.classList.add("active");
+            topNState.n = parseInt(btn.dataset.n) || 0;
+            renderTopNTable();
+        });
+    });
+    document.getElementById("topNSearch").addEventListener("input", e => {
+        topNState.search = e.target.value;
+        renderTopNTable();
+    });
+    document.addEventListener("keydown", e => {
+        if (e.key === "Escape" && document.getElementById("topNModal").style.display === "flex") closeTopNModal();
+    });
 }
 
 // ============================================================
