@@ -472,6 +472,62 @@
                 </div>
             </div>
 
+            <!-- DRILL: Item Detail (global — opens from Top 10 items click) -->
+            <div id="drillItemDetail" class="drill" style="display:none;">
+                <div class="breadcrumb">
+                    <a class="back-btn" id="idBack">← Back</a>
+                    <span class="sep">/</span>
+                    <span class="current" id="idTitle"></span>
+                </div>
+                <div class="kpi-row">
+                    <div class="kpi k-rev"><div class="label">Revenue</div><div class="value" id="idRevenue">—</div></div>
+                    <div class="kpi k-qty"><div class="label">Total Qty</div><div class="value" id="idQty">—</div></div>
+                    <div class="kpi k-avg"><div class="label">Avg Unit Price</div><div class="value" id="idAvg">—</div></div>
+                    <div class="kpi k-cust"><div class="label">Customers Buying</div><div class="value" id="idCustCount">—</div></div>
+                </div>
+                <div class="chart-grid">
+                    <div class="card span-12">
+                        <div class="head">
+                            <h3>Sales over time</h3>
+                            <div style="display:flex; gap:10px; align-items:center;">
+                                <select id="idMetric" class="mini-select">
+                                    <option value="revenue">Revenue</option>
+                                    <option value="qty">Quantity</option>
+                                </select>
+                                <div class="toggle" id="idBucketToggle">
+                                    <button data-bucket="day">Day</button>
+                                    <button data-bucket="week">Week</button>
+                                    <button data-bucket="month" class="active">Month</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="chart-wrap" style="min-height:300px;"><canvas id="idChart"></canvas></div>
+                    </div>
+                    <div class="card span-12">
+                        <div class="head"><h3>Top customers buying this item</h3><div class="meta">click a bar to drill into customer</div></div>
+                        <div class="chart-wrap" style="min-height:340px;"><canvas id="idCustChart"></canvas></div>
+                    </div>
+                </div>
+                <div class="panel">
+                    <div class="panel-header"><h2>Invoices containing this item</h2><div class="meta" id="idInvCount"></div></div>
+                    <div class="table-scroll">
+                        <table id="idInvoiceTable">
+                            <thead><tr>
+                                <th>Customer</th>
+                                <th>Salesperson</th>
+                                <th>Invoice No</th>
+                                <th>Posting Date</th>
+                                <th class="num">Qty</th>
+                                <th class="num">Unit Price</th>
+                                <th class="num">Line Total</th>
+                                <th>Branch</th>
+                            </tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
             <!-- DRILL: Invoice -->
             <div id="drillInvoice" class="drill" style="display:none;">
                 <div class="breadcrumb">
@@ -523,6 +579,12 @@
                         <div class="head">
                             <h3>Revenue over time</h3>
                             <div style="display:flex; gap:10px; align-items:center;">
+                                <select id="trendChartType" class="mini-select" title="Chart type">
+                                    <option value="line" selected>Line</option>
+                                    <option value="area">Area</option>
+                                    <option value="bar">Bar</option>
+                                    <option value="column">Column</option>
+                                </select>
                                 <select id="trendSplit" class="mini-select">
                                     <option value="">Split by: none</option>
                                     <option value="location">Split by: branch</option>
@@ -542,7 +604,7 @@
                         <div class="chart-wrap" style="min-height:340px;"><canvas id="topCustomersChart"></canvas></div>
                     </div>
                     <div class="card span-6">
-                        <div class="head"><h3>Top 10 items</h3><div class="meta">by revenue</div></div>
+                        <div class="head"><h3>Top 10 items</h3><div class="meta">click a bar to drill in</div></div>
                         <div class="chart-wrap" style="min-height:340px;"><canvas id="topItemsChart"></canvas></div>
                     </div>
                     <div class="card span-6">
@@ -554,11 +616,25 @@
                         <div class="chart-wrap" style="min-height:300px;"><canvas id="salespersonChart"></canvas></div>
                     </div>
                     <div class="card span-4">
-                        <div class="head"><h3>Invoice status</h3></div>
+                        <div class="head">
+                            <h3>Invoice status</h3>
+                            <div class="toggle" id="statusMetricToggle">
+                                <button data-metric="count" class="active">Count</button>
+                                <button data-metric="amount">$ Amount</button>
+                            </div>
+                        </div>
                         <div class="chart-wrap"><canvas id="statusChart"></canvas></div>
                     </div>
                     <div class="card span-8">
-                        <div class="head"><h3>Posting pattern by day of week</h3></div>
+                        <div class="head">
+                            <h3>Posting pattern by day of week</h3>
+                            <select id="dowChartType" class="mini-select" title="Chart type">
+                                <option value="bar" selected>Bar + line</option>
+                                <option value="line">Line</option>
+                                <option value="radar">Radar</option>
+                                <option value="polarArea">Polar area</option>
+                            </select>
+                        </div>
                         <div class="chart-wrap"><canvas id="dowChart"></canvas></div>
                     </div>
                 </div>
@@ -1396,6 +1472,8 @@ const state = {
     currentCustomer: null, currentInvoice: null, currentItem: null,
     dashboardBucket: "month", customerBucket: "month", ciBucket: "month",
     ciMetric: "revenue", trendSplit: "",
+    trendChartType: "line", dowChartType: "bar", statusMetric: "count",
+    currentItemDetail: null,
     sort: { key: "revenue", dir: "desc" },
     sortBranch: { key: "salesAmount", dir: "desc" },
     sortSales: { key: "salesAmount", dir: "desc" },
@@ -2107,7 +2185,9 @@ function renderOverview() {
 function renderTrendChart() {
     destroyChart("trend");
     const ctx = document.getElementById("trendChart").getContext("2d");
+    const ct = state.trendChartType || "line";
     if (state.trendSplit) {
+        // When stacked-by, force a bar shape (line stacks badly)
         const { labels, datasets } = bucketInvoicesSplitBy(state.filtered, state.dashboardBucket, state.trendSplit);
         state.charts.trend = new Chart(ctx, {
             type: "bar", data: { labels, datasets },
@@ -2117,21 +2197,25 @@ function renderTrendChart() {
                 scales: { x: { stacked: true }, y: { stacked: true, ticks: { callback: v => fmtMoney(v) } } }
             })
         });
-    } else {
-        const buckets = bucketInvoices(state.filtered, state.dashboardBucket);
-        state.charts.trend = new Chart(ctx, {
-            type: "line",
-            data: { labels: buckets.map(b => b.key), datasets: [{
-                label: "Revenue", data: buckets.map(b => b.revenue),
-                borderColor: "#3f51b5", backgroundColor: "rgba(63,81,181,0.15)",
-                fill: true, tension: 0.3, pointRadius: 3, pointHoverRadius: 6, borderWidth: 2,
-            }] },
-            options: chartBase({
-                plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => fmtMoneyFull(c.parsed.y) + " (" + buckets[c.dataIndex].count + " inv)" } } },
-                scales: { y: { ticks: { callback: v => fmtMoney(v) } } }
-            })
-        });
+        return;
     }
+    const buckets = bucketInvoices(state.filtered, state.dashboardBucket);
+    let chartType = ct === "column" ? "bar" : (ct === "area" ? "line" : ct);
+    const fill = (ct === "area" || ct === "line");
+    const dataset = (chartType === "bar")
+        ? { label: "Revenue", data: buckets.map(b => b.revenue), backgroundColor: "#3f51b5", borderRadius: 4 }
+        : { label: "Revenue", data: buckets.map(b => b.revenue), borderColor: "#3f51b5",
+            backgroundColor: ct === "area" ? "rgba(63,81,181,0.20)" : "rgba(63,81,181,0.06)",
+            fill: fill, tension: 0.3, pointRadius: 3, pointHoverRadius: 6, borderWidth: 2 };
+    state.charts.trend = new Chart(ctx, {
+        type: chartType,
+        data: { labels: buckets.map(b => b.key), datasets: [dataset] },
+        options: chartBase({
+            plugins: { legend: { display: false },
+                       tooltip: { callbacks: { label: c => fmtMoneyFull(c.parsed.y) + " (" + buckets[c.dataIndex].count + " inv)" } } },
+            scales: { y: { ticks: { callback: v => fmtMoney(v) } } }
+        })
+    });
 }
 
 function renderTopCustomersChart() {
@@ -2168,7 +2252,8 @@ function renderTopItemsChart() {
             indexAxis: "y",
             plugins: { legend: { display: false },
                        tooltip: { callbacks: { label: c => fmtMoneyFull(c.parsed.x) + " · qty " + fmtInt(top[c.dataIndex].qty) + " · GP " + fmtPct(top[c.dataIndex].gpPct) } } },
-            scales: { x: { ticks: { callback: v => fmtMoney(v) } } }
+            scales: { x: { ticks: { callback: v => fmtMoney(v) } } },
+            onClick: (_, els) => { if (els.length) showItemDetail(top[els[0].index]); }
         })
     });
 }
@@ -2227,8 +2312,18 @@ function renderSalespersonChart() {
 
 function renderStatusChart() {
     destroyChart("status");
-    const sc = statusCounts(state.filtered);
-    const labels = [...sc.keys()], data = labels.map(k => sc.get(k));
+    // Group filtered invoices by status, collecting count + $ amount in one pass
+    const map = new Map();
+    for (const inv of state.filtered) {
+        const k = inv.status || "(unknown)";
+        const cur = map.get(k) || { count: 0, amount: 0 };
+        cur.count += 1;
+        cur.amount += invoiceSalesAmount(inv);
+        map.set(k, cur);
+    }
+    const labels = [...map.keys()];
+    const isAmount = state.statusMetric === "amount";
+    const data = labels.map(k => isAmount ? map.get(k).amount : map.get(k).count);
     const palette = labels.map(k => {
         const kk = (k || "").toLowerCase();
         if (kk === "paid")  return "#2e7d32";
@@ -2242,7 +2337,12 @@ function renderStatusChart() {
         data: { labels, datasets: [{ data, backgroundColor: palette, borderWidth: 0 }] },
         options: chartBase({ cutout: "62%",
             plugins: { legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } },
-                       tooltip: { callbacks: { label: c => c.label + ": " + fmtInt(c.parsed) } } } })
+                       tooltip: { callbacks: {
+                           label: c => {
+                               const m = map.get(c.label);
+                               return c.label + ": " + fmtMoneyFull(m.amount) + " · " + fmtInt(m.count) + " inv";
+                           }
+                       } } } })
     });
 }
 
@@ -2251,6 +2351,41 @@ function renderDayOfWeekChart() {
     const { rev, cnt } = dayOfWeekCounts(state.filtered);
     const labels = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
     const ctx = document.getElementById("dowChart").getContext("2d");
+    const ct = state.dowChartType || "bar";
+    if (ct === "radar" || ct === "polarArea") {
+        // Single-series radar/polar — invoice-count overlay doesn't fit cleanly here
+        state.charts.dow = new Chart(ctx, {
+            type: ct,
+            data: { labels, datasets: [{
+                label: "Revenue", data: rev,
+                backgroundColor: ct === "radar" ? "rgba(63,81,181,0.25)" : ["#3f51b5","#5c6bc0","#7986cb","#9fa8da","#c5cae9","#e8eaf6","#ede7f6"],
+                borderColor: "#3f51b5", borderWidth: 2, pointBackgroundColor: "#3f51b5",
+            }] },
+            options: chartBase({
+                plugins: { legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } },
+                           tooltip: { callbacks: { label: c => "Revenue: " + fmtMoneyFull(c.parsed.r) } } },
+                scales: { r: { ticks: { callback: v => fmtMoney(v) } } }
+            })
+        });
+        return;
+    }
+    if (ct === "line") {
+        state.charts.dow = new Chart(ctx, {
+            type: "line",
+            data: { labels, datasets: [
+                { label: "Revenue", data: rev, borderColor: "#3f51b5", backgroundColor: "rgba(63,81,181,0.10)", fill: true, tension: 0.3, pointRadius: 4, yAxisID: "y" },
+                { label: "Invoices", data: cnt, borderColor: "#e91e63", backgroundColor: "transparent", fill: false, tension: 0.3, yAxisID: "y1", borderWidth: 2, pointRadius: 3, borderDash: [4,4] }
+            ] },
+            options: chartBase({
+                plugins: { legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } },
+                           tooltip: { callbacks: { label: c => c.dataset.label + ": " + (c.dataset.yAxisID === "y" ? fmtMoneyFull(c.parsed.y) : fmtInt(c.parsed.y)) } } },
+                scales: { y: { position: "left", ticks: { callback: v => fmtMoney(v) } },
+                          y1: { position: "right", grid: { drawOnChartArea: false }, ticks: { callback: v => fmtInt(v) } } }
+            })
+        });
+        return;
+    }
+    // default: bar (with invoice-count line overlay)
     state.charts.dow = new Chart(ctx, {
         type: "bar",
         data: { labels, datasets: [
@@ -3182,6 +3317,131 @@ function renderCiTable() {
             <td>${escapeHtml(r.location)}</td>
         </tr>
     `).join("") || '<tr><td colspan="6" class="empty">No purchases.</td></tr>';
+}
+
+// ============================================================
+// DRILL: ITEM DETAIL (global — opens from clicking a Top 10 items bar)
+// ============================================================
+function itemHistoryAcrossCustomers(itemKey) {
+    const rows = [];
+    for (const inv of state.filtered) {
+        for (const ln of (inv.salesInvoiceLines || [])) {
+            if (state.filters.location && locationCode(ln.locationId) !== state.filters.location) continue;
+            const k = ln.lineObjectNumber || ln.itemId || ("(non-item) " + (ln.lineType || "?"));
+            if (k !== itemKey) continue;
+            rows.push({
+                invoiceId: inv.id,
+                invoiceNumber: inv.number,
+                postingDate: inv.postingDate,
+                customerNumber: inv.customerNumber,
+                customerName: inv.customerName,
+                salesperson: inv.salesperson || "(unassigned)",
+                branch: locationCode(ln.locationId),
+                qty: num(ln.quantity),
+                unitPrice: num(ln.unitPrice),
+                amountExcludingTax: num(ln.amountExcludingTax),
+            });
+        }
+    }
+    rows.sort((a, b) => a.postingDate < b.postingDate ? -1 : 1);
+    return rows;
+}
+
+function showItemDetail(item) {
+    state.currentItemDetail = item;
+    state.idBucket = state.idBucket || "month";
+    state.idMetric = state.idMetric || "revenue";
+    const rows = itemHistoryAcrossCustomers(item.key);
+    const totalQty = rows.reduce((s, r) => s + r.qty, 0);
+    const totalRev = rows.reduce((s, r) => s + r.amountExcludingTax, 0);
+    const avgUnit = totalQty ? (totalRev / totalQty) : 0;
+    const customerSet = new Set(rows.map(r => r.customerNumber));
+
+    document.getElementById("idTitle").textContent = (item.number ? item.number + " — " : "") + (item.description || "");
+    document.getElementById("idRevenue").textContent  = fmtMoneyFull(totalRev);
+    document.getElementById("idQty").textContent      = fmtInt(totalQty);
+    document.getElementById("idAvg").textContent      = fmtMoney2(avgUnit);
+    document.getElementById("idCustCount").textContent = fmtInt(customerSet.size);
+
+    state.charts._idRows = rows;
+    renderIdChart();
+    renderIdCustomerChart();
+    renderIdInvoiceTable();
+    document.getElementById("idInvCount").textContent = rows.length + " line" + (rows.length === 1 ? "" : "s") + " on " + rows.length + " invoice rows";
+    openDrill("itemDetail");
+}
+
+function renderIdChart() {
+    destroyChart("id");
+    const rows = state.charts._idRows || [];
+    const map = new Map();
+    for (const r of rows) {
+        const k = bucketKey(r.postingDate, state.idBucket);
+        const cur = map.get(k) || { key: k, revenue: 0, qty: 0, count: 0 };
+        cur.revenue += r.amountExcludingTax; cur.qty += r.qty; cur.count += 1;
+        map.set(k, cur);
+    }
+    const buckets = [...map.values()].sort((a, b) => a.key < b.key ? -1 : 1);
+    const metric = state.idMetric;
+    const ctx = document.getElementById("idChart").getContext("2d");
+    state.charts.id = new Chart(ctx, {
+        type: "bar",
+        data: { labels: buckets.map(b => b.key),
+                datasets: [{ label: metric === "qty" ? "Quantity" : "Revenue",
+                             data: buckets.map(b => metric === "qty" ? b.qty : b.revenue),
+                             backgroundColor: "#00897b", borderRadius: 4 }] },
+        options: chartBase({
+            plugins: { legend: { display: false },
+                       tooltip: { callbacks: { label: c => (metric === "qty" ? fmtInt(c.parsed.y) + " units" : fmtMoneyFull(c.parsed.y)) } } },
+            scales: { y: { ticks: { callback: v => metric === "qty" ? fmtInt(v) : fmtMoney(v) } } }
+        })
+    });
+}
+
+function renderIdCustomerChart() {
+    destroyChart("idCust");
+    const rows = state.charts._idRows || [];
+    const byCust = new Map();
+    for (const r of rows) {
+        const k = r.customerNumber || "(unknown)";
+        const cur = byCust.get(k) || { customerNumber: k, customerName: r.customerName || k, sales: 0, qty: 0 };
+        cur.sales += r.amountExcludingTax;
+        cur.qty   += r.qty;
+        byCust.set(k, cur);
+    }
+    const top = [...byCust.values()].filter(c => c.sales > 0).sort((a, b) => b.sales - a.sales).slice(0, 15);
+    const ctx = document.getElementById("idCustChart").getContext("2d");
+    state.charts.idCust = new Chart(ctx, {
+        type: "bar",
+        data: { labels: top.map(c => truncate(c.customerName || c.customerNumber, 32)),
+                datasets: [{ data: top.map(c => c.sales),
+                             backgroundColor: top.map((_, i) => barShade("#3f51b5", i / Math.max(top.length, 1))),
+                             borderRadius: 4 }] },
+        options: chartBase({
+            indexAxis: "y",
+            plugins: { legend: { display: false },
+                       tooltip: { callbacks: { label: c => fmtMoneyFull(c.parsed.x) + " · qty " + fmtInt(top[c.dataIndex].qty) } } },
+            scales: { x: { ticks: { callback: v => fmtMoney(v) } } },
+            onClick: (_, els) => { if (els.length) showCustomer(top[els[0].index].customerNumber); }
+        })
+    });
+}
+
+function renderIdInvoiceTable() {
+    const rows = state.charts._idRows || [];
+    const tbody = document.querySelector("#idInvoiceTable tbody");
+    tbody.innerHTML = [...rows].sort((a, b) => a.postingDate < b.postingDate ? 1 : -1).slice(0, 1000).map(r => `
+        <tr class="clickable" data-cust="${escapeAttr(r.customerNumber)}">
+            <td>${escapeHtml(r.customerName || r.customerNumber)}</td>
+            <td>${escapeHtml(r.salesperson)}</td>
+            <td>${escapeHtml(r.invoiceNumber)}</td>
+            <td>${fmtDate(r.postingDate)}</td>
+            <td class="num">${fmtQty(r.qty)}</td>
+            <td class="num">${fmtMoney2(r.unitPrice)}</td>
+            <td class="num">${fmtMoney2(r.amountExcludingTax)}</td>
+            <td>${escapeHtml(r.branch)}</td>
+        </tr>
+    `).join("") || '<tr><td colspan="8" class="empty">No transactions.</td></tr>';
 }
 
 // ============================================================
@@ -4181,6 +4441,30 @@ function wireEvents() {
         });
     });
     document.getElementById("trendSplit").addEventListener("change", e => { state.trendSplit = e.target.value; renderTrendChart(); });
+    document.getElementById("trendChartType").addEventListener("change", e => { state.trendChartType = e.target.value; renderTrendChart(); });
+    document.getElementById("dowChartType").addEventListener("change", e => { state.dowChartType = e.target.value; renderDayOfWeekChart(); });
+    // Status metric toggle (count / amount)
+    document.querySelectorAll("#statusMetricToggle button").forEach(btn => {
+        btn.addEventListener("click", () => {
+            document.querySelectorAll("#statusMetricToggle button").forEach(b => b.classList.remove("active"));
+            btn.classList.add("active");
+            state.statusMetric = btn.dataset.metric;
+            renderStatusChart();
+        });
+    });
+    // Item Detail drill controls
+    document.querySelectorAll("#idBucketToggle button").forEach(btn => {
+        btn.addEventListener("click", () => {
+            document.querySelectorAll("#idBucketToggle button").forEach(b => b.classList.remove("active"));
+            btn.classList.add("active"); state.idBucket = btn.dataset.bucket; renderIdChart();
+        });
+    });
+    document.getElementById("idMetric").addEventListener("change", e => { state.idMetric = e.target.value; renderIdChart(); });
+    document.getElementById("idBack").addEventListener("click", closeDrill);
+    document.querySelector("#idInvoiceTable tbody").addEventListener("click", e => {
+        const tr = e.target.closest("tr.clickable"); if (!tr) return;
+        if (tr.dataset.cust) showCustomer(tr.dataset.cust);
+    });
     document.querySelectorAll("#custBucketToggle button").forEach(btn => {
         btn.addEventListener("click", () => {
             document.querySelectorAll("#custBucketToggle button").forEach(b => b.classList.remove("active"));
