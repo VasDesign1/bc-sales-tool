@@ -283,11 +283,16 @@
             border-radius: 6px; cursor: pointer; font-size: 11px; font-weight: 600;
         }
         .row-action-btn:hover { background: #dde0f4; }
-        .card .head .more-btn {
+        .card .head .more-btn,
+        .panel-header .more-btn,
+        .panel-header .export-btn {
             background: white; color: #3f51b5; border: 1px solid #d6d8eb;
-            padding: 3px 10px; border-radius: 6px; cursor: pointer; font-size: 11px; font-weight: 600;
+            padding: 4px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600;
         }
-        .card .head .more-btn:hover { background: #eef0fb; }
+        .card .head .more-btn:hover,
+        .panel-header .more-btn:hover,
+        .panel-header .export-btn:hover { background: #eef0fb; }
+        .panel-header .export-btn { white-space: nowrap; }
 
         /* ---------- PROGRESS ---------- */
         .progress {
@@ -1163,28 +1168,39 @@
 
             <!-- TAB: Sales Pareto (80/20) -->
             <section data-tab-content="pareto" style="display:none;">
-                <div class="hint">The Pareto principle: typically a small share of customers drives most of the revenue. Customers above the 80% cumulative line are your <strong>vital few</strong>; below it are the <strong>useful many</strong>.</div>
+                <div class="hint">The Pareto principle: typically 80% of an outcome comes from 20% of the inputs. Pick what you want to analyse.</div>
+                <div class="toolbar">
+                    <div class="field">
+                        <label for="paretoDim">Analyse</label>
+                        <select id="paretoDim" class="mini-select">
+                            <option value="customers"   selected>Clients &amp; Accounts (sales)</option>
+                            <option value="products">Products (gross profit $)</option>
+                            <option value="salespeople">Sales Team (sales)</option>
+                            <option value="days">Time &amp; Effort (sales per day)</option>
+                        </select>
+                    </div>
+                </div>
                 <div class="kpi-row">
-                    <div class="kpi k-cust"><div class="label">Total customers</div><div class="value" id="parKpiTotal">—</div></div>
-                    <div class="kpi k-rev"><div class="label">Customers driving 80%</div><div class="value" id="parKpiTop80">—</div><div class="sub" id="parKpiTop80Sub"></div></div>
-                    <div class="kpi k-gp"><div class="label">Concentration ratio</div><div class="value" id="parKpiRatio">—</div><div class="sub">% of customers = 80% of sales</div></div>
-                    <div class="kpi k-avg"><div class="label">Avg sale per customer</div><div class="value" id="parKpiAvg">—</div></div>
+                    <div class="kpi k-cust"><div class="label" id="parKpiTotalLabel">Total</div><div class="value" id="parKpiTotal">—</div></div>
+                    <div class="kpi k-rev"><div class="label" id="parKpiTop80Label">Driving 80%</div><div class="value" id="parKpiTop80">—</div><div class="sub" id="parKpiTop80Sub"></div></div>
+                    <div class="kpi k-gp"><div class="label">Concentration ratio</div><div class="value" id="parKpiRatio">—</div><div class="sub" id="parKpiRatioSub">% reaching 80%</div></div>
+                    <div class="kpi k-avg"><div class="label" id="parKpiAvgLabel">Average</div><div class="value" id="parKpiAvg">—</div></div>
                 </div>
                 <div class="chart-grid">
                     <div class="card span-12">
-                        <div class="head"><h3>Customer revenue + cumulative %</h3><div class="meta">orange line at 80%</div></div>
+                        <div class="head"><h3 id="parChartTitle">Pareto chart</h3><div class="meta">orange line at 80%</div></div>
                         <div class="chart-wrap" style="min-height:380px;"><canvas id="paretoChart"></canvas></div>
                     </div>
                 </div>
                 <div class="panel">
-                    <div class="panel-header"><h2>Pareto detail · sorted by revenue desc</h2><div class="meta" id="parMeta"></div></div>
+                    <div class="panel-header"><h2 id="parTableTitle">Pareto detail</h2><div class="meta" id="parMeta"></div></div>
                     <div class="table-scroll">
                         <table id="paretoTable">
                             <thead><tr>
                                 <th class="num">#</th>
-                                <th>Customer</th>
-                                <th class="num">Sales</th>
-                                <th class="num">Cum. Sales</th>
+                                <th id="parThEntity">Name</th>
+                                <th class="num" id="parThMetric">Value</th>
+                                <th class="num">Cum. value</th>
                                 <th class="num">Cum. %</th>
                                 <th>Band</th>
                             </tr></thead>
@@ -1224,21 +1240,29 @@
 
             <!-- TAB: Customer Retention History -->
             <section data-tab-content="retentionHistory" style="display:none;">
-                <div class="hint">Per-customer view of when they started, last bought, and whether they're active, lost, or recovered. "Lost" = no purchase in the last 6 months from today.</div>
+                <div class="hint">
+                    Each customer is bucketed by their purchase timeline. Click any row to drill into that customer.<br>
+                    <strong>New</strong>: first invoice in the loaded data is less than 90 days ago.
+                    <strong>Returning</strong>: had a gap of more than 180 days between consecutive purchases (lapsed then came back).
+                    <strong>Active</strong>: regular buyer with last purchase within 90 days, not New or Returning.
+                    <strong>Lost</strong>: no purchase in the last 180 days from today.
+                </div>
                 <div class="kpi-row">
                     <div class="kpi k-cust"><div class="label">Total</div><div class="value" id="rhKpiTotal">—</div></div>
                     <div class="kpi k-rev"><div class="label">Active</div><div class="value" id="rhKpiActive">—</div></div>
-                    <div class="kpi k-gp"><div class="label">New this period</div><div class="value" id="rhKpiNew">—</div></div>
-                    <div class="kpi k-avg"><div class="label">Lost</div><div class="value" id="rhKpiLost">—</div></div>
+                    <div class="kpi k-gp"><div class="label">New (last 90 days)</div><div class="value" id="rhKpiNew">—</div></div>
+                    <div class="kpi k-avg"><div class="label">Returning</div><div class="value" id="rhKpiReturning">—</div></div>
+                    <div class="kpi k-loc"><div class="label">Lost</div><div class="value" id="rhKpiLost">—</div></div>
                 </div>
                 <div class="panel">
                     <div class="panel-header">
-                        <h2>Customer retention detail</h2>
+                        <h2>Customer retention detail · click a row to drill</h2>
                         <select id="rhStatusFilter" class="mini-select">
                             <option value="">All statuses</option>
-                            <option value="new">New (first purchase in period)</option>
-                            <option value="active">Active</option>
-                            <option value="lost">Lost (no purchase >6mo)</option>
+                            <option value="new">New (first purchase &lt; 90 days)</option>
+                            <option value="returning">Returning (came back after &gt;180-day gap)</option>
+                            <option value="active">Active (regular buyer)</option>
+                            <option value="lost">Lost (no purchase &gt;180 days)</option>
                         </select>
                         <input type="text" class="search" id="rhSearch" placeholder="Search customer…">
                         <div class="meta" id="rhMeta"></div>
@@ -1251,9 +1275,11 @@
                                 <th>First purchase</th>
                                 <th>Last purchase</th>
                                 <th class="num">Days since</th>
+                                <th class="num">Max gap (days)</th>
                                 <th class="num">Invoices</th>
                                 <th class="num">Sales</th>
                                 <th>Status</th>
+                                <th>Why</th>
                             </tr></thead>
                             <tbody></tbody>
                         </table>
@@ -3679,36 +3705,101 @@ function renderForecast() {
 // ============================================================
 // SALES PARETO (80/20) TAB
 // ============================================================
+const PARETO_DIMS = {
+    customers: {
+        labelEntity: "Customer", labelTotal: "Total customers", labelMetric: "Sales",
+        labelAvg: "Avg sale per customer",
+        chartTitle: "Customer sales (descending) + cumulative %",
+        tableTitle: "Pareto detail · clients & accounts",
+        thMetric: "Sales", thEntity: "Customer",
+        get: () => [...state.byCustomer.values()].filter(g => g.revenue > 0).map(g => ({
+            name: g.customerName || g.customerNumber,
+            value: g.revenue,
+        })).sort((a, b) => b.value - a.value),
+        fmt: fmtMoneyFull,
+    },
+    products: {
+        labelEntity: "Item", labelTotal: "Total items", labelMetric: "GP $",
+        labelAvg: "Avg GP per item",
+        chartTitle: "Item gross profit (descending) + cumulative %",
+        tableTitle: "Pareto detail · products",
+        thMetric: "GP $", thEntity: "Item",
+        get: () => [...state.byItem.values()].filter(it => it.gp > 0).map(it => ({
+            name: (it.number ? it.number + " — " : "") + (it.description || ""),
+            value: it.gp,
+        })).sort((a, b) => b.value - a.value),
+        fmt: fmtMoneyFull,
+    },
+    salespeople: {
+        labelEntity: "Salesperson", labelTotal: "Total salespeople", labelMetric: "Sales",
+        labelAvg: "Avg sales per salesperson",
+        chartTitle: "Salesperson sales (descending) + cumulative %",
+        tableTitle: "Pareto detail · sales team",
+        thMetric: "Sales", thEntity: "Salesperson",
+        get: () => [...state.bySalesperson.values()].filter(s => s.revenue > 0).map(s => ({
+            name: s.code,
+            value: s.revenue,
+        })).sort((a, b) => b.value - a.value),
+        fmt: fmtMoneyFull,
+    },
+    days: {
+        labelEntity: "Day", labelTotal: "Active selling days", labelMetric: "Day sales",
+        labelAvg: "Avg sales per day",
+        chartTitle: "Daily sales (descending) + cumulative %",
+        tableTitle: "Pareto detail · time & effort",
+        thMetric: "Day sales", thEntity: "Date",
+        get: () => {
+            const byDay = new Map();
+            for (const inv of state.filtered) {
+                const k = (inv.postingDate || "").slice(0, 10);
+                if (!k) continue;
+                byDay.set(k, (byDay.get(k) || 0) + invoiceSalesAmount(inv));
+            }
+            return [...byDay.entries()]
+                .map(([k, v]) => ({ name: fmtDate(k), value: v }))
+                .filter(r => r.value > 0)
+                .sort((a, b) => b.value - a.value);
+        },
+        fmt: fmtMoneyFull,
+    },
+};
+
 function renderPareto() {
     renderFilterChips();
-    const rows = [...state.byCustomer.values()]
-        .filter(g => g.revenue > 0)
-        .sort((a, b) => b.revenue - a.revenue);
-    const total = rows.reduce((s, g) => s + g.revenue, 0);
+    const dimKey = (document.getElementById("paretoDim") || {}).value || "customers";
+    const def = PARETO_DIMS[dimKey];
+    const rows = def.get();
+    const total = rows.reduce((s, r) => s + r.value, 0);
     let cum = 0, top80Count = 0, top80Hit = false;
-    const labels = [], sales = [], cumPct = [];
+    const labels = [], values = [], cumPct = [];
     const tblRows = [];
-    rows.forEach((g, i) => {
-        cum += g.revenue;
+    rows.forEach((r, i) => {
+        cum += r.value;
         const pct = total ? cum / total : 0;
         if (!top80Hit && pct >= 0.8) { top80Hit = true; top80Count = i + 1; }
-        labels.push(truncate(g.customerName || g.customerNumber, 20));
-        sales.push(g.revenue);
+        labels.push(truncate(r.name, 24));
+        values.push(r.value);
         cumPct.push(pct * 100);
         tblRows.push({
-            rank: i + 1,
-            name: g.customerName || g.customerNumber,
-            sales: g.revenue, cum, cumPct: pct,
-            band: pct <= 0.8 ? "Top 80%" : "Bottom 20%",
+            rank: i + 1, name: r.name, value: r.value,
+            cum, cumPct: pct, band: pct <= 0.8 ? "Top 80%" : "Bottom 20%",
         });
     });
     if (!top80Hit) top80Count = rows.length;
 
     document.getElementById("parKpiTotal").textContent = fmtInt(rows.length);
+    document.getElementById("parKpiTotalLabel").textContent = def.labelTotal;
     document.getElementById("parKpiTop80").textContent = fmtInt(top80Count);
-    document.getElementById("parKpiTop80Sub").textContent = rows.length ? fmtPct(top80Count / rows.length) + " of customers" : "";
+    document.getElementById("parKpiTop80Sub").textContent = rows.length ? fmtPct(top80Count / rows.length) + " of " + def.labelEntity.toLowerCase() + "s" : "";
+    document.getElementById("parKpiTop80Label").textContent = def.labelEntity + "s driving 80%";
     document.getElementById("parKpiRatio").textContent = rows.length ? fmtPct(top80Count / rows.length) : "—";
-    document.getElementById("parKpiAvg").textContent = rows.length ? fmtMoneyFull(total / rows.length) : "—";
+    document.getElementById("parKpiRatioSub").textContent = "% of " + def.labelEntity.toLowerCase() + "s = 80% of " + def.labelMetric.toLowerCase();
+    document.getElementById("parKpiAvg").textContent = rows.length ? def.fmt(total / rows.length) : "—";
+    document.getElementById("parKpiAvgLabel").textContent = def.labelAvg;
+    document.getElementById("parChartTitle").textContent = def.chartTitle;
+    document.getElementById("parTableTitle").textContent = def.tableTitle;
+    document.getElementById("parThMetric").textContent = def.thMetric;
+    document.getElementById("parThEntity").textContent = def.thEntity;
 
     destroyChart("pareto");
     const ctx = document.getElementById("paretoChart").getContext("2d");
@@ -3716,14 +3807,13 @@ function renderPareto() {
         data: {
             labels,
             datasets: [
-                { type: "bar", label: "Sales", data: sales, backgroundColor: rows.map((_, i) => i < top80Count ? "#3f51b5" : "#bdbdbd"), borderRadius: 2, yAxisID: "y" },
+                { type: "bar", label: def.labelMetric, data: values, backgroundColor: rows.map((_, i) => i < top80Count ? "#3f51b5" : "#bdbdbd"), borderRadius: 2, yAxisID: "y" },
                 { type: "line", label: "Cumulative %", data: cumPct, borderColor: "#fb8c00", backgroundColor: "rgba(251,140,0,0.10)", fill: false, tension: 0.1, pointRadius: 0, borderWidth: 2, yAxisID: "y1" },
             ],
         },
         options: chartBase({
             plugins: { legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } },
-                       tooltip: { callbacks: { label: c => c.dataset.label + ": " + (c.dataset.yAxisID === "y" ? fmtMoneyFull(c.parsed.y) : c.parsed.y.toFixed(1) + "%") } },
-                       annotation: undefined },
+                       tooltip: { callbacks: { label: c => c.dataset.label + ": " + (c.dataset.yAxisID === "y" ? def.fmt(c.parsed.y) : c.parsed.y.toFixed(1) + "%") } } },
             scales: {
                 y:  { position: "left", ticks: { callback: v => fmtMoney(v) } },
                 y1: { position: "right", min: 0, max: 100, grid: { drawOnChartArea: false }, ticks: { callback: v => v + "%" } }
@@ -3736,13 +3826,13 @@ function renderPareto() {
         <tr>
             <td class="num">${r.rank}</td>
             <td>${escapeHtml(r.name)}</td>
-            <td class="num">${fmtMoneyFull(r.sales)}</td>
-            <td class="num">${fmtMoneyFull(r.cum)}</td>
+            <td class="num">${def.fmt(r.value)}</td>
+            <td class="num">${def.fmt(r.cum)}</td>
             <td class="num">${fmtPct(r.cumPct)}</td>
             <td><span class="badge ${r.band === "Top 80%" ? "badge-paid" : "badge-draft"}">${r.band}</span></td>
         </tr>
     `).join("") || '<tr><td colspan="6" class="empty">No data.</td></tr>';
-    document.getElementById("parMeta").textContent = rows.length + " customers · 80% line at customer #" + top80Count;
+    document.getElementById("parMeta").textContent = rows.length + " " + def.labelEntity.toLowerCase() + "s · 80% line at #" + top80Count;
 }
 
 // ============================================================
@@ -3751,32 +3841,57 @@ function renderPareto() {
 function renderRetentionHistory() {
     renderFilterChips();
     const today = new Date();
-    const thresholdMs = 6 * 30 * 24 * 60 * 60 * 1000;
-    const periodStart = (() => {
-        const from = document.getElementById("fromDate").value;
-        return from ? new Date(from) : null;
-    })();
+    const dayMs = 24 * 60 * 60 * 1000;
+    const NEW_DAYS = 90;
+    const RETURNING_GAP_DAYS = 180;
+    const LOST_DAYS = 180;
+
     let rows = [...state.byCustomer.values()].filter(g => g.revenue > 0).map(g => {
-        const firstD = g.firstInvoiceDate ? new Date(g.firstInvoiceDate) : null;
-        const lastD  = g.lastInvoiceDate  ? new Date(g.lastInvoiceDate)  : null;
-        const daysSince = lastD ? Math.floor((today - lastD) / (24*60*60*1000)) : null;
-        let status;
-        if (lastD && (today - lastD) > thresholdMs) status = "lost";
-        else if (firstD && periodStart && firstD >= periodStart) status = "new";
-        else status = "active";
+        // Collect all invoice dates for this customer (chronological)
+        const dates = g.invoices
+            .map(inv => inv.postingDate)
+            .filter(Boolean)
+            .map(d => new Date(d))
+            .sort((a, b) => a - b);
+        const firstD = dates[0] || null;
+        const lastD  = dates[dates.length - 1] || null;
+        const daysSince = lastD ? Math.floor((today - lastD) / dayMs) : null;
+        const daysSinceFirst = firstD ? Math.floor((today - firstD) / dayMs) : null;
+        // Largest gap between consecutive purchases (days)
+        let maxGap = 0, maxGapEnd = null;
+        for (let i = 1; i < dates.length; i++) {
+            const gap = Math.floor((dates[i] - dates[i - 1]) / dayMs);
+            if (gap > maxGap) { maxGap = gap; maxGapEnd = dates[i]; }
+        }
+        // Status decision tree
+        let status, reason;
+        if (lastD && (today - lastD) > LOST_DAYS * dayMs) {
+            status = "lost";
+            reason = "Last purchase " + daysSince + " days ago (> " + LOST_DAYS + ")";
+        } else if (firstD && daysSinceFirst <= NEW_DAYS) {
+            status = "new";
+            reason = "First purchase " + daysSinceFirst + " days ago (≤ " + NEW_DAYS + ")";
+        } else if (maxGap > RETURNING_GAP_DAYS) {
+            status = "returning";
+            reason = "Lapsed " + maxGap + " days then came back on " + fmtDate(maxGapEnd ? maxGapEnd.toISOString() : "");
+        } else {
+            status = "active";
+            reason = g.invoices.length + " invoices · last " + daysSince + " days ago";
+        }
         return {
             customerNumber: g.customerNumber,
             customerName: g.customerName,
             first: g.firstInvoiceDate,
             last: g.lastInvoiceDate,
             daysSince,
+            maxGap: dates.length >= 2 ? maxGap : null,
             invoices: g.invoiceCount,
             sales: g.revenue,
-            status,
+            status, reason,
         };
     });
     const total = rows.length;
-    const counts = { active: 0, new: 0, lost: 0 };
+    const counts = { active: 0, new: 0, returning: 0, lost: 0 };
     for (const r of rows) counts[r.status]++;
 
     const statusFilter = document.getElementById("rhStatusFilter").value;
@@ -3785,27 +3900,31 @@ function renderRetentionHistory() {
     if (search) rows = rows.filter(r => (r.customerName + " " + r.customerNumber).toLowerCase().includes(search));
     rows.sort((a, b) => b.sales - a.sales);
 
-    document.getElementById("rhKpiTotal").textContent  = fmtInt(total);
-    document.getElementById("rhKpiActive").textContent = fmtInt(counts.active);
-    document.getElementById("rhKpiNew").textContent    = fmtInt(counts.new);
-    document.getElementById("rhKpiLost").textContent   = fmtInt(counts.lost);
+    document.getElementById("rhKpiTotal").textContent     = fmtInt(total);
+    document.getElementById("rhKpiActive").textContent    = fmtInt(counts.active);
+    document.getElementById("rhKpiNew").textContent       = fmtInt(counts.new);
+    document.getElementById("rhKpiReturning").textContent = fmtInt(counts.returning);
+    document.getElementById("rhKpiLost").textContent      = fmtInt(counts.lost);
 
     const tbody = document.querySelector("#retentionHistoryTable tbody");
     tbody.innerHTML = rows.map(r => {
-        const badge = r.status === "active" ? '<span class="badge badge-paid">Active</span>'
-                    : r.status === "new"    ? '<span class="badge" style="background:#e3f2fd; color:#1565c0;">New</span>'
+        const badge = r.status === "active"    ? '<span class="badge badge-paid">Active</span>'
+                    : r.status === "new"       ? '<span class="badge" style="background:#e3f2fd; color:#1565c0;">New</span>'
+                    : r.status === "returning" ? '<span class="badge" style="background:#fff3e0; color:#e65100;">Returning</span>'
                     : '<span class="badge" style="background:#ffebee; color:#c62828;">Lost</span>';
-        return `<tr>
+        return `<tr class="clickable" data-cust="${escapeAttr(r.customerNumber)}">
             <td>${escapeHtml(r.customerNumber)}</td>
             <td>${escapeHtml(r.customerName)}</td>
             <td>${fmtDate(r.first)}</td>
             <td>${fmtDate(r.last)}</td>
             <td class="num">${r.daysSince == null ? "—" : fmtInt(r.daysSince)}</td>
+            <td class="num">${r.maxGap == null ? "—" : fmtInt(r.maxGap)}</td>
             <td class="num">${fmtInt(r.invoices)}</td>
             <td class="num">${fmtMoneyFull(r.sales)}</td>
             <td>${badge}</td>
+            <td>${escapeHtml(r.reason)}</td>
         </tr>`;
-    }).join("") || '<tr><td colspan="8" class="empty">No customers match.</td></tr>';
+    }).join("") || '<tr><td colspan="10" class="empty">No customers match.</td></tr>';
     document.getElementById("rhMeta").textContent = rows.length + " of " + total + " customers";
 }
 
@@ -5398,9 +5517,15 @@ function wireEvents() {
         renderDecomposition();
     });
 
-    // Retention history filters
+    // Retention history filters + drill
     document.getElementById("rhStatusFilter").addEventListener("change", () => renderRetentionHistory());
     document.getElementById("rhSearch").addEventListener("input", () => renderRetentionHistory());
+    document.querySelector("#retentionHistoryTable tbody").addEventListener("click", e => {
+        const tr = e.target.closest("tr.clickable"); if (!tr) return;
+        if (tr.dataset.cust) showCustomer(tr.dataset.cust);
+    });
+    // Pareto dimension change
+    document.getElementById("paretoDim").addEventListener("change", () => renderPareto());
 }
 
 // ============================================================
