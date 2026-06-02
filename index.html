@@ -1168,46 +1168,31 @@
 
             <!-- TAB: Sales Pareto (80/20) -->
             <section data-tab-content="pareto" style="display:none;">
-                <div class="hint">The Pareto principle: typically 80% of an outcome comes from 20% of the inputs. Pick what you want to analyse.</div>
+                <div class="hint">The Pareto principle: typically 80% of an outcome comes from 20% of the inputs. Tick one or more analyses below to compare them side-by-side.</div>
                 <div class="toolbar">
-                    <div class="field">
-                        <label for="paretoDim">Analyse</label>
-                        <select id="paretoDim" class="mini-select">
-                            <option value="customers"   selected>Clients &amp; Accounts (sales)</option>
-                            <option value="products">Products (gross profit $)</option>
-                            <option value="salespeople">Sales Team (sales)</option>
-                            <option value="days">Time &amp; Effort (sales per day)</option>
-                        </select>
+                    <div class="field" style="flex:1; min-width: 320px;">
+                        <label>Show Pareto for</label>
+                        <div style="display:flex; gap:18px; flex-wrap:wrap; padding-top:4px;">
+                            <label style="display:inline-flex; align-items:center; gap:6px; cursor:pointer; font-weight:500;">
+                                <input type="checkbox" data-pdim="customers" checked>
+                                Clients &amp; Accounts (sales)
+                            </label>
+                            <label style="display:inline-flex; align-items:center; gap:6px; cursor:pointer; font-weight:500;">
+                                <input type="checkbox" data-pdim="products" checked>
+                                Products (GP $)
+                            </label>
+                            <label style="display:inline-flex; align-items:center; gap:6px; cursor:pointer; font-weight:500;">
+                                <input type="checkbox" data-pdim="salespeople">
+                                Sales Team (sales)
+                            </label>
+                            <label style="display:inline-flex; align-items:center; gap:6px; cursor:pointer; font-weight:500;">
+                                <input type="checkbox" data-pdim="days">
+                                Time &amp; Effort (per day)
+                            </label>
+                        </div>
                     </div>
                 </div>
-                <div class="kpi-row">
-                    <div class="kpi k-cust"><div class="label" id="parKpiTotalLabel">Total</div><div class="value" id="parKpiTotal">—</div></div>
-                    <div class="kpi k-rev"><div class="label" id="parKpiTop80Label">Driving 80%</div><div class="value" id="parKpiTop80">—</div><div class="sub" id="parKpiTop80Sub"></div></div>
-                    <div class="kpi k-gp"><div class="label">Concentration ratio</div><div class="value" id="parKpiRatio">—</div><div class="sub" id="parKpiRatioSub">% reaching 80%</div></div>
-                    <div class="kpi k-avg"><div class="label" id="parKpiAvgLabel">Average</div><div class="value" id="parKpiAvg">—</div></div>
-                </div>
-                <div class="chart-grid">
-                    <div class="card span-12">
-                        <div class="head"><h3 id="parChartTitle">Pareto chart</h3><div class="meta">orange line at 80%</div></div>
-                        <div class="chart-wrap" style="min-height:380px;"><canvas id="paretoChart"></canvas></div>
-                    </div>
-                </div>
-                <div class="panel">
-                    <div class="panel-header"><h2 id="parTableTitle">Pareto detail</h2><div class="meta" id="parMeta"></div></div>
-                    <div class="table-scroll">
-                        <table id="paretoTable">
-                            <thead><tr>
-                                <th class="num">#</th>
-                                <th id="parThEntity">Name</th>
-                                <th class="num" id="parThMetric">Value</th>
-                                <th class="num">Cum. value</th>
-                                <th class="num">Cum. %</th>
-                                <th>Band</th>
-                            </tr></thead>
-                            <tbody></tbody>
-                        </table>
-                    </div>
-                </div>
+                <div id="paretoSections"></div>
             </section>
 
             <!-- TAB: Sales Decomposition -->
@@ -3764,10 +3749,49 @@ const PARETO_DIMS = {
     },
 };
 
-function renderPareto() {
-    renderFilterChips();
-    const dimKey = (document.getElementById("paretoDim") || {}).value || "customers";
-    const def = PARETO_DIMS[dimKey];
+function buildParetoSectionHtml(dim) {
+    const def = PARETO_DIMS[dim];
+    const headerColor = dim === "customers"   ? "#3f51b5"
+                      : dim === "products"    ? "#00897b"
+                      : dim === "salespeople" ? "#00acc1"
+                                              : "#fb8c00";
+    return `
+        <div class="pareto-section" data-dim="${escapeAttr(dim)}" style="margin-top: 24px; padding-top: 4px; border-top: 3px solid ${headerColor};">
+            <h2 style="color:${headerColor}; margin: 12px 0; font-size: 17px;">${escapeHtml(def.tableTitle)}</h2>
+            <div class="kpi-row">
+                <div class="kpi k-cust"><div class="label">${escapeHtml(def.labelTotal)}</div><div class="value" id="parKpiTotal_${dim}">—</div></div>
+                <div class="kpi k-rev"><div class="label">${escapeHtml(def.labelEntity)}s driving 80%</div><div class="value" id="parKpiTop80_${dim}">—</div><div class="sub" id="parKpiTop80Sub_${dim}"></div></div>
+                <div class="kpi k-gp"><div class="label">Concentration ratio</div><div class="value" id="parKpiRatio_${dim}">—</div><div class="sub">% reaching 80%</div></div>
+                <div class="kpi k-avg"><div class="label">${escapeHtml(def.labelAvg)}</div><div class="value" id="parKpiAvg_${dim}">—</div></div>
+            </div>
+            <div class="chart-grid">
+                <div class="card span-12">
+                    <div class="head"><h3>${escapeHtml(def.chartTitle)}</h3><div class="meta">orange line at 80%</div></div>
+                    <div class="chart-wrap" style="min-height:360px;"><canvas id="paretoChart_${dim}"></canvas></div>
+                </div>
+            </div>
+            <div class="panel">
+                <div class="panel-header"><h2>${escapeHtml(def.tableTitle)}</h2><div class="meta" id="parMeta_${dim}"></div></div>
+                <div class="table-scroll">
+                    <table id="paretoTable_${dim}">
+                        <thead><tr>
+                            <th class="num">#</th>
+                            <th>${escapeHtml(def.thEntity)}</th>
+                            <th class="num">${escapeHtml(def.thMetric)}</th>
+                            <th class="num">Cum. ${escapeHtml(def.thMetric)}</th>
+                            <th class="num">Cum. %</th>
+                            <th>Band</th>
+                        </tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+function renderParetoSection(dim) {
+    const def = PARETO_DIMS[dim];
     const rows = def.get();
     const total = rows.reduce((s, r) => s + r.value, 0);
     let cum = 0, top80Count = 0, top80Hit = false;
@@ -3787,23 +3811,16 @@ function renderPareto() {
     });
     if (!top80Hit) top80Count = rows.length;
 
-    document.getElementById("parKpiTotal").textContent = fmtInt(rows.length);
-    document.getElementById("parKpiTotalLabel").textContent = def.labelTotal;
-    document.getElementById("parKpiTop80").textContent = fmtInt(top80Count);
-    document.getElementById("parKpiTop80Sub").textContent = rows.length ? fmtPct(top80Count / rows.length) + " of " + def.labelEntity.toLowerCase() + "s" : "";
-    document.getElementById("parKpiTop80Label").textContent = def.labelEntity + "s driving 80%";
-    document.getElementById("parKpiRatio").textContent = rows.length ? fmtPct(top80Count / rows.length) : "—";
-    document.getElementById("parKpiRatioSub").textContent = "% of " + def.labelEntity.toLowerCase() + "s = 80% of " + def.labelMetric.toLowerCase();
-    document.getElementById("parKpiAvg").textContent = rows.length ? def.fmt(total / rows.length) : "—";
-    document.getElementById("parKpiAvgLabel").textContent = def.labelAvg;
-    document.getElementById("parChartTitle").textContent = def.chartTitle;
-    document.getElementById("parTableTitle").textContent = def.tableTitle;
-    document.getElementById("parThMetric").textContent = def.thMetric;
-    document.getElementById("parThEntity").textContent = def.thEntity;
+    document.getElementById("parKpiTotal_" + dim).textContent = fmtInt(rows.length);
+    document.getElementById("parKpiTop80_" + dim).textContent = fmtInt(top80Count);
+    document.getElementById("parKpiTop80Sub_" + dim).textContent = rows.length ? fmtPct(top80Count / rows.length) + " of " + def.labelEntity.toLowerCase() + "s" : "";
+    document.getElementById("parKpiRatio_" + dim).textContent = rows.length ? fmtPct(top80Count / rows.length) : "—";
+    document.getElementById("parKpiAvg_" + dim).textContent = rows.length ? def.fmt(total / rows.length) : "—";
 
-    destroyChart("pareto");
-    const ctx = document.getElementById("paretoChart").getContext("2d");
-    state.charts.pareto = new Chart(ctx, {
+    const chartKey = "pareto_" + dim;
+    destroyChart(chartKey);
+    const ctx = document.getElementById("paretoChart_" + dim).getContext("2d");
+    state.charts[chartKey] = new Chart(ctx, {
         data: {
             labels,
             datasets: [
@@ -3821,7 +3838,7 @@ function renderPareto() {
         })
     });
 
-    const tbody = document.querySelector("#paretoTable tbody");
+    const tbody = document.querySelector("#paretoTable_" + dim + " tbody");
     tbody.innerHTML = tblRows.map(r => `
         <tr>
             <td class="num">${r.rank}</td>
@@ -3832,7 +3849,21 @@ function renderPareto() {
             <td><span class="badge ${r.band === "Top 80%" ? "badge-paid" : "badge-draft"}">${r.band}</span></td>
         </tr>
     `).join("") || '<tr><td colspan="6" class="empty">No data.</td></tr>';
-    document.getElementById("parMeta").textContent = rows.length + " " + def.labelEntity.toLowerCase() + "s · 80% line at #" + top80Count;
+    document.getElementById("parMeta_" + dim).textContent = rows.length + " " + def.labelEntity.toLowerCase() + "s · 80% line at #" + top80Count;
+}
+
+function renderPareto() {
+    renderFilterChips();
+    const dims = [...document.querySelectorAll("input[data-pdim]:checked")].map(el => el.dataset.pdim);
+    const container = document.getElementById("paretoSections");
+    if (!dims.length) {
+        container.innerHTML = '<div class="placeholder"><h2>No analyses selected</h2><p>Tick at least one box above to see Pareto charts.</p></div>';
+        return;
+    }
+    container.innerHTML = dims.map(buildParetoSectionHtml).join("");
+    dims.forEach(renderParetoSection);
+    // The newly-created panels need Excel buttons attached
+    attachExportButtons();
 }
 
 // ============================================================
@@ -5524,8 +5555,10 @@ function wireEvents() {
         const tr = e.target.closest("tr.clickable"); if (!tr) return;
         if (tr.dataset.cust) showCustomer(tr.dataset.cust);
     });
-    // Pareto dimension change
-    document.getElementById("paretoDim").addEventListener("change", () => renderPareto());
+    // Pareto dimension checkboxes — re-render when any toggled
+    document.querySelectorAll("input[data-pdim]").forEach(cb => {
+        cb.addEventListener("change", () => renderPareto());
+    });
 }
 
 // ============================================================
