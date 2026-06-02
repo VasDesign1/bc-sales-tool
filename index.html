@@ -979,20 +979,20 @@
 
                 <div class="panel">
                     <div class="panel-header">
-                        <h2>All quotes · click a row to drill into the customer</h2>
-                        <input type="text" class="search" id="qSearch" placeholder="Search customer / quote no / salesperson…">
-                        <div class="meta" id="qMeta"></div>
+                        <h2>Sales Quotes by Customer · click ▸ to expand to quotes &amp; items</h2>
+                        <div class="meta" id="qTreeMeta"></div>
                     </div>
                     <div class="table-scroll">
-                        <table id="quotesTable">
+                        <table id="quoteCustomerTree">
                             <thead><tr>
-                                <th data-qsort="customer">Customer</th>
-                                <th data-qsort="salesperson">Salesperson</th>
-                                <th data-qsort="number">Quote No</th>
-                                <th data-qsort="date">Document Date</th>
-                                <th data-qsort="status">Status</th>
-                                <th class="num" data-qsort="qty">Qty</th>
-                                <th class="num" data-qsort="amount">Amount (excl. tax)</th>
+                                <th data-qtsort="label">Customer / Quote / Item</th>
+                                <th class="num" data-qtsort="quoteCount">Quotes</th>
+                                <th class="num" data-qtsort="sales">Sales (LCY)</th>
+                                <th class="num" data-qtsort="qty">Qty</th>
+                                <th>Status</th>
+                                <th data-qtsort="salesperson">Salesperson</th>
+                                <th data-qtsort="user">Assigned User</th>
+                                <th data-qtsort="campaign">Campaign</th>
                             </tr></thead>
                             <tbody></tbody>
                         </table>
@@ -1577,6 +1577,7 @@ const BC_CONFIG = {
 const BC_TENANT_DOMAIN = "VicAirPtyLtd.onmicrosoft.com";
 const BC_API_BASE = "https://api.businesscentral.dynamics.com/v2.0/" + BC_TENANT_DOMAIN + "/" + BC_CONFIG.environment;
 const BC_API_URL  = BC_API_BASE + "/api/v2.0";
+const BC_ODATA_URL = BC_API_BASE + "/ODataV4";
 const BC_SCOPES   = ["https://api.businesscentral.dynamics.com/.default"];
 
 let bcMsalInstance = null, bcAccessToken = null, bcCompanyId = null;
@@ -1732,6 +1733,32 @@ async function fetchSalesQuotes(fromISO, toISO) {
     const url = BC_API_URL + "/companies(" + compId + ")/salesQuotes?$filter=" + encodeURIComponent(filter) + "&$expand=salesQuoteLines&$top=2000";
     try { return await bcFetchAll(url, "Sales quotes"); }
     catch (e) { console.warn("Quotes fetch failed:", e.message); return []; }
+}
+
+// BC v2.0 REST API doesn't expose Campaign No or Assigned User ID on
+// salesQuotes. OData v4 does. Fetch a lightweight projection that we can
+// merge into the quote records by quote No.
+async function fetchSalesQuoteExtras(fromISO, toISO) {
+    const compName = encodeURIComponent(BC_CONFIG.companyName);
+    const tries = [
+        // Standard OData v4 publish names
+        { url: BC_ODATA_URL + "/Company('" + compName + "')/SalesQuotes?$filter=" + encodeURIComponent("Document_Date ge " + fromISO + " and Document_Date le " + toISO) + "&$select=No,Campaign_No,Assigned_User_ID&$top=10000", label: "Quote extras (OData v4)" },
+        // Some tenants spell it with a trailing underscore (Campaign No.)
+        { url: BC_ODATA_URL + "/Company('" + compName + "')/SalesQuotes?$filter=" + encodeURIComponent("Document_Date ge " + fromISO + " and Document_Date le " + toISO) + "&$select=No,Campaign_No_,Assigned_User_ID&$top=10000", label: "Quote extras (alt naming)" },
+    ];
+    for (const t of tries) {
+        try {
+            const rows = await bcFetchAll(t.url, t.label);
+            if (rows.length) {
+                console.log("[Quote extras] " + rows.length + " rows from " + t.label);
+                console.log("[Quote extras] sample row keys:", Object.keys(rows[0]).join(", "));
+                return rows;
+            }
+        } catch (e) {
+            console.warn("[Quote extras] " + t.label + " failed:", e.message);
+        }
+    }
+    return [];
 }
 
 // ============================================================
@@ -3187,10 +3214,18 @@ function renderEOM() {
 // ============================================================
 // ----- Quote helpers (optional BC fields, status semantics, drill modal) -----
 function getQuoteCampaign(q) {
-    return q.campaignNumber || q.campaignCode || q.campaignNo || q.campaign || null;
+    const direct = q.campaignNumber || q.campaignCode || q.campaignNo || q.campaign;
+    if (direct) return direct;
+    const ex = state.quoteExtras && state.quoteExtras.get(q.number);
+    if (ex) return ex.Campaign_No || ex.Campaign_No_ || ex.campaignNo || null;
+    return null;
 }
 function getQuoteAssignedUser(q) {
-    return q.assignedUserID || q.assignedUserId || q.assignedUserCode || q.assignedUser || null;
+    const direct = q.assignedUserID || q.assignedUserId || q.assignedUserCode || q.assignedUser;
+    if (direct) return direct;
+    const ex = state.quoteExtras && state.quoteExtras.get(q.number);
+    if (ex) return ex.Assigned_User_ID || ex.assignedUserID || null;
+    return null;
 }
 function isQuoteWon(q)  { return (q.status || "") === "Accepted"; }
 function isQuoteLost(q) { return (q.status || "") === "Lost"; }
@@ -3394,9 +3429,11 @@ function renderQuotes() {
                            return r.name + ": " + fmtInt(r.count) + " quotes · " + fmtMoneyFull(r.amount);
                        } } } },
             onClick: (_, els) => {
+                // Toggle status as a global filter so the whole tab re-aggregates
                 if (!els.length) return;
                 const r = statusRows[els[0].index];
-                openQuoteList(q => (q.status || "(unknown)") === r.name, "Quotes with status: " + r.name);
+                state.filters.status = (state.filters.status === r.name) ? "" : r.name;
+                rebuildFiltered(); renderCurrentTab();
             }
         })
     });
@@ -3451,7 +3488,10 @@ function renderQuotes() {
             onClick: (_, els) => {
                 if (!els.length) return;
                 const c = custTop[els[0].index];
-                openQuoteList(q => (q.customerNumber || "") === c.customerNumber, "Quotes for " + c.customer);
+                state.filters.customer = (state.filters.customer === c.customerNumber) ? "" : c.customerNumber;
+                state.filters.customerName = state.filters.customer ? c.customer : "";
+                document.getElementById("customerFilter").value = state.filters.customer;
+                rebuildFiltered(); renderCurrentTab();
             }
         })
     });
@@ -3472,8 +3512,10 @@ function renderQuotes() {
             onClick: (_, els) => {
                 if (!els.length) return;
                 const it = itemTop[els[0].index];
-                openQuoteList(q => (q.salesQuoteLines || []).some(ln => (ln.lineObjectNumber || ln.itemId || "") === it.number),
-                    "Quotes containing " + (it.number + (it.description ? " — " + it.description : "")));
+                state.filters.item = (state.filters.item === it.number) ? "" : it.number;
+                state.filters.itemDesc = state.filters.item ? (it.description || "") : "";
+                document.getElementById("itemFilterBox").value = state.filters.item;
+                rebuildFiltered(); renderCurrentTab();
             }
         })
     });
@@ -3493,7 +3535,9 @@ function renderQuotes() {
             onClick: (_, els) => {
                 if (!els.length) return;
                 const r = spRows[els[0].index];
-                openQuoteList(q => (q.salesperson || "(unassigned)") === r.name, "Quotes by salesperson " + r.name);
+                state.filters.salesperson = (state.filters.salesperson === r.name) ? "" : r.name;
+                document.getElementById("salespersonFilter").value = state.filters.salesperson;
+                rebuildFiltered(); renderCurrentTab();
             }
         })
     });
@@ -3576,38 +3620,99 @@ function renderQuotes() {
         });
     }
 
-    // ---------- Detail table ----------
-    let tblRows = quotes.map(quoteToListRow);
-    if (state.quoteSearch) {
-        const s = state.quoteSearch.toLowerCase();
-        tblRows = tblRows.filter(r => (r.customer + " " + r.number + " " + r.salesperson + " " + r.status).toLowerCase().includes(s));
+    // ---------- Customer drill tree (replaces the flat detail table) ----------
+    renderQuoteCustomerTree(quotes);
+}
+
+function buildQuoteCustomerTreeData(quotes) {
+    const custMap = new Map();
+    for (const q of quotes) {
+        const custKey = q.customerNumber || q.customerId || "(unknown)";
+        let custNode = custMap.get(custKey);
+        if (!custNode) {
+            custNode = {
+                key: "qct-cust-" + custKey,
+                label: q.customerName || custKey,
+                sales: 0, qty: 0, quoteCount: 0,
+                status: "", salesperson: "", user: "", campaign: "",
+                children: [],
+                _customerNumber: custKey,
+            };
+            custMap.set(custKey, custNode);
+        }
+        const qAmt = quoteAmount(q);
+        const qQ = quoteQty(q);
+        custNode.sales += qAmt;
+        custNode.qty   += qQ;
+        custNode.quoteCount += 1;
+        const quoteNode = {
+            key: "qct-quote-" + q.id,
+            label: q.number || "(no number)",
+            sales: qAmt, qty: qQ, quoteCount: 1,
+            status: q.status || "",
+            salesperson: q.salesperson || "",
+            user: getQuoteAssignedUser(q) || "",
+            campaign: getQuoteCampaign(q) || "",
+            children: [],
+            _quoteId: q.id,
+        };
+        custNode.children.push(quoteNode);
+        for (const ln of (q.salesQuoteLines || [])) {
+            if (!lineMatchesFilters(ln)) continue;
+            const itemNo = ln.lineObjectNumber || ln.itemId || "";
+            const lineLabel = (itemNo || "(non-item)") + (ln.description ? " · " + ln.description : "");
+            const lineSales = lineNetAmount(ln);
+            const lineQ = num(ln.quantity);
+            quoteNode.children.push({
+                key: "qct-line-" + q.id + "-" + (ln.id || ln.sequence || itemNo),
+                label: lineLabel,
+                sales: lineSales, qty: lineQ, quoteCount: 0,
+                status: "", salesperson: "", user: "", campaign: "",
+                children: null,
+            });
+        }
     }
-    const sk = state.quoteSort.key, dirMul = state.quoteSort.dir === "asc" ? 1 : -1;
-    tblRows.sort((a, b) => {
-        let av = a[sk], bv = b[sk];
-        if (av == null) av = (typeof bv === "number") ? 0 : "";
-        if (bv == null) bv = (typeof av === "number") ? 0 : "";
-        if (typeof av === "number" && typeof bv === "number") return (av - bv) * dirMul;
-        return String(av).localeCompare(String(bv)) * dirMul;
-    });
-    const tbody = document.querySelector("#quotesTable tbody");
-    tbody.innerHTML = tblRows.slice(0, 2000).map(r => `
-        <tr class="clickable" data-cust="${escapeAttr(r.customerNumber)}">
-            <td>${escapeHtml(r.customer)}</td>
-            <td>${escapeHtml(r.salesperson)}</td>
-            <td>${escapeHtml(r.number)}</td>
-            <td>${fmtDate(r.date)}</td>
-            <td><span class="badge ${quoteStatusBadgeClass(r.status)}">${escapeHtml(r.status)}</span></td>
-            <td class="num">${fmtQty(r.qty)}</td>
-            <td class="num">${fmtMoneyFull(r.amount)}</td>
-        </tr>
-    `).join("") || '<tr><td colspan="7" class="empty">No quotes loaded for this period.</td></tr>';
-    document.getElementById("qMeta").textContent = tblRows.length + " of " + quotes.length + " quote" + (quotes.length === 1 ? "" : "s");
-    // Sort indicators
-    document.querySelectorAll("#quotesTable th[data-qsort]").forEach(th => {
+    return [...custMap.values()];
+}
+
+function renderQuoteCustomerTree(quotes) {
+    if (!quotes) quotes = filteredQuotes();
+    state.expandedQuoteMatrix = state.expandedQuoteMatrix || new Set();
+    state.quoteTreeSort = state.quoteTreeSort || { key: "sales", dir: "desc" };
+    const roots = buildQuoteCustomerTreeData(quotes);
+    _sortNodesRecursive(roots, state.quoteTreeSort.key, state.quoteTreeSort.dir);
+    const acc = [];
+    function emit(node, depth) {
+        const expandable = node.children && node.children.length > 0;
+        const isOpen = state.expandedQuoteMatrix.has(node.key);
+        const arrow = expandable ? (isOpen ? "▾" : "▸") : "";
+        const pad = "&nbsp;".repeat(depth * 4);
+        const bg = depth === 0 ? "background:#eef0fb; font-weight:700;"
+                 : depth === 1 ? "background:#f7f8fd;"
+                 : "";
+        const statusBadge = node.status ? `<span class="badge ${quoteStatusBadgeClass(node.status)}">${escapeHtml(node.status)}</span>` : "";
+        acc.push(`<tr data-key="${escapeAttr(node.key)}" data-expandable="${expandable ? 1 : 0}" style="${bg}cursor:${expandable ? "pointer" : "default"};">
+            <td>${pad}<span style="display:inline-block; width:14px; color:#3f51b5;">${arrow}</span> ${escapeHtml(node.label)}</td>
+            <td class="num">${node.quoteCount ? fmtInt(node.quoteCount) : ""}</td>
+            <td class="num">${fmtMoneyFull(node.sales)}</td>
+            <td class="num">${node.qty ? fmtQty(node.qty) : ""}</td>
+            <td>${statusBadge}</td>
+            <td>${escapeHtml(node.salesperson || "")}</td>
+            <td>${escapeHtml(node.user || "")}</td>
+            <td>${escapeHtml(node.campaign || "")}</td>
+        </tr>`);
+        if (expandable && isOpen) for (const c of node.children) emit(c, depth + 1);
+    }
+    for (const n of roots) emit(n, 0);
+    const tbody = document.querySelector("#quoteCustomerTree tbody");
+    tbody.innerHTML = acc.join("") || '<tr><td colspan="8" class="empty">No quotes loaded for this period.</td></tr>';
+    document.getElementById("qTreeMeta").textContent =
+        roots.length + " customer" + (roots.length === 1 ? "" : "s") + " · " + quotes.length + " quote" + (quotes.length === 1 ? "" : "s");
+    // Sort arrows
+    document.querySelectorAll("#quoteCustomerTree th[data-qtsort]").forEach(th => {
         th.classList.remove("sorted-asc", "sorted-desc");
-        if (th.dataset.qsort === state.quoteSort.key) {
-            th.classList.add(state.quoteSort.dir === "asc" ? "sorted-asc" : "sorted-desc");
+        if (th.dataset.qtsort === state.quoteTreeSort.key) {
+            th.classList.add(state.quoteTreeSort.dir === "asc" ? "sorted-asc" : "sorted-desc");
         }
     });
 }
@@ -5669,7 +5774,7 @@ async function handleLoad() {
     const btn = document.getElementById("loadBtn");
     btn.disabled = true; btn.textContent = "Loading…";
     try {
-        const [locs, items, customers, invoices, iles, creditMemos, shipments, returnReceipts, quotes] = await Promise.all([
+        const [locs, items, customers, invoices, iles, creditMemos, shipments, returnReceipts, quotes, quoteExtras] = await Promise.all([
             fetchLocations(),
             fetchItems(),
             fetchCustomers(),
@@ -5679,11 +5784,18 @@ async function handleLoad() {
             fetchSalesShipments(from, to),
             fetchSalesReturnReceipts(from, to),
             fetchSalesQuotes(from, to),
+            fetchSalesQuoteExtras(from, to),
         ]);
         state.creditMemos = creditMemos;
         state.shipments = shipments;
         state.returnReceipts = returnReceipts;
         state.quotes = quotes;
+        // Build extras map keyed by quote No so we can look up Campaign / Assigned User
+        state.quoteExtras = new Map();
+        for (const ex of (quoteExtras || [])) {
+            const no = ex.No || ex.no || ex.number;
+            if (no) state.quoteExtras.set(no, ex);
+        }
         state.locations = new Map(locs.map(l => [l.id, l.code || l.displayName || "(unnamed)"]));
         state.items = items;
         state.itemCategory = new Map(items.map(it => [it.number, it.itemCategoryCode || ""]));
@@ -6076,19 +6188,24 @@ function wireEvents() {
             }
         });
     });
-    // Quote sort + search + row click
-    document.querySelectorAll("#quotesTable th[data-qsort]").forEach(th => {
-        th.addEventListener("click", () => {
-            const k = th.dataset.qsort;
-            if (state.quoteSort.key === k) state.quoteSort.dir = state.quoteSort.dir === "asc" ? "desc" : "asc";
-            else { state.quoteSort.key = k; state.quoteSort.dir = (k === "customer" || k === "salesperson" || k === "number" || k === "status" || k === "date") ? "asc" : "desc"; }
-            renderQuotes();
-        });
+    // Quote Customer drill tree — expand/collapse + column sort
+    document.querySelector("#quoteCustomerTree tbody").addEventListener("click", e => {
+        const tr = e.target.closest("tr[data-key]"); if (!tr) return;
+        if (tr.dataset.expandable !== "1") return;
+        const k = tr.dataset.key;
+        if (!state.expandedQuoteMatrix) state.expandedQuoteMatrix = new Set();
+        if (state.expandedQuoteMatrix.has(k)) state.expandedQuoteMatrix.delete(k);
+        else state.expandedQuoteMatrix.add(k);
+        renderQuoteCustomerTree();
     });
-    document.getElementById("qSearch").addEventListener("input", e => { state.quoteSearch = e.target.value; renderQuotes(); });
-    document.querySelector("#quotesTable tbody").addEventListener("click", e => {
-        const tr = e.target.closest("tr.clickable"); if (!tr) return;
-        if (tr.dataset.cust) showCustomer(tr.dataset.cust);
+    document.querySelectorAll("#quoteCustomerTree th[data-qtsort]").forEach(th => {
+        th.addEventListener("click", () => {
+            const k = th.dataset.qtsort;
+            state.quoteTreeSort = state.quoteTreeSort || { key: "sales", dir: "desc" };
+            if (state.quoteTreeSort.key === k) state.quoteTreeSort.dir = state.quoteTreeSort.dir === "asc" ? "desc" : "asc";
+            else { state.quoteTreeSort.key = k; state.quoteTreeSort.dir = (k === "label" || k === "salesperson" || k === "user" || k === "campaign") ? "asc" : "desc"; }
+            renderQuoteCustomerTree();
+        });
     });
     // Pareto dimension checkboxes — re-render when any toggled
     document.querySelectorAll("input[data-pdim]").forEach(cb => {
