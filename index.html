@@ -6,7 +6,6 @@
     <title>Sales Analytics (Wiise Connected)</title>
     <script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -284,15 +283,12 @@
         }
         .row-action-btn:hover { background: #dde0f4; }
         .card .head .more-btn,
-        .panel-header .more-btn,
-        .panel-header .export-btn {
+        .panel-header .more-btn {
             background: white; color: #3f51b5; border: 1px solid #d6d8eb;
             padding: 4px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600;
         }
         .card .head .more-btn:hover,
-        .panel-header .more-btn:hover,
-        .panel-header .export-btn:hover { background: #eef0fb; }
-        .panel-header .export-btn { white-space: nowrap; }
+        .panel-header .more-btn:hover { background: #eef0fb; }
 
         /* ---------- PROGRESS ---------- */
         .progress {
@@ -1099,26 +1095,35 @@
 
             <!-- TAB: Customer Retention -->
             <section data-tab-content="retention" style="display:none;">
+                <div class="hint">
+                    <strong>Definitions for this view</strong> (limited to invoices in the loaded date range — for true "first-time-ever" data, load a wider range).
+                    <strong>New-in-month</strong>: a customer whose first appearance in the loaded data falls in that month.
+                    <strong>Returning-in-month</strong>: a customer active that month who already appeared in an earlier month within the loaded range.
+                    <strong>One-time customers</strong>: appeared in only one month across the loaded period.
+                    <strong>Repeat customers</strong>: appeared in two or more months.
+                    <strong>Lost customers</strong>: last purchase was more than 6 months before today.
+                    <em>Click any month (in the chart or table) to see the customer list for that month.</em>
+                </div>
                 <div class="kpi-row">
-                    <div class="kpi k-cust"><div class="label">Customers (in period)</div><div class="value" id="retKpiCust">—</div></div>
-                    <div class="kpi k-rev"><div class="label">New customers</div><div class="value" id="retKpiNew">—</div></div>
-                    <div class="kpi k-gp"><div class="label">Returning customers</div><div class="value" id="retKpiReturning">—</div></div>
-                    <div class="kpi k-avg"><div class="label">Lost customers</div><div class="value" id="retKpiLost">—</div></div>
+                    <div class="kpi k-cust"><div class="label">Total unique customers</div><div class="value" id="retKpiCust">—</div></div>
+                    <div class="kpi k-rev"><div class="label">One-time customers</div><div class="value" id="retKpiOneTime">—</div><div class="sub">one month only</div></div>
+                    <div class="kpi k-gp"><div class="label">Repeat customers</div><div class="value" id="retKpiRepeat">—</div><div class="sub">2+ months</div></div>
+                    <div class="kpi k-avg"><div class="label">Lost</div><div class="value" id="retKpiLost">—</div><div class="sub">no purchase &gt;6mo</div></div>
                 </div>
                 <div class="chart-grid">
                     <div class="card span-12">
-                        <div class="head"><h3>New vs Returning Customers by Month</h3><div class="meta">stacked bar</div></div>
+                        <div class="head"><h3>First-appearance vs Returning Customers by Month</h3><div class="meta">stacked bar · click to drill</div></div>
                         <div class="chart-wrap" style="min-height:320px;"><canvas id="retChart"></canvas></div>
                     </div>
                 </div>
                 <div class="panel">
-                    <div class="panel-header"><h2>Monthly Retention Detail</h2><div class="meta" id="retMeta"></div></div>
+                    <div class="panel-header"><h2>Monthly Retention Detail · click a row to drill</h2><div class="meta" id="retMeta"></div></div>
                     <div class="table-scroll">
                         <table id="retentionTable">
                             <thead><tr>
                                 <th>Month</th>
                                 <th class="num">Total Customers</th>
-                                <th class="num">New</th>
+                                <th class="num">First-in-period</th>
                                 <th class="num">Returning</th>
                             </tr></thead>
                             <tbody></tbody>
@@ -1560,38 +1565,6 @@ function updateBCProgress(label, detail) {
 function hideBCProgress() {
     const wrap = document.getElementById("bcProgress");
     if (wrap) wrap.style.display = "none";
-}
-function exportTable(table, panel) {
-    if (typeof XLSX === "undefined") {
-        alert("Export library still loading — try again in a few seconds.");
-        return;
-    }
-    const titleEl = panel ? panel.querySelector("h2") : null;
-    const title = titleEl ? titleEl.textContent.trim() : "data";
-    const safeTitle = title.replace(/[^a-zA-Z0-9 _-]/g, "").slice(0, 60).trim() || "data";
-    const dateStr = new Date().toISOString().slice(0, 10);
-    // Clone the table so we can strip any action buttons before exporting
-    const clone = table.cloneNode(true);
-    clone.querySelectorAll("button, .row-action-btn").forEach(b => b.remove());
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.table_to_sheet(clone);
-    XLSX.utils.book_append_sheet(wb, ws, "Data");
-    XLSX.writeFile(wb, safeTitle + " - " + dateStr + ".xlsx");
-}
-function attachExportButtons() {
-    document.querySelectorAll(".panel").forEach(panel => {
-        const header = panel.querySelector(".panel-header");
-        const table = panel.querySelector("table");
-        if (!header || !table) return;
-        if (header.querySelector(".export-btn")) return;
-        const btn = document.createElement("button");
-        btn.className = "more-btn export-btn";
-        btn.title = "Export this table to Excel (.xlsx)";
-        btn.textContent = "⤓ Excel";
-        btn.style.marginLeft = "8px";
-        btn.addEventListener("click", () => exportTable(table, panel));
-        header.appendChild(btn);
-    });
 }
 function updateCostQualityBadge() {
     const el = document.getElementById("costQualityBadge"); if (!el) return;
@@ -3520,9 +3493,10 @@ function renderBranchTargets() {
 // ============================================================
 function renderRetention() {
     renderFilterChips();
-    // Build first/last purchase month per customer
-    const firstMonth = new Map(), lastMonth = new Map(); // custKey -> monthKey
-    const monthCustomers = new Map(); // monthKey -> Set<custKey>
+    // Build first/last purchase month per customer + which months each customer appeared in
+    const firstMonth = new Map(), lastMonth = new Map();
+    const customerMonths = new Map();   // custKey -> Set<monthKey>
+    const monthCustomers = new Map();   // monthKey -> Set<custKey>
     for (const inv of state.filtered) {
         const k = inv.customerNumber || "(unknown)";
         const mk = monthKey(inv.postingDate);
@@ -3530,10 +3504,11 @@ function renderRetention() {
         if (!lastMonth.has(k) || mk > lastMonth.get(k)) lastMonth.set(k, mk);
         if (!monthCustomers.has(mk)) monthCustomers.set(mk, new Set());
         monthCustomers.get(mk).add(k);
+        if (!customerMonths.has(k)) customerMonths.set(k, new Set());
+        customerMonths.get(k).add(mk);
     }
     const months = [...monthCustomers.keys()].sort();
-    // Per-month metrics
-    const rows = months.map((mk, i) => {
+    const rows = months.map(mk => {
         const custs = monthCustomers.get(mk);
         let newC = 0, returningC = 0;
         for (const c of custs) {
@@ -3542,24 +3517,26 @@ function renderRetention() {
         return { monthKey: mk, total: custs.size, newC, returningC };
     });
 
-    // Lost / Recovered (relative to today): a customer is "lost" if last purchase >= 6 months ago
     const today = new Date();
     const thresholdMs = 6 * 30 * 24 * 60 * 60 * 1000;
-    let lost = 0, active = 0;
+    let lost = 0;
     for (const [c, mk] of lastMonth) {
         const lastDate = new Date(mk + "-01");
-        if ((today - lastDate) > thresholdMs) lost++; else active++;
+        if ((today - lastDate) > thresholdMs) lost++;
     }
-    const totalCustomers = lastMonth.size;
-    const totalNew = rows.reduce((s, r) => s + r.newC, 0);
-    const totalReturning = rows.reduce((s, r) => s + r.returningC, 0);
+    // Repeat = customer appeared in 2+ months; One-time = appeared in exactly 1 month
+    let oneTime = 0, repeat = 0;
+    for (const [, monthsSet] of customerMonths) {
+        if (monthsSet.size >= 2) repeat++; else oneTime++;
+    }
+    const totalCustomers = customerMonths.size;
 
-    document.getElementById("retKpiCust").textContent     = fmtInt(totalCustomers);
-    document.getElementById("retKpiNew").textContent      = fmtInt(totalNew);
-    document.getElementById("retKpiReturning").textContent = fmtInt(totalReturning);
-    document.getElementById("retKpiLost").textContent     = fmtInt(lost);
+    document.getElementById("retKpiCust").textContent    = fmtInt(totalCustomers);
+    document.getElementById("retKpiOneTime").textContent = fmtInt(oneTime);
+    document.getElementById("retKpiRepeat").textContent  = fmtInt(repeat);
+    document.getElementById("retKpiLost").textContent    = fmtInt(lost);
 
-    // Stacked chart: new vs returning per month
+    // Stacked chart: new (first-in-period) vs returning per month, clickable
     destroyChart("ret");
     const ctx = document.getElementById("retChart").getContext("2d");
     state.charts.ret = new Chart(ctx, {
@@ -3567,27 +3544,53 @@ function renderRetention() {
         data: {
             labels: rows.map(r => monthLabelFromKey(r.monthKey)),
             datasets: [
-                { label: "New",       data: rows.map(r => r.newC),       backgroundColor: "#3f51b5", stack: "c" },
-                { label: "Returning", data: rows.map(r => r.returningC), backgroundColor: "#00897b", stack: "c" },
+                { label: "First-in-period", data: rows.map(r => r.newC),       backgroundColor: "#3f51b5", stack: "c" },
+                { label: "Returning",       data: rows.map(r => r.returningC), backgroundColor: "#00897b", stack: "c" },
             ]
         },
         options: chartBase({
             plugins: { legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } } },
-            scales: { x: { stacked: true }, y: { stacked: true, ticks: { precision: 0 } } }
+            scales: { x: { stacked: true }, y: { stacked: true, ticks: { precision: 0 } } },
+            onClick: (_, els) => {
+                if (!els.length) return;
+                const r = rows[els[0].index];
+                openCustomersInMonth(r.monthKey, monthLabelFromKey(r.monthKey));
+            }
         })
     });
 
-    // Table
+    // Table — clickable
     const tbody = document.querySelector("#retentionTable tbody");
     tbody.innerHTML = rows.slice().reverse().map(r => `
-        <tr>
+        <tr class="clickable" data-mk="${escapeAttr(r.monthKey)}">
             <td>${monthLabelFromKey(r.monthKey)}</td>
             <td class="num">${fmtInt(r.total)}</td>
             <td class="num">${fmtInt(r.newC)}</td>
             <td class="num">${fmtInt(r.returningC)}</td>
         </tr>
     `).join("") || '<tr><td colspan="4" class="empty">No data.</td></tr>';
-    document.getElementById("retMeta").textContent = "Lost = last purchase > 6 months ago from today (" + fmtDate(today.toISOString().slice(0, 10)) + ")";
+    document.getElementById("retMeta").textContent = months.length + " months · click a month to see its customer list";
+}
+
+// Open the topN modal seeded with the customers active in a given month
+function openCustomersInMonth(mk, label) {
+    const custSet = new Set();
+    for (const inv of state.filtered) {
+        if (monthKey(inv.postingDate) === mk) custSet.add(inv.customerNumber);
+    }
+    TOPN_DEFS.customers_in_month = {
+        title: "Customers active in " + label,
+        get: () => [...state.byCustomer.values()]
+            .filter(c => custSet.has(c.customerNumber))
+            .map(c => ({
+                key: c.customerNumber, name: c.customerName, num: c.customerNumber,
+                sales: c.revenue, gp: c.gp, gpPct: c.gpPct, qty: c.qty, invoiceCount: c.invoiceCount,
+            })),
+        columns: ["Customer No", "Name", "Invoices", "Sales", "GP $", "GP %", "Qty", ""],
+        sortKey: "sales",
+        action: { label: "Drill in", run: r => { closeTopNModal(); showCustomer(r.key); } },
+    };
+    openTopNModal("customers_in_month");
 }
 
 // ============================================================
@@ -3862,8 +3865,6 @@ function renderPareto() {
     }
     container.innerHTML = dims.map(buildParetoSectionHtml).join("");
     dims.forEach(renderParetoSection);
-    // The newly-created panels need Excel buttons attached
-    attachExportButtons();
 }
 
 // ============================================================
@@ -5525,8 +5526,6 @@ function wireEvents() {
         if (e.key === "Escape" && document.getElementById("topNModal").style.display === "flex") closeTopNModal();
     });
 
-    // Excel export — auto-attach a button to every panel containing a table
-    attachExportButtons();
 
     // Decomposition tree expand/collapse + Build tree button
     document.querySelector("#decompTable tbody").addEventListener("click", e => {
@@ -5554,6 +5553,11 @@ function wireEvents() {
     document.querySelector("#retentionHistoryTable tbody").addEventListener("click", e => {
         const tr = e.target.closest("tr.clickable"); if (!tr) return;
         if (tr.dataset.cust) showCustomer(tr.dataset.cust);
+    });
+    // Customer Retention: month row click → open per-month customer list
+    document.querySelector("#retentionTable tbody").addEventListener("click", e => {
+        const tr = e.target.closest("tr.clickable"); if (!tr) return;
+        if (tr.dataset.mk) openCustomersInMonth(tr.dataset.mk, monthLabelFromKey(tr.dataset.mk));
     });
     // Pareto dimension checkboxes — re-render when any toggled
     document.querySelectorAll("input[data-pdim]").forEach(cb => {
