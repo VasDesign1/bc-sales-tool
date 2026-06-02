@@ -6,6 +6,7 @@
     <title>Sales Analytics (Wiise Connected)</title>
     <script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -1548,6 +1549,38 @@ function updateBCProgress(label, detail) {
 function hideBCProgress() {
     const wrap = document.getElementById("bcProgress");
     if (wrap) wrap.style.display = "none";
+}
+function exportTable(table, panel) {
+    if (typeof XLSX === "undefined") {
+        alert("Export library still loading — try again in a few seconds.");
+        return;
+    }
+    const titleEl = panel ? panel.querySelector("h2") : null;
+    const title = titleEl ? titleEl.textContent.trim() : "data";
+    const safeTitle = title.replace(/[^a-zA-Z0-9 _-]/g, "").slice(0, 60).trim() || "data";
+    const dateStr = new Date().toISOString().slice(0, 10);
+    // Clone the table so we can strip any action buttons before exporting
+    const clone = table.cloneNode(true);
+    clone.querySelectorAll("button, .row-action-btn").forEach(b => b.remove());
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.table_to_sheet(clone);
+    XLSX.utils.book_append_sheet(wb, ws, "Data");
+    XLSX.writeFile(wb, safeTitle + " - " + dateStr + ".xlsx");
+}
+function attachExportButtons() {
+    document.querySelectorAll(".panel").forEach(panel => {
+        const header = panel.querySelector(".panel-header");
+        const table = panel.querySelector("table");
+        if (!header || !table) return;
+        if (header.querySelector(".export-btn")) return;
+        const btn = document.createElement("button");
+        btn.className = "more-btn export-btn";
+        btn.title = "Export this table to Excel (.xlsx)";
+        btn.textContent = "⤓ Excel";
+        btn.style.marginLeft = "8px";
+        btn.addEventListener("click", () => exportTable(table, panel));
+        header.appendChild(btn);
+    });
 }
 function updateCostQualityBadge() {
     const el = document.getElementById("costQualityBadge"); if (!el) return;
@@ -5341,6 +5374,9 @@ function wireEvents() {
     document.addEventListener("keydown", e => {
         if (e.key === "Escape" && document.getElementById("topNModal").style.display === "flex") closeTopNModal();
     });
+
+    // Excel export — auto-attach a button to every panel containing a table
+    attachExportButtons();
 
     // Decomposition tree expand/collapse + Build tree button
     document.querySelector("#decompTable tbody").addEventListener("click", e => {
