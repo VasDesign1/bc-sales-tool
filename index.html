@@ -440,6 +440,29 @@
                     </div>
                 </div>
                 <div class="panel">
+                    <div class="panel-header">
+                        <h2>Items this customer buys</h2>
+                        <input type="text" class="search" id="customerItemSearch" placeholder="Search item or description…">
+                        <div class="meta" id="customerItemMeta"></div>
+                    </div>
+                    <div class="table-scroll">
+                        <table id="customerItemTable">
+                            <thead><tr>
+                                <th data-sort="number">Item No</th>
+                                <th data-sort="description">Description</th>
+                                <th class="num" data-sort="qty">Qty</th>
+                                <th class="num" data-sort="revenue">Sales $</th>
+                                <th class="num" data-sort="gp">GP $</th>
+                                <th class="num" data-sort="gpPct">GP %</th>
+                                <th class="num" data-sort="invoiceCount">Invoices</th>
+                                <th data-sort="lastDate">Last purchased</th>
+                                <th class="num" data-sort="daysSince">Days since</th>
+                            </tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="panel">
                     <div class="panel-header"><h2>Invoices</h2><div class="meta" id="cdInvCount"></div></div>
                     <div class="table-scroll">
                         <table id="customerInvoiceTable">
@@ -2176,8 +2199,9 @@ const state = {
     sortBranch: { key: "salesAmount", dir: "desc" },
     sortSales: { key: "salesAmount", dir: "desc" },
     sortItems: { key: "revenue", dir: "desc" },
+    sortCustomerItems: { key: "revenue", dir: "desc" },
     treeSort: { key: "sales", dir: "desc" },
-    custFilter: "", itemFilter: "", eomFilter: "",
+    custFilter: "", itemFilter: "", eomFilter: "", customerItemFilter: "",
     filters: { location: "", salesperson: "", customer: "", customerName: "", item: "", itemDesc: "", status: "" },
     snapshotAsOf: null,
     charts: {},
@@ -5438,6 +5462,7 @@ function showCustomer(custNumber) {
 
     renderCustomerTrendChart();
     renderCustomerItemsChart();
+    renderCustomerItemsTable();
     renderCustomerInvoiceTable();
     renderCustomerDrillTree();
     document.getElementById("cdInvCount").textContent = g.invoices.length + " invoices";
@@ -5502,6 +5527,88 @@ function renderCustomerInvoiceTable() {
             <td class="num">${fmtPct(inv.gpPct)}</td>
         </tr>
     `).join("");
+}
+
+function buildCustomerItemRows(g) {
+    // Per-item rollup across this customer's invoices (line-level).
+    // Captures invoice count (distinct), last purchase date, qty, revenue,
+    // and cost — so we can drive a richer table than the top-15 chart.
+    const map = new Map();
+    for (const inv of g.invoices) {
+        const seenThisInv = new Set();
+        for (const ln of (inv.salesInvoiceLines || [])) {
+            if (!lineMatchesFilters(ln)) continue;
+            const itemNo = ln.lineObjectNumber || ln.itemId || "";
+            const key = itemNo || ("(non-item) " + (ln.lineType || "?"));
+            let r = map.get(key);
+            if (!r) {
+                r = { key, number: itemNo || "", description: ln.description || "",
+                      revenue: 0, cost: 0, qty: 0, lineCount: 0,
+                      invoiceIds: new Set(), lastDate: "" };
+                map.set(key, r);
+            }
+            if (ln.description) r.description = ln.description;
+            r.revenue += lineNetAmount(ln);
+            r.qty += num(ln.quantity);
+            r.lineCount++;
+            r.cost += costFromLine(ln, 1, inv.postingDate, inv.customerNumber);
+            if (!seenThisInv.has(key)) { r.invoiceIds.add(inv.id); seenThisInv.add(key); }
+            if (inv.postingDate && (!r.lastDate || inv.postingDate > r.lastDate)) r.lastDate = inv.postingDate;
+        }
+    }
+    const today = new Date();
+    const dayMs = 86400000;
+    const out = [];
+    for (const r of map.values()) {
+        const invoiceCount = r.invoiceIds.size;
+        const gp = r.revenue - r.cost;
+        const gpPct = r.revenue ? gp / r.revenue : 0;
+        const daysSince = r.lastDate ? Math.floor((today - new Date(r.lastDate)) / dayMs) : null;
+        out.push({
+            key: r.key, number: r.number, description: r.description,
+            qty: r.qty, revenue: r.revenue, cost: r.cost, gp, gpPct,
+            lineCount: r.lineCount, invoiceCount, lastDate: r.lastDate, daysSince,
+        });
+    }
+    return out;
+}
+
+function renderCustomerItemsTable() {
+    const g = state.currentCustomer; if (!g) return;
+    let rows = buildCustomerItemRows(g);
+    if (state.customerItemFilter) {
+        const q = state.customerItemFilter.toLowerCase();
+        rows = rows.filter(r => (r.number || "").toLowerCase().includes(q) || (r.description || "").toLowerCase().includes(q));
+    }
+    const { key, dir } = state.sortCustomerItems;
+    const m = dir === "asc" ? 1 : -1;
+    rows.sort((a, b) => {
+        let av = a[key], bv = b[key];
+        if (av == null) av = (typeof bv === "number") ? 0 : "";
+        if (bv == null) bv = (typeof av === "number") ? 0 : "";
+        if (typeof av === "number" && typeof bv === "number") return (av - bv) * m;
+        return String(av).localeCompare(String(bv)) * m;
+    });
+    const tbody = document.querySelector("#customerItemTable tbody");
+    tbody.innerHTML = rows.slice(0, 1000).map(r => `
+        <tr class="clickable" data-item-key="${escapeAttr(r.key)}">
+            <td>${escapeHtml(r.number || "—")}</td>
+            <td>${escapeHtml(r.description || "")}</td>
+            <td class="num">${fmtInt(r.qty)}</td>
+            <td class="num">${fmtMoneyFull(r.revenue)}</td>
+            <td class="num ${r.gp >= 0 ? "pos" : "neg"}">${fmtMoneyFull(r.gp)}</td>
+            <td class="num">${fmtPct(r.gpPct)}</td>
+            <td class="num">${fmtInt(r.invoiceCount)}</td>
+            <td>${r.lastDate ? fmtDate(r.lastDate) : "—"}</td>
+            <td class="num">${r.daysSince == null ? "—" : fmtInt(r.daysSince)}</td>
+        </tr>
+    `).join("") || '<tr><td colspan="9" class="empty">No items.</td></tr>';
+    document.querySelectorAll("#customerItemTable th").forEach(th => {
+        th.classList.remove("sorted-asc", "sorted-desc");
+        if (th.dataset.sort === state.sortCustomerItems.key) th.classList.add(state.sortCustomerItems.dir === "asc" ? "sorted-asc" : "sorted-desc");
+    });
+    document.getElementById("customerItemMeta").textContent = rows.length + " items" + (rows.length > 1000 ? " (showing top 1000)" : "");
+    state._customerItemRowsCache = rows;
 }
 
 // ============================================================
@@ -6754,6 +6861,25 @@ function wireEvents() {
         });
     });
     document.getElementById("itemSearch").addEventListener("input", e => { state.itemFilter = e.target.value; renderByItem(); });
+
+    // Customer items table: sort + search + row click → item × customer drill
+    document.querySelectorAll("#customerItemTable th").forEach(th => {
+        th.addEventListener("click", () => {
+            const key = th.dataset.sort; if (!key) return;
+            if (state.sortCustomerItems.key === key) state.sortCustomerItems.dir = state.sortCustomerItems.dir === "asc" ? "desc" : "asc";
+            else { state.sortCustomerItems.key = key; state.sortCustomerItems.dir = (key === "number" || key === "description" || key === "lastDate") ? "asc" : "desc"; }
+            renderCustomerItemsTable();
+        });
+    });
+    document.getElementById("customerItemSearch").addEventListener("input", e => {
+        state.customerItemFilter = e.target.value; renderCustomerItemsTable();
+    });
+    document.querySelector("#customerItemTable tbody").addEventListener("click", e => {
+        const tr = e.target.closest("tr.clickable"); if (!tr) return;
+        const key = tr.dataset.itemKey;
+        const item = (state._customerItemRowsCache || []).find(r => r.key === key);
+        if (item) showItem(item);
+    });
 
     // EOM search
     document.getElementById("eomSearch").addEventListener("input", e => { state.eomFilter = e.target.value; renderEOM(); });
