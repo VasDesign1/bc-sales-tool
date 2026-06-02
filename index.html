@@ -895,6 +895,7 @@
                     <strong>Open / Sent</strong> = anything still pending (Draft / Open / Sent).
                     <strong>Win rate</strong> = Won ÷ (Won + Lost).
                 </div>
+                <div id="qExtrasDiagnostic" class="hint" style="background:#fff8e1; border-left-color:#ffca28; display:none;"></div>
 
                 <div class="kpi-row">
                     <div class="kpi k-rev"><div class="label">Total Quote Value</div><div class="value" id="qKpiSales">—</div></div>
@@ -1736,28 +1737,37 @@ async function fetchSalesQuotes(fromISO, toISO) {
 }
 
 // BC v2.0 REST API doesn't expose Campaign No or Assigned User ID on
-// salesQuotes. OData v4 does. Fetch a lightweight projection that we can
-// merge into the quote records by quote No.
+// salesQuotes. OData v4 does — provided the entity is published as a
+// Web Service in BC. Try several entity-name and selector variations.
 async function fetchSalesQuoteExtras(fromISO, toISO) {
     const compName = encodeURIComponent(BC_CONFIG.companyName);
+    const dateFilter = "Document_Date ge " + fromISO + " and Document_Date le " + toISO;
     const tries = [
-        // Standard OData v4 publish names
-        { url: BC_ODATA_URL + "/Company('" + compName + "')/SalesQuotes?$filter=" + encodeURIComponent("Document_Date ge " + fromISO + " and Document_Date le " + toISO) + "&$select=No,Campaign_No,Assigned_User_ID&$top=10000", label: "Quote extras (OData v4)" },
-        // Some tenants spell it with a trailing underscore (Campaign No.)
-        { url: BC_ODATA_URL + "/Company('" + compName + "')/SalesQuotes?$filter=" + encodeURIComponent("Document_Date ge " + fromISO + " and Document_Date le " + toISO) + "&$select=No,Campaign_No_,Assigned_User_ID&$top=10000", label: "Quote extras (alt naming)" },
+        // Standard published Web Service names, with $select narrowed down
+        { url: BC_ODATA_URL + "/Company('" + compName + "')/SalesQuotes?$filter=" + encodeURIComponent(dateFilter) + "&$select=No,Campaign_No,Assigned_User_ID&$top=10000", label: "SalesQuotes + $select" },
+        { url: BC_ODATA_URL + "/Company('" + compName + "')/SalesQuotes?$filter=" + encodeURIComponent(dateFilter) + "&$top=10000", label: "SalesQuotes (all fields)" },
+        // Singular form — some tenants publish this name
+        { url: BC_ODATA_URL + "/Company('" + compName + "')/SalesQuote?$filter=" + encodeURIComponent(dateFilter) + "&$top=10000", label: "SalesQuote singular" },
+        // No filter (small datasets) — exposes all rows so we can see fields even if filter syntax is off
+        { url: BC_ODATA_URL + "/Company('" + compName + "')/SalesQuotes?$top=10", label: "SalesQuotes (no filter, sample)" },
     ];
+    state.quoteExtrasDiagnostic = "";
     for (const t of tries) {
         try {
             const rows = await bcFetchAll(t.url, t.label);
+            console.log("[Quote extras] " + t.label + " → " + rows.length + " rows");
             if (rows.length) {
-                console.log("[Quote extras] " + rows.length + " rows from " + t.label);
                 console.log("[Quote extras] sample row keys:", Object.keys(rows[0]).join(", "));
+                console.log("[Quote extras] sample row:", rows[0]);
+                state.quoteExtrasDiagnostic = "OData v4 source: " + t.label + " (" + rows.length + " rows). Fields: " + Object.keys(rows[0]).join(", ");
                 return rows;
             }
         } catch (e) {
             console.warn("[Quote extras] " + t.label + " failed:", e.message);
+            state.quoteExtrasDiagnostic += "Tried " + t.label + " → " + e.message + ". ";
         }
     }
+    console.warn("[Quote extras] all OData v4 attempts failed");
     return [];
 }
 
@@ -3307,6 +3317,21 @@ function filteredQuotes() {
 function renderQuotes() {
     renderFilterChips();
     const quotes = filteredQuotes();
+    // Diagnostic banner if we couldn't fetch Campaign/Assigned User extras
+    const diag = document.getElementById("qExtrasDiagnostic");
+    if (diag) {
+        const haveExtras = state.quoteExtras && state.quoteExtras.size > 0;
+        if (!haveExtras) {
+            diag.style.display = "block";
+            diag.innerHTML = "<strong>Heads up:</strong> Campaign No. and Assigned User ID couldn't be loaded from BC. " +
+                "These fields aren't in the standard v2.0 REST API; the OData v4 fallback also didn't return data. " +
+                (state.quoteExtrasDiagnostic ? "<br><span style='font-family:monospace; font-size:11px;'>" + escapeHtml(state.quoteExtrasDiagnostic) + "</span>" : "") +
+                "<br>Most likely cause: <em>SalesQuotes</em> is not published as an OData Web Service in your BC tenant. Ask your BC admin to publish it (or expose a custom API page), then reload. " +
+                "<br>Open the browser console (F12) to see exactly which URLs we tried.";
+        } else {
+            diag.style.display = "none";
+        }
+    }
     state.quoteTrendBucket    = state.quoteTrendBucket    || "month";
     state.quoteTrendChartType = state.quoteTrendChartType || "line";
     state.quoteTrendMetric    = state.quoteTrendMetric    || "amount";
@@ -5790,12 +5815,17 @@ async function handleLoad() {
         state.shipments = shipments;
         state.returnReceipts = returnReceipts;
         state.quotes = quotes;
+        // Diagnostic: print v2.0 quote field names so we can spot Campaign/User fields if BC exposes them under a non-standard name
+        if (quotes.length) {
+            console.log("[v2 SalesQuote fields]:", Object.keys(quotes[0]).join(", "));
+        }
         // Build extras map keyed by quote No so we can look up Campaign / Assigned User
         state.quoteExtras = new Map();
         for (const ex of (quoteExtras || [])) {
             const no = ex.No || ex.no || ex.number;
             if (no) state.quoteExtras.set(no, ex);
         }
+        console.log("[Quote extras] loaded " + state.quoteExtras.size + " extras rows for " + quotes.length + " quotes");
         state.locations = new Map(locs.map(l => [l.id, l.code || l.displayName || "(unnamed)"]));
         state.items = items;
         state.itemCategory = new Map(items.map(it => [it.number, it.itemCategoryCode || ""]));
