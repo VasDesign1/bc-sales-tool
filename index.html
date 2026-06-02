@@ -905,11 +905,19 @@
                     <div class="kpi k-gpp"><div class="label">Avg Quote Value</div><div class="value" id="qKpiAvg">—</div></div>
                 </div>
 
-                <div class="kpi-row">
-                    <div class="kpi k-gp"><div class="label">Won (Accepted)</div><div class="value" id="qKpiWon">—</div><div class="sub" id="qKpiWonSub"></div></div>
+                <div class="kpi-row" style="grid-template-columns: repeat(5, 1fr);">
+                    <div class="kpi k-gp"><div class="label">Won</div><div class="value" id="qKpiWon">—</div><div class="sub" id="qKpiWonSub"></div></div>
                     <div class="kpi k-avg" style="background:linear-gradient(135deg,#b71c1c,#c62828);"><div class="label">Lost</div><div class="value" id="qKpiLost">—</div><div class="sub" id="qKpiLostSub"></div></div>
-                    <div class="kpi k-cust"><div class="label">Open / Sent / Follow-up</div><div class="value" id="qKpiOpen">—</div><div class="sub" id="qKpiOpenSub"></div></div>
+                    <div class="kpi k-cust"><div class="label">Follow-up</div><div class="value" id="qKpiFollow">—</div><div class="sub" id="qKpiFollowSub"></div></div>
+                    <div class="kpi k-inv" style="background:linear-gradient(135deg,#455a64,#607d8b);"><div class="label">Uncategorised</div><div class="value" id="qKpiOther">—</div><div class="sub" id="qKpiOtherSub"></div></div>
                     <div class="kpi k-loc"><div class="label">Win rate</div><div class="value" id="qKpiWinRate">—</div><div class="sub">Won ÷ (Won + Lost)</div></div>
+                </div>
+                <div class="hint" style="margin-top:-8px; margin-bottom:10px;">
+                    Buckets read from <strong>Campaign No.</strong> on each quote (not BC's <code>status</code> field).
+                    <strong>Won:</strong> QUOTE WON, QUOTE WON ON STOCK, PARTLY WON ·
+                    <strong>Lost:</strong> LOST - PROJECT LOST, LOST - PRICE, LOST - AVAILABILITY, FAIL, DNQ ·
+                    <strong>Follow-up:</strong> OPEN, PRICE QUERY, FOLLOW UP - 14/30 DAYS, FOLLOW UP - OTHER, IN PROGRESS, PENDING, OPTION, REPRICING, WFB, LIVE ·
+                    <strong>Uncategorised:</strong> blank Campaign No or any value not in the lists above.
                 </div>
 
                 <div class="chart-grid">
@@ -1016,6 +1024,17 @@
                     <div class="kpi k-qty"><div class="label">No. of Blanket Orders</div><div class="value" id="boKpiCount">—</div></div>
                     <div class="kpi k-inv"><div class="label">Order Quantity</div><div class="value" id="boKpiQty">—</div></div>
                     <div class="kpi k-gpp"><div class="label">Avg Order Value</div><div class="value" id="boKpiAvg">—</div></div>
+                </div>
+
+                <div class="kpi-row" style="grid-template-columns: repeat(5, 1fr);">
+                    <div class="kpi k-gp"><div class="label">Won</div><div class="value" id="boKpiWon">—</div><div class="sub" id="boKpiWonSub"></div></div>
+                    <div class="kpi k-avg" style="background:linear-gradient(135deg,#b71c1c,#c62828);"><div class="label">Lost</div><div class="value" id="boKpiLost">—</div><div class="sub" id="boKpiLostSub"></div></div>
+                    <div class="kpi k-cust"><div class="label">Follow-up</div><div class="value" id="boKpiFollow">—</div><div class="sub" id="boKpiFollowSub"></div></div>
+                    <div class="kpi k-inv" style="background:linear-gradient(135deg,#455a64,#607d8b);"><div class="label">Uncategorised</div><div class="value" id="boKpiOther">—</div><div class="sub" id="boKpiOtherSub"></div></div>
+                    <div class="kpi k-loc"><div class="label">Win rate</div><div class="value" id="boKpiWinRate">—</div><div class="sub">Won ÷ (Won + Lost)</div></div>
+                </div>
+                <div class="hint" style="margin-top:-8px; margin-bottom:10px;">
+                    Buckets read from <strong>Campaign No.</strong> on each blanket order (same rules as Sales Quote Overview).
                 </div>
 
                 <div class="chart-grid">
@@ -3487,8 +3506,28 @@ function getQuoteAssignedUser(q) {
     if (fm && fm.fAssigned && ex[fm.fAssigned]) return ex[fm.fAssigned];
     return ex.Assigned_User_ID || ex.assignedUserID || null;
 }
-function isQuoteWon(q)  { return (q.status || "") === "Accepted"; }
-function isQuoteLost(q) { return (q.status || "") === "Lost"; }
+// Campaign-No → bucket mapping (mirrors calendar-viewer's sync-wiise.js rules).
+// Sales workflow lives in Campaign No on the quote / blanket order, not in the
+// BC `status` field (which is just Open/Draft/Released).
+const CAMPAIGN_BUCKETS = {
+    won:  ["QUOTE WON", "QUOTE WON ON STOCK", "PARTLY WON"],
+    lost: ["LOST - PROJECT LOST", "LOST - PRICE", "LOST - AVAILABILITY", "FAIL", "DNQ"],
+    follow: [
+        "FOLLOW UP - 14 DAYS", "FOLLOW UP 30 DAYS", "FOLLOW UP - OTHER",
+        "IN PROGRESS", "PRICE QUERY", "OPEN", "PENDING", "OPTION",
+        "REPRICING", "WFB", "LIVE",
+    ],
+};
+function campaignBucket(campaign) {
+    const c = (campaign || "").trim().toUpperCase();
+    if (!c) return "other";
+    if (CAMPAIGN_BUCKETS.won.includes(c))    return "won";
+    if (CAMPAIGN_BUCKETS.lost.includes(c))   return "lost";
+    if (CAMPAIGN_BUCKETS.follow.includes(c)) return "follow";
+    return "other";
+}
+function isQuoteWon(q)  { return campaignBucket(getQuoteCampaign(q)) === "won"; }
+function isQuoteLost(q) { return campaignBucket(getQuoteCampaign(q)) === "lost"; }
 function quoteAmount(q) {
     let a = 0;
     for (const ln of (q.salesQuoteLines || [])) {
@@ -3595,8 +3634,8 @@ function renderQuotes() {
 
     // Aggregations
     let totalAmount = 0, totalQty = 0;
-    let wonCount = 0, lostCount = 0, openCount = 0;
-    let wonAmount = 0, lostAmount = 0, openAmount = 0;
+    let wonCount = 0, lostCount = 0, followCount = 0, otherCount = 0;
+    let wonAmount = 0, lostAmount = 0, followAmount = 0, otherAmount = 0;
     const bySp = new Map(), byCat = new Map(), byCust = new Map(), byItem = new Map();
     const byStatus = new Map(), byCampaign = new Map(), byUser = new Map();
     const byMonth = new Map(), byWeek = new Map(), byDay = new Map();
@@ -3637,9 +3676,6 @@ function renderQuotes() {
         const statusCur = byStatus.get(status) || { name: status, count: 0, amount: 0 };
         statusCur.count += 1; statusCur.amount += qAmount;
         byStatus.set(status, statusCur);
-        if (status === "Accepted")      { wonCount++;  wonAmount  += qAmount; }
-        else if (status === "Lost")     { lostCount++; lostAmount += qAmount; }
-        else                            { openCount++; openAmount += qAmount; }
 
         const camp = getQuoteCampaign(q);
         if (camp) {
@@ -3647,6 +3683,11 @@ function renderQuotes() {
             cur.amount += qAmount; cur.count += 1;
             byCampaign.set(camp, cur);
         }
+        const bucket = campaignBucket(camp);
+        if (bucket === "won")         { wonCount++;    wonAmount    += qAmount; }
+        else if (bucket === "lost")   { lostCount++;   lostAmount   += qAmount; }
+        else if (bucket === "follow") { followCount++; followAmount += qAmount; }
+        else                          { otherCount++;  otherAmount  += qAmount; }
         const user = getQuoteAssignedUser(q);
         if (user) {
             const cur = byUser.get(user) || { name: user, amount: 0, count: 0 };
@@ -3672,12 +3713,14 @@ function renderQuotes() {
     document.getElementById("qKpiCount").textContent = fmtInt(quotes.length);
     document.getElementById("qKpiQty").textContent   = fmtInt(totalQty);
     document.getElementById("qKpiAvg").textContent   = quotes.length ? fmtMoneyFull(totalAmount / quotes.length) : "—";
-    document.getElementById("qKpiWon").textContent   = fmtInt(wonCount);
-    document.getElementById("qKpiWonSub").textContent = wonCount ? fmtMoneyFull(wonAmount) : "";
-    document.getElementById("qKpiLost").textContent  = fmtInt(lostCount);
+    document.getElementById("qKpiWon").textContent     = fmtInt(wonCount);
+    document.getElementById("qKpiWonSub").textContent  = wonCount ? fmtMoneyFull(wonAmount) : "";
+    document.getElementById("qKpiLost").textContent    = fmtInt(lostCount);
     document.getElementById("qKpiLostSub").textContent = lostCount ? fmtMoneyFull(lostAmount) : "";
-    document.getElementById("qKpiOpen").textContent  = fmtInt(openCount);
-    document.getElementById("qKpiOpenSub").textContent = openCount ? fmtMoneyFull(openAmount) : "";
+    document.getElementById("qKpiFollow").textContent   = fmtInt(followCount);
+    document.getElementById("qKpiFollowSub").textContent = followCount ? fmtMoneyFull(followAmount) : "";
+    document.getElementById("qKpiOther").textContent   = fmtInt(otherCount);
+    document.getElementById("qKpiOtherSub").textContent = otherCount ? fmtMoneyFull(otherAmount) : "";
     const decided = wonCount + lostCount;
     document.getElementById("qKpiWinRate").textContent = decided ? fmtPct(wonCount / decided) : "—";
 
@@ -4062,6 +4105,8 @@ function renderBlanketOrders() {
 
     // Aggregations
     let totalAmount = 0, totalQty = 0;
+    let boWonCount = 0, boLostCount = 0, boFollowCount = 0, boOtherCount = 0;
+    let boWonAmount = 0, boLostAmount = 0, boFollowAmount = 0, boOtherAmount = 0;
     const bySp = new Map(), byCat = new Map(), byCust = new Map(), byItem = new Map();
     const byStatus = new Map();
     const byMonth = new Map(), byWeek = new Map(), byDay = new Map();
@@ -4103,6 +4148,12 @@ function renderBlanketOrders() {
         statusCur.count += 1; statusCur.amount += amt;
         byStatus.set(status, statusCur);
 
+        const boBucket = campaignBucket(bo.campaignNumber);
+        if (boBucket === "won")         { boWonCount++;    boWonAmount    += amt; }
+        else if (boBucket === "lost")   { boLostCount++;   boLostAmount   += amt; }
+        else if (boBucket === "follow") { boFollowCount++; boFollowAmount += amt; }
+        else                            { boOtherCount++;  boOtherAmount  += amt; }
+
         const dateStr = bo.documentDate || bo.orderDate || "";
         if (dateStr) {
             const mk = bucketKey(dateStr, "month");
@@ -4121,6 +4172,16 @@ function renderBlanketOrders() {
     document.getElementById("boKpiCount").textContent = fmtInt(orders.length);
     document.getElementById("boKpiQty").textContent   = fmtInt(totalQty);
     document.getElementById("boKpiAvg").textContent   = orders.length ? fmtMoneyFull(totalAmount / orders.length) : "—";
+    document.getElementById("boKpiWon").textContent      = fmtInt(boWonCount);
+    document.getElementById("boKpiWonSub").textContent   = boWonCount ? fmtMoneyFull(boWonAmount) : "";
+    document.getElementById("boKpiLost").textContent     = fmtInt(boLostCount);
+    document.getElementById("boKpiLostSub").textContent  = boLostCount ? fmtMoneyFull(boLostAmount) : "";
+    document.getElementById("boKpiFollow").textContent   = fmtInt(boFollowCount);
+    document.getElementById("boKpiFollowSub").textContent = boFollowCount ? fmtMoneyFull(boFollowAmount) : "";
+    document.getElementById("boKpiOther").textContent    = fmtInt(boOtherCount);
+    document.getElementById("boKpiOtherSub").textContent = boOtherCount ? fmtMoneyFull(boOtherAmount) : "";
+    const boDecided = boWonCount + boLostCount;
+    document.getElementById("boKpiWinRate").textContent  = boDecided ? fmtPct(boWonCount / boDecided) : "—";
 
     // Status doughnut (cross-filter on click)
     destroyChart("boStatus");
