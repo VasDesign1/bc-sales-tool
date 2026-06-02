@@ -1793,6 +1793,61 @@ function bcFindField(names, patterns) {
     for (const p of patterns) { const hit = names.find(n => p.test(n)); if (hit) return hit; }
     return null;
 }
+// Find the matching *lines* entity for a header entity (e.g. for
+// "BlanketSalesOrder", look for "BlanketSalesOrderSalesLines" or similar).
+// Required fields: Document No, Line No, Item No (or Type+No), Quantity, Amount.
+async function bcDiscoverSalesLinesEntity(headerEntity) {
+    const md = await bcGetODataMetadata();
+    const allSets = Object.keys(md.entitySets);
+    const DOC_NO   = [/^document.?no$/i, /documentNumber/i];
+    const LINE_NO  = [/^line.?no$/i, /lineNumber/i];
+    const ITEM_NO  = [/^no$/i, /^item.?no$/i, /itemNumber/i, /lineObjectNumber/i];
+    const QTY      = [/^quantity$/i, /^qty$/i];
+    const AMOUNT   = [/^amount$/i, /^line.?amount$/i, /amountExcludingTax/i, /^amount.*excl/i];
+    const UPRICE   = [/^unit.?price$/i, /unitPrice/i];
+    const DESC     = [/^description$/i];
+    const LOCATION = [/^location.?code$/i, /locationCode/i, /^location$/i];
+    const TYPE     = [/^type$/i, /^line.?type$/i, /lineType/i];
+    const DISC_ALLOC = [/^inv.*discount.?allocation/i, /invoiceDiscountAllocation/i, /^line.?discount.?amount/i];
+    // Score candidates by name closeness to header + presence of line indicators
+    const base = headerEntity.toLowerCase();
+    const candidates = allSets.filter(n => {
+        const l = n.toLowerCase();
+        if (l === base) return false;
+        return /line|sales.?line/i.test(l) && l.includes(base.replace(/s$/, "").substring(0, Math.min(8, base.length)));
+    });
+    // Fallback: any entity starting with header name that has "line" in it
+    if (!candidates.length) {
+        for (const n of allSets) {
+            if (n === headerEntity) continue;
+            if (n.toLowerCase().startsWith(base.toLowerCase()) && /line/i.test(n)) candidates.push(n);
+        }
+    }
+    // Final fallback: scan for entities with Document_No + Quantity + Amount fields
+    const fallbackPool = candidates.length ? candidates : allSets;
+    for (const candidate of fallbackPool) {
+        const typeName = md.entitySets[candidate];
+        const fields = md.entityTypes[typeName] || [];
+        const fDocNo  = bcFindField(fields, DOC_NO);
+        const fQty    = bcFindField(fields, QTY);
+        const fAmount = bcFindField(fields, AMOUNT);
+        if (!fDocNo || !fQty || !fAmount) continue;
+        return {
+            entity: candidate, fields,
+            fDocNo,
+            fLineNo:    bcFindField(fields, LINE_NO),
+            fItemNo:    bcFindField(fields, ITEM_NO),
+            fQty, fAmount,
+            fUnitPrice: bcFindField(fields, UPRICE),
+            fDesc:      bcFindField(fields, DESC),
+            fLocation:  bcFindField(fields, LOCATION),
+            fType:      bcFindField(fields, TYPE),
+            fDiscAlloc: bcFindField(fields, DISC_ALLOC),
+        };
+    }
+    return null;
+}
+
 // kind: "quote" | "blanket"
 async function bcDiscoverSalesEntity(kind) {
     const md = await bcGetODataMetadata();
@@ -1983,8 +2038,65 @@ async function fetchBlanketSalesOrders(fromISO, toISO) {
             _raw: r,
         }));
         state.blanketOrdersSource = "OData: " + info.entity;
-        state.blanketOrdersDiagnostic = "Source: OData " + info.entity + " · " + rows.length + " orders. (Lines not yet pulled — header-level totals only.)";
         state.blanketOrdersFieldMap = info;
+
+        // ----- Lines: discover entity, fetch all, group by Document_No -----
+        let linesNote = "Lines not loaded.";
+        try {
+            const linesInfo = await bcDiscoverSalesLinesEntity(info.entity);
+            if (linesInfo) {
+                state.blanketOrdersLinesFieldMap = linesInfo;
+                const lineParams = ["$top=50000"];
+                // Filter to just our headers' document numbers if we have a manageable count
+                const docNos = normalized.map(o => o.number).filter(Boolean);
+                if (docNos.length && docNos.length <= 400) {
+                    const inClause = docNos.map(n => linesInfo.fDocNo + " eq '" + String(n).replace(/'/g, "''") + "'").join(" or ");
+                    lineParams.push("$filter=" + encodeURIComponent(inClause));
+                }
+                const linesUrl = BC_ODATA_URL + "/Company('" + coName + "')/" + linesInfo.entity + "?" + lineParams.join("&");
+                const lineRows = await bcFetchAll(linesUrl, "Blanket order lines (" + linesInfo.entity + ")");
+                console.log("[Blanket SO lines] " + linesInfo.entity + " → " + lineRows.length + " line rows");
+                if (lineRows.length) console.log("[Blanket SO lines] sample line keys:", Object.keys(lineRows[0]).join(", "));
+                // Group by document number
+                const byDoc = new Map();
+                for (const lr of lineRows) {
+                    const docNo = String(lr[linesInfo.fDocNo] || "");
+                    if (!docNo) continue;
+                    const qty = num(lr[linesInfo.fQty]);
+                    const amt = num(lr[linesInfo.fAmount]);
+                    const disc = linesInfo.fDiscAlloc ? num(lr[linesInfo.fDiscAlloc]) : 0;
+                    const typeVal = linesInfo.fType ? lr[linesInfo.fType] : "Item";
+                    const itemNo = linesInfo.fItemNo ? lr[linesInfo.fItemNo] : "";
+                    const locCode = linesInfo.fLocation ? lr[linesInfo.fLocation] : "";
+                    const v2Line = {
+                        lineObjectNumber: itemNo || "",
+                        itemId:           itemNo || "",
+                        quantity:         qty,
+                        unitPrice:        linesInfo.fUnitPrice ? num(lr[linesInfo.fUnitPrice]) : 0,
+                        amountExcludingTax:        amt,
+                        invoiceDiscountAllocation: disc,
+                        description:      linesInfo.fDesc ? (lr[linesInfo.fDesc] || "") : "",
+                        locationId:       locCode || "",   // code, not GUID — locationCode() will pass through unknown codes
+                        lineType:         (typeVal && /^item$/i.test(typeVal)) ? "Item" : (typeVal || "Item"),
+                    };
+                    if (!byDoc.has(docNo)) byDoc.set(docNo, []);
+                    byDoc.get(docNo).push(v2Line);
+                }
+                let attached = 0;
+                for (const o of normalized) {
+                    const lines = byDoc.get(String(o.number));
+                    if (lines && lines.length) { o.blanketSalesOrderLines = lines; attached++; }
+                }
+                linesNote = lineRows.length + " line rows · attached to " + attached + "/" + normalized.length + " orders.";
+            } else {
+                linesNote = "No matching lines entity found in $metadata (looked for entities matching '" + info.entity + "' + 'line').";
+                console.warn("[Blanket SO lines] no candidate lines entity");
+            }
+        } catch (le) {
+            console.warn("[Blanket SO lines] fetch failed:", le.message);
+            linesNote = "Lines fetch failed: " + le.message;
+        }
+        state.blanketOrdersDiagnostic = "Source: OData " + info.entity + " · " + rows.length + " orders. " + linesNote;
         return normalized;
     } catch (e) {
         console.warn("[Blanket SO] OData fetch failed:", e.message);
@@ -2138,7 +2250,12 @@ function escapeHtml(s) {
 function escapeAttr(s) { return escapeHtml(s); }
 function locationCode(locId) {
     if (!locId) return "(no location)";
-    return state.locations.get(locId) || "(unknown)";
+    // v2 invoice lines store a GUID → look up code; OData blanket-order lines
+    // already store the code → pass through.
+    const mapped = state.locations.get(locId);
+    if (mapped) return mapped;
+    // GUID-shaped but not in map → unknown; otherwise treat as a raw code.
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(locId) ? "(unknown)" : locId;
 }
 
 // AU fiscal year: July–June. FY ends in (year if Jul-Dec is in previous calendar year? no — FY2026 = Jul 2025 to Jun 2026, so a date in Jul 2025 → FY2026, a date in Jun 2026 → FY2026)
