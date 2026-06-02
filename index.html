@@ -317,6 +317,7 @@
             <a data-tab="byItem">Sales by Item</a>
             <a data-tab="eom">EOM Report</a>
             <a data-tab="quotes">Sales Quote Overview</a>
+            <a data-tab="blanketOrders">Blanket Sales Order Overview</a>
             <a data-tab="returns">Sales Returns Overview</a>
 
             <div class="group-label">Time Analytics</div>
@@ -1002,6 +1003,101 @@
             </section>
 
             <!-- TAB: Sales Returns Overview -->
+            <!-- TAB: Blanket Sales Order Overview -->
+            <section data-tab-content="blanketOrders" style="display:none;">
+                <div class="hint">
+                    Every chart on this page is clickable. Click any bar / slice / row to drill into the underlying blanket orders.
+                    Status meanings depend on your BC workflow — typically <strong>Open</strong>, <strong>Released</strong>, <strong>Pending Approval</strong>.
+                </div>
+                <div id="boExtrasDiagnostic" class="hint" style="background:#fff8e1; border-left-color:#ffca28; display:none;"></div>
+
+                <div class="kpi-row">
+                    <div class="kpi k-rev"><div class="label">Total Blanket Order Value</div><div class="value" id="boKpiSales">—</div></div>
+                    <div class="kpi k-qty"><div class="label">No. of Blanket Orders</div><div class="value" id="boKpiCount">—</div></div>
+                    <div class="kpi k-inv"><div class="label">Order Quantity</div><div class="value" id="boKpiQty">—</div></div>
+                    <div class="kpi k-gpp"><div class="label">Avg Order Value</div><div class="value" id="boKpiAvg">—</div></div>
+                </div>
+
+                <div class="chart-grid">
+                    <div class="card span-4">
+                        <div class="head">
+                            <h3>Order status</h3>
+                            <div class="toggle" id="boStatusMetricToggle">
+                                <button data-metric="count" class="active">Count</button>
+                                <button data-metric="amount">$ Amount</button>
+                            </div>
+                        </div>
+                        <div class="chart-wrap" style="min-height:300px;"><canvas id="boStatusChart"></canvas></div>
+                    </div>
+                    <div class="card span-8">
+                        <div class="head">
+                            <h3>Blanket order trend</h3>
+                            <div style="display:flex; gap:10px; align-items:center;">
+                                <select id="boTrendChartType" class="mini-select">
+                                    <option value="line" selected>Line</option>
+                                    <option value="area">Area</option>
+                                    <option value="bar">Bar</option>
+                                    <option value="column">Column</option>
+                                </select>
+                                <select id="boTrendMetric" class="mini-select">
+                                    <option value="amount" selected>$ Amount</option>
+                                    <option value="count">Count</option>
+                                </select>
+                                <div class="toggle" id="boTrendBucketToggle">
+                                    <button data-bucket="day">Day</button>
+                                    <button data-bucket="week">Week</button>
+                                    <button data-bucket="month" class="active">Month</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="chart-wrap" style="min-height:300px;"><canvas id="boTrendChart"></canvas></div>
+                    </div>
+
+                    <div class="card span-6">
+                        <div class="head"><h3>Top 10 customers (blanket orders)</h3>
+                            <button class="more-btn" data-botopn="customers">Show more…</button>
+                        </div>
+                        <div class="chart-wrap" style="min-height:340px;"><canvas id="boCustChart"></canvas></div>
+                    </div>
+                    <div class="card span-6">
+                        <div class="head"><h3>Top 10 items (blanket orders)</h3>
+                            <button class="more-btn" data-botopn="items">Show more…</button>
+                        </div>
+                        <div class="chart-wrap" style="min-height:340px;"><canvas id="boItemChart"></canvas></div>
+                    </div>
+
+                    <div class="card span-6">
+                        <div class="head"><h3>By salesperson</h3></div>
+                        <div class="chart-wrap" style="min-height:340px;"><canvas id="boSpChart"></canvas></div>
+                    </div>
+                    <div class="card span-6">
+                        <div class="head"><h3>By item category</h3></div>
+                        <div class="chart-wrap" style="min-height:340px;"><canvas id="boCatChart"></canvas></div>
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <div class="panel-header">
+                        <h2>Blanket Orders by Customer · click ▸ to expand to orders &amp; items</h2>
+                        <div class="meta" id="boTreeMeta"></div>
+                    </div>
+                    <div class="table-scroll">
+                        <table id="boCustomerTree">
+                            <thead><tr>
+                                <th data-botsort="label">Customer / Order / Item</th>
+                                <th class="num" data-botsort="docCount">Orders</th>
+                                <th class="num" data-botsort="sales">Value (LCY)</th>
+                                <th class="num" data-botsort="qty">Qty</th>
+                                <th>Status</th>
+                                <th data-botsort="salesperson">Salesperson</th>
+                                <th data-botsort="orderDate">Order date</th>
+                            </tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
             <section data-tab-content="returns" style="display:none;">
                 <div class="kpi-row">
                     <div class="kpi k-rev"><div class="label">Return Rate (Amount)</div><div class="value" id="rKpiRate">—</div><div class="sub">credits / sales</div></div>
@@ -1736,6 +1832,42 @@ async function fetchSalesQuotes(fromISO, toISO) {
     catch (e) { console.warn("Quotes fetch failed:", e.message); return []; }
 }
 
+// Blanket Sales Orders aren't a documented v2.0 REST endpoint. Try both
+// REST and OData v4 (and a couple of common entity-name variations).
+async function fetchBlanketSalesOrders(fromISO, toISO) {
+    const compId = await bcGetCompanyId();
+    const compName = encodeURIComponent(BC_CONFIG.companyName);
+    const dateFilter = "documentDate ge " + fromISO + " and documentDate le " + toISO;
+    const odataDateFilter = "Document_Date ge " + fromISO + " and Document_Date le " + toISO;
+    const tries = [
+        // v2.0 REST API attempts (most likely 404 — not standard)
+        { url: BC_API_URL + "/companies(" + compId + ")/blanketSalesOrders?$filter=" + encodeURIComponent(dateFilter) + "&$expand=blanketSalesOrderLines&$top=2000", label: "v2 blanketSalesOrders" },
+        { url: BC_API_URL + "/companies(" + compId + ")/blanketSalesOrders?$top=2000", label: "v2 blanketSalesOrders (no filter)" },
+        // OData v4 fallback — needs to be published as Web Service in BC
+        { url: BC_ODATA_URL + "/Company('" + compName + "')/BlanketSalesOrder?$filter=" + encodeURIComponent(odataDateFilter) + "&$top=2000", label: "OData BlanketSalesOrder" },
+        { url: BC_ODATA_URL + "/Company('" + compName + "')/BlanketSalesOrders?$filter=" + encodeURIComponent(odataDateFilter) + "&$top=2000", label: "OData BlanketSalesOrders" },
+        { url: BC_ODATA_URL + "/Company('" + compName + "')/BlanketSalesOrder?$top=10", label: "OData BlanketSalesOrder (sample)" },
+    ];
+    state.blanketOrdersDiagnostic = "";
+    for (const t of tries) {
+        try {
+            const rows = await bcFetchAll(t.url, t.label);
+            console.log("[Blanket SO] " + t.label + " → " + rows.length + " rows");
+            if (rows.length) {
+                console.log("[Blanket SO] sample row keys:", Object.keys(rows[0]).join(", "));
+                state.blanketOrdersSource = t.label;
+                state.blanketOrdersDiagnostic = "Source: " + t.label + " · " + rows.length + " orders loaded.";
+                return rows;
+            }
+        } catch (e) {
+            console.warn("[Blanket SO] " + t.label + " failed:", e.message);
+            state.blanketOrdersDiagnostic += "Tried " + t.label + " → " + e.message + ". ";
+        }
+    }
+    console.warn("[Blanket SO] all attempts failed");
+    return [];
+}
+
 // BC v2.0 REST API doesn't expose Campaign No or Assigned User ID on
 // salesQuotes. OData v4 does — provided the entity is published as a
 // Web Service in BC. Try several entity-name and selector variations.
@@ -1818,6 +1950,7 @@ const TAB_TITLES = {
     byItem: "Sales by Item",
     eom: "EOM Report",
     quotes: "Sales Quote Overview",
+    blanketOrders: "Blanket Sales Order Overview",
     returns: "Sales Returns Overview",
     mtd: "Month-to-Date",
     mat: "Moving Annual Total",
@@ -2463,8 +2596,9 @@ function renderCurrentTab() {
         case "salesperson": renderSalesperson(); break;
         case "byItem":      renderByItem();   break;
         case "eom":         renderEOM();      break;
-        case "quotes":      renderQuotes();   break;
-        case "returns":     renderReturns();  break;
+        case "quotes":         renderQuotes();   break;
+        case "blanketOrders":  renderBlanketOrders(); break;
+        case "returns":        renderReturns();  break;
         case "mtd":         renderMTD();      break;
         case "mat":         renderMAT();      break;
         case "pop":         renderPoP();      break;
@@ -3745,6 +3879,369 @@ function renderQuoteCustomerTree(quotes) {
 // ============================================================
 // SALES RETURNS OVERVIEW TAB
 // ============================================================
+// ============================================================
+// BLANKET SALES ORDER OVERVIEW
+// ============================================================
+function getBlanketOrderLines(bo) {
+    return bo.blanketSalesOrderLines || bo.blanketOrderLines || bo.salesLines || [];
+}
+function blanketOrderAmount(bo) {
+    let a = 0;
+    for (const ln of getBlanketOrderLines(bo)) {
+        if (!lineMatchesFilters(ln)) continue;
+        a += lineNetAmount(ln);
+    }
+    if (!a && bo.totalAmountExcludingTax != null) a = num(bo.totalAmountExcludingTax);
+    return a;
+}
+function blanketOrderQty(bo) {
+    let q = 0;
+    for (const ln of getBlanketOrderLines(bo)) {
+        if (!lineMatchesFilters(ln)) continue;
+        q += num(ln.quantity);
+    }
+    return q;
+}
+function boStatusBadgeClass(s) {
+    const k = (s || "").toLowerCase();
+    if (k === "released") return "badge-paid";
+    if (k === "open") return "badge-open";
+    if (k === "pending approval" || k === "pending_approval") return "badge-other";
+    if (k === "draft") return "badge-draft";
+    return "badge-draft";
+}
+function filteredBlanketOrders() {
+    return (state.blanketOrders || []).filter(bo => {
+        if (state.filters.salesperson && (bo.salesperson || "(unassigned)") !== state.filters.salesperson) return false;
+        if (state.filters.customer && (bo.customerNumber || "") !== state.filters.customer) return false;
+        if (state.filters.status && (bo.status || "") !== state.filters.status) return false;
+        if (state.filters.location) {
+            return getBlanketOrderLines(bo).some(ln => locationCode(ln.locationId) === state.filters.location);
+        }
+        return true;
+    });
+}
+
+function renderBlanketOrders() {
+    renderFilterChips();
+    // Diagnostic banner
+    const diag = document.getElementById("boExtrasDiagnostic");
+    if (diag) {
+        if (!state.blanketOrders || state.blanketOrders.length === 0) {
+            diag.style.display = "block";
+            diag.innerHTML = "<strong>No blanket sales orders loaded.</strong> " +
+                "BC's v2.0 REST API doesn't expose <code>blanketSalesOrders</code> as a documented endpoint, and the OData v4 fallback also didn't return data. " +
+                (state.blanketOrdersDiagnostic ? "<br><span style='font-family:monospace; font-size:11px;'>" + escapeHtml(state.blanketOrdersDiagnostic) + "</span>" : "") +
+                "<br>Most likely cause: <em>Blanket Sales Order</em> (page 9305) isn't published as an OData Web Service in your BC tenant. Ask your BC admin to publish it (Web Services → New → Page, Object ID 9305, Service Name <code>BlanketSalesOrder</code>, ☑ Published), then Reload sales.";
+        } else {
+            diag.style.display = "none";
+        }
+    }
+
+    const orders = filteredBlanketOrders();
+    state.boTrendBucket    = state.boTrendBucket    || "month";
+    state.boTrendChartType = state.boTrendChartType || "line";
+    state.boTrendMetric    = state.boTrendMetric    || "amount";
+    state.boStatusMetric   = state.boStatusMetric   || "count";
+
+    // Aggregations
+    let totalAmount = 0, totalQty = 0;
+    const bySp = new Map(), byCat = new Map(), byCust = new Map(), byItem = new Map();
+    const byStatus = new Map();
+    const byMonth = new Map(), byWeek = new Map(), byDay = new Map();
+
+    for (const bo of orders) {
+        let amt = 0, q = 0;
+        for (const ln of getBlanketOrderLines(bo)) {
+            if (!lineMatchesFilters(ln)) continue;
+            const a = lineNetAmount(ln);
+            const lq = num(ln.quantity);
+            amt += a; q += lq;
+            const itemNo = ln.lineObjectNumber || ln.itemId || "";
+            const cat = itemNo ? (state.itemCategory.get(itemNo) || "(no category)") : "(non-item)";
+            const catCur = byCat.get(cat) || { name: cat, amount: 0 };
+            catCur.amount += a;
+            byCat.set(cat, catCur);
+            if (itemNo) {
+                const itemCur = byItem.get(itemNo) || { key: itemNo, number: itemNo, description: ln.description || "", amount: 0, qty: 0 };
+                itemCur.amount += a; itemCur.qty += lq;
+                if (ln.description) itemCur.description = ln.description;
+                byItem.set(itemNo, itemCur);
+            }
+        }
+        if (!amt && bo.totalAmountExcludingTax != null) amt = num(bo.totalAmountExcludingTax);
+        totalAmount += amt; totalQty += q;
+
+        const sp = bo.salesperson || "(unassigned)";
+        const spCur = bySp.get(sp) || { name: sp, amount: 0, count: 0 };
+        spCur.amount += amt; spCur.count += 1;
+        bySp.set(sp, spCur);
+
+        const custKey = bo.customerNumber || bo.customerId || "(unknown)";
+        const custCur = byCust.get(custKey) || { customer: bo.customerName || custKey, customerNumber: custKey, amount: 0, count: 0 };
+        custCur.amount += amt; custCur.count += 1;
+        byCust.set(custKey, custCur);
+
+        const status = bo.status || "(unknown)";
+        const statusCur = byStatus.get(status) || { name: status, count: 0, amount: 0 };
+        statusCur.count += 1; statusCur.amount += amt;
+        byStatus.set(status, statusCur);
+
+        const dateStr = bo.documentDate || bo.orderDate || "";
+        if (dateStr) {
+            const mk = bucketKey(dateStr, "month");
+            const wk = bucketKey(dateStr, "week");
+            const dk = bucketKey(dateStr, "day");
+            for (const [map, key] of [[byMonth, mk], [byWeek, wk], [byDay, dk]]) {
+                const cur = map.get(key) || { key, amount: 0, count: 0 };
+                cur.amount += amt; cur.count += 1;
+                map.set(key, cur);
+            }
+        }
+    }
+
+    // KPIs
+    document.getElementById("boKpiSales").textContent = fmtMoneyFull(totalAmount);
+    document.getElementById("boKpiCount").textContent = fmtInt(orders.length);
+    document.getElementById("boKpiQty").textContent   = fmtInt(totalQty);
+    document.getElementById("boKpiAvg").textContent   = orders.length ? fmtMoneyFull(totalAmount / orders.length) : "—";
+
+    // Status doughnut (cross-filter on click)
+    destroyChart("boStatus");
+    const statusRows = [...byStatus.values()];
+    const statusPalette = statusRows.map(r => {
+        const kk = (r.name || "").toLowerCase();
+        if (kk === "released") return "#2e7d32";
+        if (kk === "open")     return "#e65100";
+        if (kk === "pending approval" || kk === "pending_approval") return "#6a1b9a";
+        if (kk === "draft")    return "#607d8b";
+        return "#3f51b5";
+    });
+    const statusValueFn = state.boStatusMetric === "amount" ? (r => r.amount) : (r => r.count);
+    const ctxBs = document.getElementById("boStatusChart").getContext("2d");
+    state.charts.boStatus = new Chart(ctxBs, {
+        type: "doughnut",
+        data: { labels: statusRows.map(r => r.name), datasets: [{ data: statusRows.map(statusValueFn), backgroundColor: statusPalette, borderWidth: 0 }] },
+        options: chartBase({ cutout: "62%",
+            plugins: { legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } },
+                       tooltip: { callbacks: { label: c => {
+                           const r = statusRows[c.dataIndex];
+                           return r.name + ": " + fmtInt(r.count) + " orders · " + fmtMoneyFull(r.amount);
+                       } } } },
+            onClick: (_, els) => {
+                if (!els.length) return;
+                const r = statusRows[els[0].index];
+                state.filters.status = (state.filters.status === r.name) ? "" : r.name;
+                rebuildFiltered(); renderCurrentTab();
+            }
+        })
+    });
+
+    // Trend
+    destroyChart("boTrend");
+    const map = state.boTrendBucket === "day" ? byDay : state.boTrendBucket === "week" ? byWeek : byMonth;
+    const buckets = [...map.values()].sort((a, b) => a.key < b.key ? -1 : 1);
+    const trendData = buckets.map(b => state.boTrendMetric === "amount" ? b.amount : b.count);
+    const tCt = state.boTrendChartType;
+    let chartType = tCt === "column" ? "bar" : (tCt === "area" ? "line" : tCt);
+    const fill = (tCt === "area" || tCt === "line");
+    const dataset = (chartType === "bar")
+        ? { label: state.boTrendMetric === "amount" ? "Amount" : "Count", data: trendData, backgroundColor: "#3f51b5", borderRadius: 4 }
+        : { label: state.boTrendMetric === "amount" ? "Amount" : "Count", data: trendData, borderColor: "#3f51b5",
+            backgroundColor: tCt === "area" ? "rgba(63,81,181,0.20)" : "rgba(63,81,181,0.06)",
+            fill: fill, tension: 0.3, pointRadius: 3, borderWidth: 2 };
+    const ctxBt = document.getElementById("boTrendChart").getContext("2d");
+    state.charts.boTrend = new Chart(ctxBt, {
+        type: chartType,
+        data: { labels: buckets.map(b => b.key), datasets: [dataset] },
+        options: chartBase({
+            plugins: { legend: { display: false },
+                       tooltip: { callbacks: { label: c => {
+                           const b = buckets[c.dataIndex];
+                           return state.boTrendMetric === "amount"
+                               ? fmtMoneyFull(b.amount) + " · " + b.count + " orders"
+                               : fmtInt(b.count) + " orders · " + fmtMoneyFull(b.amount);
+                       } } } },
+            scales: { y: { ticks: { callback: v => state.boTrendMetric === "amount" ? fmtMoney(v) : fmtInt(v) } } }
+        })
+    });
+
+    // Top 10 customers (cross-filter)
+    destroyChart("boCust");
+    const custTop = [...byCust.values()].sort((a, b) => b.amount - a.amount).slice(0, 10);
+    const ctxBc = document.getElementById("boCustChart").getContext("2d");
+    state.charts.boCust = new Chart(ctxBc, {
+        type: "bar",
+        data: { labels: custTop.map(c => truncate(c.customer, 28)),
+                datasets: [{ data: custTop.map(c => c.amount), backgroundColor: custTop.map((_, i) => barShade("#3f51b5", i / Math.max(custTop.length, 1))), borderRadius: 4 }] },
+        options: chartBase({
+            indexAxis: "y",
+            plugins: { legend: { display: false },
+                       tooltip: { callbacks: { label: c => fmtMoneyFull(c.parsed.x) + " · " + custTop[c.dataIndex].count + " orders" } } },
+            scales: { x: { ticks: { callback: v => fmtMoney(v) } } },
+            onClick: (_, els) => {
+                if (!els.length) return;
+                const c = custTop[els[0].index];
+                state.filters.customer = (state.filters.customer === c.customerNumber) ? "" : c.customerNumber;
+                state.filters.customerName = state.filters.customer ? c.customer : "";
+                document.getElementById("customerFilter").value = state.filters.customer;
+                rebuildFiltered(); renderCurrentTab();
+            }
+        })
+    });
+
+    // Top 10 items (cross-filter)
+    destroyChart("boItem");
+    const itemTop = [...byItem.values()].sort((a, b) => b.amount - a.amount).slice(0, 10);
+    const ctxBi = document.getElementById("boItemChart").getContext("2d");
+    state.charts.boItem = new Chart(ctxBi, {
+        type: "bar",
+        data: { labels: itemTop.map(it => truncate((it.number ? it.number + " — " : "") + (it.description || ""), 30)),
+                datasets: [{ data: itemTop.map(it => it.amount), backgroundColor: itemTop.map((_, i) => barShade("#00897b", i / Math.max(itemTop.length, 1))), borderRadius: 4 }] },
+        options: chartBase({
+            indexAxis: "y",
+            plugins: { legend: { display: false },
+                       tooltip: { callbacks: { label: c => fmtMoneyFull(c.parsed.x) + " · qty " + fmtInt(itemTop[c.dataIndex].qty) } } },
+            scales: { x: { ticks: { callback: v => fmtMoney(v) } } },
+            onClick: (_, els) => {
+                if (!els.length) return;
+                const it = itemTop[els[0].index];
+                state.filters.item = (state.filters.item === it.number) ? "" : it.number;
+                state.filters.itemDesc = state.filters.item ? (it.description || "") : "";
+                document.getElementById("itemFilterBox").value = state.filters.item;
+                rebuildFiltered(); renderCurrentTab();
+            }
+        })
+    });
+
+    // By salesperson (cross-filter)
+    destroyChart("boSp");
+    const spRows = [...bySp.values()].sort((a, b) => b.amount - a.amount);
+    const ctxBsp = document.getElementById("boSpChart").getContext("2d");
+    state.charts.boSp = new Chart(ctxBsp, {
+        type: "bar",
+        data: { labels: spRows.map(r => r.name),
+                datasets: [{ data: spRows.map(r => r.amount), backgroundColor: spRows.map((_, i) => barShade("#00acc1", i / Math.max(spRows.length, 1))), borderRadius: 4 }] },
+        options: chartBase({
+            indexAxis: "y",
+            plugins: { legend: { display: false },
+                       tooltip: { callbacks: { label: c => fmtMoneyFull(c.parsed.x) + " · " + spRows[c.dataIndex].count + " orders" } } },
+            scales: { x: { ticks: { callback: v => fmtMoney(v) } } },
+            onClick: (_, els) => {
+                if (!els.length) return;
+                const r = spRows[els[0].index];
+                state.filters.salesperson = (state.filters.salesperson === r.name) ? "" : r.name;
+                document.getElementById("salespersonFilter").value = state.filters.salesperson;
+                rebuildFiltered(); renderCurrentTab();
+            }
+        })
+    });
+
+    // By item category
+    destroyChart("boCat");
+    const catRows = [...byCat.values()].filter(r => r.amount > 0).sort((a, b) => b.amount - a.amount).slice(0, 20);
+    const ctxBcat = document.getElementById("boCatChart").getContext("2d");
+    state.charts.boCat = new Chart(ctxBcat, {
+        type: "bar",
+        data: { labels: catRows.map(r => truncate(r.name, 30)),
+                datasets: [{ data: catRows.map(r => r.amount), backgroundColor: catRows.map((_, i) => barShade("#fb8c00", i / Math.max(catRows.length, 1))), borderRadius: 4 }] },
+        options: chartBase({
+            indexAxis: "y",
+            plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => fmtMoneyFull(c.parsed.x) } } },
+            scales: { x: { ticks: { callback: v => fmtMoney(v) } } }
+        })
+    });
+
+    // Customer drill tree
+    renderBlanketOrderCustomerTree(orders);
+}
+
+function buildBlanketOrderCustomerTreeData(orders) {
+    const custMap = new Map();
+    for (const bo of orders) {
+        const custKey = bo.customerNumber || bo.customerId || "(unknown)";
+        let custNode = custMap.get(custKey);
+        if (!custNode) {
+            custNode = {
+                key: "boct-cust-" + custKey,
+                label: bo.customerName || custKey,
+                sales: 0, qty: 0, docCount: 0,
+                status: "", salesperson: "", orderDate: "",
+                children: [],
+            };
+            custMap.set(custKey, custNode);
+        }
+        const amt = blanketOrderAmount(bo);
+        const q = blanketOrderQty(bo);
+        custNode.sales += amt;
+        custNode.qty   += q;
+        custNode.docCount += 1;
+        const docNode = {
+            key: "boct-doc-" + bo.id,
+            label: bo.number || "(no number)",
+            sales: amt, qty: q, docCount: 1,
+            status: bo.status || "",
+            salesperson: bo.salesperson || "",
+            orderDate: bo.orderDate || bo.documentDate || "",
+            children: [],
+        };
+        custNode.children.push(docNode);
+        for (const ln of getBlanketOrderLines(bo)) {
+            if (!lineMatchesFilters(ln)) continue;
+            const itemNo = ln.lineObjectNumber || ln.itemId || "";
+            docNode.children.push({
+                key: "boct-line-" + bo.id + "-" + (ln.id || ln.sequence || itemNo),
+                label: (itemNo || "(non-item)") + (ln.description ? " · " + ln.description : ""),
+                sales: lineNetAmount(ln),
+                qty: num(ln.quantity),
+                docCount: 0,
+                status: "", salesperson: "", orderDate: "",
+                children: null,
+            });
+        }
+    }
+    return [...custMap.values()];
+}
+
+function renderBlanketOrderCustomerTree(orders) {
+    if (!orders) orders = filteredBlanketOrders();
+    state.expandedBoMatrix = state.expandedBoMatrix || new Set();
+    state.boTreeSort = state.boTreeSort || { key: "sales", dir: "desc" };
+    const roots = buildBlanketOrderCustomerTreeData(orders);
+    _sortNodesRecursive(roots, state.boTreeSort.key, state.boTreeSort.dir);
+    const acc = [];
+    function emit(node, depth) {
+        const expandable = node.children && node.children.length > 0;
+        const isOpen = state.expandedBoMatrix.has(node.key);
+        const arrow = expandable ? (isOpen ? "▾" : "▸") : "";
+        const pad = "&nbsp;".repeat(depth * 4);
+        const bg = depth === 0 ? "background:#eef0fb; font-weight:700;"
+                 : depth === 1 ? "background:#f7f8fd;"
+                 : "";
+        const statusBadge = node.status ? `<span class="badge ${boStatusBadgeClass(node.status)}">${escapeHtml(node.status)}</span>` : "";
+        acc.push(`<tr data-key="${escapeAttr(node.key)}" data-expandable="${expandable ? 1 : 0}" style="${bg}cursor:${expandable ? "pointer" : "default"};">
+            <td>${pad}<span style="display:inline-block; width:14px; color:#3f51b5;">${arrow}</span> ${escapeHtml(node.label)}</td>
+            <td class="num">${node.docCount ? fmtInt(node.docCount) : ""}</td>
+            <td class="num">${fmtMoneyFull(node.sales)}</td>
+            <td class="num">${node.qty ? fmtQty(node.qty) : ""}</td>
+            <td>${statusBadge}</td>
+            <td>${escapeHtml(node.salesperson || "")}</td>
+            <td>${node.orderDate ? fmtDate(node.orderDate) : ""}</td>
+        </tr>`);
+        if (expandable && isOpen) for (const c of node.children) emit(c, depth + 1);
+    }
+    for (const n of roots) emit(n, 0);
+    const tbody = document.querySelector("#boCustomerTree tbody");
+    tbody.innerHTML = acc.join("") || '<tr><td colspan="7" class="empty">No blanket orders.</td></tr>';
+    document.getElementById("boTreeMeta").textContent = roots.length + " customer" + (roots.length === 1 ? "" : "s") + " · " + orders.length + " order" + (orders.length === 1 ? "" : "s");
+    document.querySelectorAll("#boCustomerTree th[data-botsort]").forEach(th => {
+        th.classList.remove("sorted-asc", "sorted-desc");
+        if (th.dataset.botsort === state.boTreeSort.key) {
+            th.classList.add(state.boTreeSort.dir === "asc" ? "sorted-asc" : "sorted-desc");
+        }
+    });
+}
+
 function renderReturns() {
     renderFilterChips();
     const cms = (state.creditMemos || []).filter(cm => {
@@ -5799,7 +6296,7 @@ async function handleLoad() {
     const btn = document.getElementById("loadBtn");
     btn.disabled = true; btn.textContent = "Loading…";
     try {
-        const [locs, items, customers, invoices, iles, creditMemos, shipments, returnReceipts, quotes, quoteExtras] = await Promise.all([
+        const [locs, items, customers, invoices, iles, creditMemos, shipments, returnReceipts, quotes, quoteExtras, blanketOrders] = await Promise.all([
             fetchLocations(),
             fetchItems(),
             fetchCustomers(),
@@ -5810,7 +6307,12 @@ async function handleLoad() {
             fetchSalesReturnReceipts(from, to),
             fetchSalesQuotes(from, to),
             fetchSalesQuoteExtras(from, to),
+            fetchBlanketSalesOrders(from, to),
         ]);
+        state.blanketOrders = blanketOrders || [];
+        if (state.blanketOrders.length) {
+            console.log("[Blanket SO] loaded " + state.blanketOrders.length + " orders, sample fields:", Object.keys(state.blanketOrders[0]).join(", "));
+        }
         state.creditMemos = creditMemos;
         state.shipments = shipments;
         state.returnReceipts = returnReceipts;
@@ -6218,6 +6720,106 @@ function wireEvents() {
             }
         });
     });
+    // -------- Blanket Sales Order Overview controls --------
+    document.querySelectorAll("#boStatusMetricToggle button").forEach(btn => {
+        btn.addEventListener("click", () => {
+            document.querySelectorAll("#boStatusMetricToggle button").forEach(b => b.classList.remove("active"));
+            btn.classList.add("active");
+            state.boStatusMetric = btn.dataset.metric;
+            renderBlanketOrders();
+        });
+    });
+    document.getElementById("boTrendChartType").addEventListener("change", e => { state.boTrendChartType = e.target.value; renderBlanketOrders(); });
+    document.getElementById("boTrendMetric").addEventListener("change",    e => { state.boTrendMetric    = e.target.value; renderBlanketOrders(); });
+    document.querySelectorAll("#boTrendBucketToggle button").forEach(btn => {
+        btn.addEventListener("click", () => {
+            document.querySelectorAll("#boTrendBucketToggle button").forEach(b => b.classList.remove("active"));
+            btn.classList.add("active");
+            state.boTrendBucket = btn.dataset.bucket;
+            renderBlanketOrders();
+        });
+    });
+    // Blanket Order tree expand/collapse + sort
+    document.querySelector("#boCustomerTree tbody").addEventListener("click", e => {
+        const tr = e.target.closest("tr[data-key]"); if (!tr) return;
+        if (tr.dataset.expandable !== "1") return;
+        const k = tr.dataset.key;
+        if (!state.expandedBoMatrix) state.expandedBoMatrix = new Set();
+        if (state.expandedBoMatrix.has(k)) state.expandedBoMatrix.delete(k);
+        else state.expandedBoMatrix.add(k);
+        renderBlanketOrderCustomerTree();
+    });
+    document.querySelectorAll("#boCustomerTree th[data-botsort]").forEach(th => {
+        th.addEventListener("click", () => {
+            const k = th.dataset.botsort;
+            state.boTreeSort = state.boTreeSort || { key: "sales", dir: "desc" };
+            if (state.boTreeSort.key === k) state.boTreeSort.dir = state.boTreeSort.dir === "asc" ? "desc" : "asc";
+            else { state.boTreeSort.key = k; state.boTreeSort.dir = (k === "label" || k === "salesperson" || k === "orderDate") ? "asc" : "desc"; }
+            renderBlanketOrderCustomerTree();
+        });
+    });
+    // Blanket order "Show more…" buttons
+    document.querySelectorAll("[data-botopn]").forEach(btn => {
+        btn.addEventListener("click", () => {
+            const which = btn.dataset.botopn;
+            const orders = filteredBlanketOrders();
+            if (which === "customers") {
+                const byCust = new Map();
+                for (const bo of orders) {
+                    const k = bo.customerNumber || bo.customerId || "(unknown)";
+                    const cur = byCust.get(k) || { customer: bo.customerName || k, customerNumber: k, amount: 0, count: 0 };
+                    cur.amount += blanketOrderAmount(bo); cur.count += 1;
+                    byCust.set(k, cur);
+                }
+                const rows = [...byCust.values()].sort((a, b) => b.amount - a.amount);
+                state.quoteListCache = rows.map(c => ({
+                    key: c.customerNumber, number: "", customer: c.customer, customerNumber: c.customerNumber,
+                    salesperson: "", date: "", status: c.count + " order" + (c.count === 1 ? "" : "s"),
+                    qty: 0, amount: c.amount,
+                }));
+                TOPN_DEFS.quoteList = {
+                    title: "All customers with blanket orders (" + rows.length + ")",
+                    get: () => state.quoteListCache,
+                    columns: ["Customer No", "Customer", "Orders", "Amount", ""],
+                    sortKey: "amount",
+                    headerKeys: { "Customer No": "customerNumber", "Customer": "customer", "Orders": "status", "Amount": "amount" },
+                    headerNumeric: new Set(["Amount"]),
+                    action: { label: "Drill customer", run: r => { closeTopNModal(); if (r.customerNumber) showCustomer(r.customerNumber); } },
+                };
+                openTopNModal("quoteList");
+            } else if (which === "items") {
+                const byItem = new Map();
+                for (const bo of orders) {
+                    for (const ln of getBlanketOrderLines(bo)) {
+                        if (!lineMatchesFilters(ln)) continue;
+                        const itemNo = ln.lineObjectNumber || ln.itemId || "";
+                        if (!itemNo) continue;
+                        const cur = byItem.get(itemNo) || { key: itemNo, number: itemNo, description: ln.description || "", amount: 0, qty: 0 };
+                        cur.amount += lineNetAmount(ln); cur.qty += num(ln.quantity);
+                        if (ln.description) cur.description = ln.description;
+                        byItem.set(itemNo, cur);
+                    }
+                }
+                const rows = [...byItem.values()].sort((a, b) => b.amount - a.amount);
+                state.quoteListCache = rows.map(it => ({
+                    key: it.number, number: it.number, customer: it.description,
+                    customerNumber: "", salesperson: "", date: "", status: "",
+                    qty: it.qty, amount: it.amount,
+                }));
+                TOPN_DEFS.quoteList = {
+                    title: "All items on blanket orders (" + rows.length + ")",
+                    get: () => state.quoteListCache,
+                    columns: ["Item No", "Description", "Qty", "Amount", ""],
+                    sortKey: "amount",
+                    headerKeys: { "Item No": "number", "Description": "customer", "Qty": "qty", "Amount": "amount" },
+                    headerNumeric: new Set(["Qty", "Amount"]),
+                    action: { label: "Close", run: r => closeTopNModal() },
+                };
+                openTopNModal("quoteList");
+            }
+        });
+    });
+
     // Quote Customer drill tree — expand/collapse + column sort
     document.querySelector("#quoteCustomerTree tbody").addEventListener("click", e => {
         const tr = e.target.closest("tr[data-key]"); if (!tr) return;
