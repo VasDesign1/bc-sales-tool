@@ -324,7 +324,10 @@
             <a data-tab="dailySales">Daily Sales Matrix</a>
             <a data-tab="demographics">Sales Demographics</a>
             <a data-tab="retention">Customer Retention</a>
+            <a data-tab="retentionHistory">Customer Retention History</a>
             <a data-tab="forecast">Sales Forecasting</a>
+            <a data-tab="pareto">Sales Pareto (80/20)</a>
+            <a data-tab="decomposition">Sales Decomposition</a>
 
             <div class="group-label">Targets &amp; Run Rate</div>
             <a data-tab="branchTarget">Branch Sales &amp; Targets</a>
@@ -389,6 +392,10 @@
                     <label for="itemFilterBox">Item</label>
                     <input list="itemFilterList" id="itemFilterBox" placeholder="All items" autocomplete="off">
                     <datalist id="itemFilterList"></datalist>
+                </div>
+                <div class="field" title="Hide documents modified after this timestamp — useful for matching a stale Power BI refresh">
+                    <label for="snapshotAsOf">Compare as of</label>
+                    <input type="datetime-local" id="snapshotAsOf">
                 </div>
                 <button class="btn btn-primary" id="loadBtn" disabled>Load sales</button>
                 <div class="spacer"></div>
@@ -1153,6 +1160,106 @@
                 </div>
             </section>
 
+            <!-- TAB: Sales Pareto (80/20) -->
+            <section data-tab-content="pareto" style="display:none;">
+                <div class="hint">The Pareto principle: typically a small share of customers drives most of the revenue. Customers above the 80% cumulative line are your <strong>vital few</strong>; below it are the <strong>useful many</strong>.</div>
+                <div class="kpi-row">
+                    <div class="kpi k-cust"><div class="label">Total customers</div><div class="value" id="parKpiTotal">—</div></div>
+                    <div class="kpi k-rev"><div class="label">Customers driving 80%</div><div class="value" id="parKpiTop80">—</div><div class="sub" id="parKpiTop80Sub"></div></div>
+                    <div class="kpi k-gp"><div class="label">Concentration ratio</div><div class="value" id="parKpiRatio">—</div><div class="sub">% of customers = 80% of sales</div></div>
+                    <div class="kpi k-avg"><div class="label">Avg sale per customer</div><div class="value" id="parKpiAvg">—</div></div>
+                </div>
+                <div class="chart-grid">
+                    <div class="card span-12">
+                        <div class="head"><h3>Customer revenue + cumulative %</h3><div class="meta">orange line at 80%</div></div>
+                        <div class="chart-wrap" style="min-height:380px;"><canvas id="paretoChart"></canvas></div>
+                    </div>
+                </div>
+                <div class="panel">
+                    <div class="panel-header"><h2>Pareto detail · sorted by revenue desc</h2><div class="meta" id="parMeta"></div></div>
+                    <div class="table-scroll">
+                        <table id="paretoTable">
+                            <thead><tr>
+                                <th class="num">#</th>
+                                <th>Customer</th>
+                                <th class="num">Sales</th>
+                                <th class="num">Cum. Sales</th>
+                                <th class="num">Cum. %</th>
+                                <th>Band</th>
+                            </tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB: Sales Decomposition -->
+            <section data-tab-content="decomposition" style="display:none;">
+                <div class="hint">Pick a hierarchy (up to 4 levels) and the tool will roll up sales / GP across those dimensions. Each row is expandable to the next level.</div>
+                <div class="toolbar">
+                    <div class="field"><label>Level 1</label><select id="decompL1" class="mini-select"></select></div>
+                    <div class="field"><label>Level 2</label><select id="decompL2" class="mini-select"></select></div>
+                    <div class="field"><label>Level 3</label><select id="decompL3" class="mini-select"></select></div>
+                    <div class="field"><label>Level 4</label><select id="decompL4" class="mini-select"></select></div>
+                    <button class="btn btn-primary" id="decompApply">Build tree</button>
+                </div>
+                <div class="panel">
+                    <div class="panel-header"><h2 id="decompTitle">Decomposition tree</h2><div class="meta" id="decompMeta"></div></div>
+                    <div class="table-scroll">
+                        <table id="decompTable">
+                            <thead><tr>
+                                <th>Hierarchy</th>
+                                <th class="num">Sales</th>
+                                <th class="num">GP $</th>
+                                <th class="num">GP %</th>
+                                <th class="num">Qty</th>
+                                <th class="num">% of total</th>
+                            </tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB: Customer Retention History -->
+            <section data-tab-content="retentionHistory" style="display:none;">
+                <div class="hint">Per-customer view of when they started, last bought, and whether they're active, lost, or recovered. "Lost" = no purchase in the last 6 months from today.</div>
+                <div class="kpi-row">
+                    <div class="kpi k-cust"><div class="label">Total</div><div class="value" id="rhKpiTotal">—</div></div>
+                    <div class="kpi k-rev"><div class="label">Active</div><div class="value" id="rhKpiActive">—</div></div>
+                    <div class="kpi k-gp"><div class="label">New this period</div><div class="value" id="rhKpiNew">—</div></div>
+                    <div class="kpi k-avg"><div class="label">Lost</div><div class="value" id="rhKpiLost">—</div></div>
+                </div>
+                <div class="panel">
+                    <div class="panel-header">
+                        <h2>Customer retention detail</h2>
+                        <select id="rhStatusFilter" class="mini-select">
+                            <option value="">All statuses</option>
+                            <option value="new">New (first purchase in period)</option>
+                            <option value="active">Active</option>
+                            <option value="lost">Lost (no purchase >6mo)</option>
+                        </select>
+                        <input type="text" class="search" id="rhSearch" placeholder="Search customer…">
+                        <div class="meta" id="rhMeta"></div>
+                    </div>
+                    <div class="table-scroll">
+                        <table id="retentionHistoryTable">
+                            <thead><tr>
+                                <th>Customer No</th>
+                                <th>Name</th>
+                                <th>First purchase</th>
+                                <th>Last purchase</th>
+                                <th class="num">Days since</th>
+                                <th class="num">Invoices</th>
+                                <th class="num">Sales</th>
+                                <th>Status</th>
+                            </tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
             <!-- TAB: Branch Sales & Targets -->
             <section data-tab-content="branchTarget" style="display:none;">
                 <div class="kpi-row">
@@ -1565,6 +1672,7 @@ const state = {
     treeSort: { key: "sales", dir: "desc" },
     custFilter: "", itemFilter: "", eomFilter: "",
     filters: { location: "", salesperson: "", customer: "", customerName: "", item: "", itemDesc: "", status: "" },
+    snapshotAsOf: null,
     charts: {},
     tab: "overview",
     drill: null, // null | "customer" | "invoice" | "item"
@@ -1586,6 +1694,9 @@ const TAB_TITLES = {
     demographics: "Sales Demographics",
     retention: "Customer Retention",
     forecast: "Sales Forecasting",
+    pareto: "Sales Pareto (80/20)",
+    decomposition: "Sales Decomposition",
+    retentionHistory: "Customer Retention History",
     branchTarget: "Branch Sales & Targets",
     branchSalesRate: "Branch Sales Run Rate",
     branchMarginRate: "Branch Margin Run Rate",
@@ -1859,8 +1970,14 @@ function lineMatchesFilters(ln) {
     if (state.filters.item && (ln.lineObjectNumber || ln.itemId || "") !== state.filters.item) return false;
     return true;
 }
+function docInSnapshot(doc) {
+    if (!state.snapshotAsOf) return true;
+    const t = doc && doc.lastModifiedDateTime;
+    if (!t) return true; // no timestamp — include conservatively
+    return new Date(t) <= state.snapshotAsOf;
+}
 function rebuildFiltered() {
-    state.filtered = state.invoices.filter(invoiceMatchesFilters);
+    state.filtered = state.invoices.filter(inv => docInSnapshot(inv) && invoiceMatchesFilters(inv));
     state.byCustomer = aggregateByCustomer(state.filtered);
     state.byItem     = aggregateByItem(state.filtered);
     state.byLocation = aggregateByLocation(state.filtered);
@@ -2223,6 +2340,9 @@ function renderCurrentTab() {
         case "demographics":renderDemographics(); break;
         case "retention":   renderRetention(); break;
         case "forecast":    renderForecast(); break;
+        case "pareto":      renderPareto(); break;
+        case "decomposition": renderDecomposition(); break;
+        case "retentionHistory": renderRetentionHistory(); break;
         case "branchTarget":           renderBranchTargets(); break;
         case "branchSalesRate":        renderBranchSalesRunRate(); break;
         case "branchMarginRate":       renderBranchMarginRunRate(); break;
@@ -2463,6 +2583,11 @@ function renderFilterChips() {
         chips.push('<span class="chip">Item: ' + escapeHtml(label) + ' <span class="x" data-clear="item">×</span></span>');
     }
     if (state.filters.status) chips.push('<span class="chip">Status: ' + escapeHtml(state.filters.status) + ' <span class="x" data-clear="status">×</span></span>');
+    if (state.snapshotAsOf) {
+        const t = state.snapshotAsOf;
+        const label = t.toLocaleDateString("en-AU") + " " + t.toLocaleTimeString("en-AU", { hour: "2-digit", minute: "2-digit" });
+        chips.push('<span class="chip" style="background:#fff3e0; color:#e65100;">As of ' + escapeHtml(label) + ' <span class="x" data-clear="snapshot">×</span></span>');
+    }
     if (chips.length >= 2) {
         chips.push('<span class="chip" style="background:#ffebee; color:#c62828;">Clear all <span class="x" data-clear="all">×</span></span>');
     }
@@ -2476,6 +2601,11 @@ function renderFilterChips() {
                 document.getElementById("salespersonFilter").value = "";
                 document.getElementById("customerFilter").value = "";
                 document.getElementById("itemFilterBox").value = "";
+                state.snapshotAsOf = null;
+                document.getElementById("snapshotAsOf").value = "";
+            } else if (k === "snapshot") {
+                state.snapshotAsOf = null;
+                document.getElementById("snapshotAsOf").value = "";
             } else {
                 state.filters[k] = "";
                 if (k === "customer") { state.filters.customerName = ""; document.getElementById("customerFilter").value = ""; }
@@ -3514,6 +3644,252 @@ function renderForecast() {
 }
 
 // ============================================================
+// SALES PARETO (80/20) TAB
+// ============================================================
+function renderPareto() {
+    renderFilterChips();
+    const rows = [...state.byCustomer.values()]
+        .filter(g => g.revenue > 0)
+        .sort((a, b) => b.revenue - a.revenue);
+    const total = rows.reduce((s, g) => s + g.revenue, 0);
+    let cum = 0, top80Count = 0, top80Hit = false;
+    const labels = [], sales = [], cumPct = [];
+    const tblRows = [];
+    rows.forEach((g, i) => {
+        cum += g.revenue;
+        const pct = total ? cum / total : 0;
+        if (!top80Hit && pct >= 0.8) { top80Hit = true; top80Count = i + 1; }
+        labels.push(truncate(g.customerName || g.customerNumber, 20));
+        sales.push(g.revenue);
+        cumPct.push(pct * 100);
+        tblRows.push({
+            rank: i + 1,
+            name: g.customerName || g.customerNumber,
+            sales: g.revenue, cum, cumPct: pct,
+            band: pct <= 0.8 ? "Top 80%" : "Bottom 20%",
+        });
+    });
+    if (!top80Hit) top80Count = rows.length;
+
+    document.getElementById("parKpiTotal").textContent = fmtInt(rows.length);
+    document.getElementById("parKpiTop80").textContent = fmtInt(top80Count);
+    document.getElementById("parKpiTop80Sub").textContent = rows.length ? fmtPct(top80Count / rows.length) + " of customers" : "";
+    document.getElementById("parKpiRatio").textContent = rows.length ? fmtPct(top80Count / rows.length) : "—";
+    document.getElementById("parKpiAvg").textContent = rows.length ? fmtMoneyFull(total / rows.length) : "—";
+
+    destroyChart("pareto");
+    const ctx = document.getElementById("paretoChart").getContext("2d");
+    state.charts.pareto = new Chart(ctx, {
+        data: {
+            labels,
+            datasets: [
+                { type: "bar", label: "Sales", data: sales, backgroundColor: rows.map((_, i) => i < top80Count ? "#3f51b5" : "#bdbdbd"), borderRadius: 2, yAxisID: "y" },
+                { type: "line", label: "Cumulative %", data: cumPct, borderColor: "#fb8c00", backgroundColor: "rgba(251,140,0,0.10)", fill: false, tension: 0.1, pointRadius: 0, borderWidth: 2, yAxisID: "y1" },
+            ],
+        },
+        options: chartBase({
+            plugins: { legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } },
+                       tooltip: { callbacks: { label: c => c.dataset.label + ": " + (c.dataset.yAxisID === "y" ? fmtMoneyFull(c.parsed.y) : c.parsed.y.toFixed(1) + "%") } },
+                       annotation: undefined },
+            scales: {
+                y:  { position: "left", ticks: { callback: v => fmtMoney(v) } },
+                y1: { position: "right", min: 0, max: 100, grid: { drawOnChartArea: false }, ticks: { callback: v => v + "%" } }
+            }
+        })
+    });
+
+    const tbody = document.querySelector("#paretoTable tbody");
+    tbody.innerHTML = tblRows.map(r => `
+        <tr>
+            <td class="num">${r.rank}</td>
+            <td>${escapeHtml(r.name)}</td>
+            <td class="num">${fmtMoneyFull(r.sales)}</td>
+            <td class="num">${fmtMoneyFull(r.cum)}</td>
+            <td class="num">${fmtPct(r.cumPct)}</td>
+            <td><span class="badge ${r.band === "Top 80%" ? "badge-paid" : "badge-draft"}">${r.band}</span></td>
+        </tr>
+    `).join("") || '<tr><td colspan="6" class="empty">No data.</td></tr>';
+    document.getElementById("parMeta").textContent = rows.length + " customers · 80% line at customer #" + top80Count;
+}
+
+// ============================================================
+// CUSTOMER RETENTION HISTORY TAB (per-customer detail)
+// ============================================================
+function renderRetentionHistory() {
+    renderFilterChips();
+    const today = new Date();
+    const thresholdMs = 6 * 30 * 24 * 60 * 60 * 1000;
+    const periodStart = (() => {
+        const from = document.getElementById("fromDate").value;
+        return from ? new Date(from) : null;
+    })();
+    let rows = [...state.byCustomer.values()].filter(g => g.revenue > 0).map(g => {
+        const firstD = g.firstInvoiceDate ? new Date(g.firstInvoiceDate) : null;
+        const lastD  = g.lastInvoiceDate  ? new Date(g.lastInvoiceDate)  : null;
+        const daysSince = lastD ? Math.floor((today - lastD) / (24*60*60*1000)) : null;
+        let status;
+        if (lastD && (today - lastD) > thresholdMs) status = "lost";
+        else if (firstD && periodStart && firstD >= periodStart) status = "new";
+        else status = "active";
+        return {
+            customerNumber: g.customerNumber,
+            customerName: g.customerName,
+            first: g.firstInvoiceDate,
+            last: g.lastInvoiceDate,
+            daysSince,
+            invoices: g.invoiceCount,
+            sales: g.revenue,
+            status,
+        };
+    });
+    const total = rows.length;
+    const counts = { active: 0, new: 0, lost: 0 };
+    for (const r of rows) counts[r.status]++;
+
+    const statusFilter = document.getElementById("rhStatusFilter").value;
+    const search = (document.getElementById("rhSearch").value || "").toLowerCase();
+    if (statusFilter) rows = rows.filter(r => r.status === statusFilter);
+    if (search) rows = rows.filter(r => (r.customerName + " " + r.customerNumber).toLowerCase().includes(search));
+    rows.sort((a, b) => b.sales - a.sales);
+
+    document.getElementById("rhKpiTotal").textContent  = fmtInt(total);
+    document.getElementById("rhKpiActive").textContent = fmtInt(counts.active);
+    document.getElementById("rhKpiNew").textContent    = fmtInt(counts.new);
+    document.getElementById("rhKpiLost").textContent   = fmtInt(counts.lost);
+
+    const tbody = document.querySelector("#retentionHistoryTable tbody");
+    tbody.innerHTML = rows.map(r => {
+        const badge = r.status === "active" ? '<span class="badge badge-paid">Active</span>'
+                    : r.status === "new"    ? '<span class="badge" style="background:#e3f2fd; color:#1565c0;">New</span>'
+                    : '<span class="badge" style="background:#ffebee; color:#c62828;">Lost</span>';
+        return `<tr>
+            <td>${escapeHtml(r.customerNumber)}</td>
+            <td>${escapeHtml(r.customerName)}</td>
+            <td>${fmtDate(r.first)}</td>
+            <td>${fmtDate(r.last)}</td>
+            <td class="num">${r.daysSince == null ? "—" : fmtInt(r.daysSince)}</td>
+            <td class="num">${fmtInt(r.invoices)}</td>
+            <td class="num">${fmtMoneyFull(r.sales)}</td>
+            <td>${badge}</td>
+        </tr>`;
+    }).join("") || '<tr><td colspan="8" class="empty">No customers match.</td></tr>';
+    document.getElementById("rhMeta").textContent = rows.length + " of " + total + " customers";
+}
+
+// ============================================================
+// SALES DECOMPOSITION TREE TAB
+// ============================================================
+const DECOMP_DIMS = {
+    "":              { label: "(none)",         get: null },
+    "branch":        { label: "Branch",         get: (inv, ln) => locationCode(ln.locationId) },
+    "salesperson":   { label: "Salesperson",    get: (inv) => inv.salesperson || "(unassigned)" },
+    "customer":      { label: "Customer",       get: (inv) => (inv.customerName || inv.customerNumber || "(unknown)") },
+    "itemCategory":  { label: "Item Category",  get: (inv, ln) => state.itemCategory.get(ln.lineObjectNumber || ln.itemId || "") || "(no category)" },
+    "item":          { label: "Item",           get: (inv, ln) => (ln.lineObjectNumber || ln.itemId || "(non-item)") + (ln.description ? " — " + ln.description : "") },
+    "city":          { label: "Customer city",  get: (inv) => state.custCity.get(inv.customerNumber) || "(unknown)" },
+    "month":         { label: "Month",          get: (inv) => monthLabel(inv.postingDate) },
+    "fy":            { label: "Fiscal Year",    get: (inv) => "FY " + fiscalYear(inv.postingDate) },
+    "status":        { label: "Status",         get: (inv) => inv.status || "(unknown)" },
+};
+function decompPopulateSelects() {
+    const opts = Object.entries(DECOMP_DIMS).map(([k, v]) => `<option value="${escapeAttr(k)}">${escapeHtml(v.label)}</option>`).join("");
+    for (let i = 1; i <= 4; i++) {
+        const sel = document.getElementById("decompL" + i);
+        if (sel && !sel.dataset.populated) {
+            sel.innerHTML = opts;
+            sel.dataset.populated = "1";
+        }
+    }
+    // Sensible defaults
+    if (!document.getElementById("decompL1").value) document.getElementById("decompL1").value = "branch";
+    if (!document.getElementById("decompL2").value) document.getElementById("decompL2").value = "salesperson";
+    if (!document.getElementById("decompL3").value) document.getElementById("decompL3").value = "customer";
+}
+
+function buildDecompositionTree(levels) {
+    // levels = ["branch", "salesperson", "customer", ...]
+    const dims = levels.map(k => DECOMP_DIMS[k]).filter(d => d && d.get);
+    if (!dims.length) return [];
+
+    // Build a nested map structure
+    const root = new Map();
+    function ensureNode(map, key, label, depth) {
+        let n = map.get(key);
+        if (!n) {
+            n = { key: depth + "|" + key, label, sales: 0, gp: 0, qty: 0, children: new Map() };
+            map.set(key, n);
+        }
+        return n;
+    }
+    for (const inv of state.filtered) {
+        for (const ln of (inv.salesInvoiceLines || [])) {
+            if (!lineMatchesFilters(ln)) continue;
+            const s = lineNetAmount(ln);
+            const q = num(ln.quantity);
+            const c = costFromLine(ln, 1, inv.postingDate, inv.customerNumber);
+            let map = root;
+            const path = [];
+            for (let d = 0; d < dims.length; d++) {
+                const val = dims[d].get(inv, ln);
+                const node = ensureNode(map, val, val, d);
+                node.sales += s; node.gp += (s - c); node.qty += q;
+                map = node.children;
+                path.push(val);
+            }
+        }
+    }
+    // Convert nested maps into arrays
+    function flatten(map) {
+        return [...map.values()].map(n => ({
+            ...n, children: flatten(n.children),
+        })).sort((a, b) => b.sales - a.sales);
+    }
+    return flatten(root);
+}
+
+const decompState = { expanded: new Set(), levels: [] };
+function renderDecomposition() {
+    renderFilterChips();
+    decompPopulateSelects();
+    const levels = decompState.levels.length ? decompState.levels :
+        [document.getElementById("decompL1").value,
+         document.getElementById("decompL2").value,
+         document.getElementById("decompL3").value,
+         document.getElementById("decompL4").value].filter(v => v);
+    if (!levels.length) {
+        document.querySelector("#decompTable tbody").innerHTML = '<tr><td colspan="6" class="empty">Pick at least one level.</td></tr>';
+        document.getElementById("decompTitle").textContent = "Decomposition tree";
+        document.getElementById("decompMeta").textContent = "";
+        return;
+    }
+    document.getElementById("decompTitle").textContent = "Decomposition: " + levels.map(k => DECOMP_DIMS[k].label).join(" → ");
+    const tree = buildDecompositionTree(levels);
+    const grandSales = tree.reduce((s, n) => s + n.sales, 0) || 1;
+    const acc = [];
+    function emit(node, depth) {
+        const expandable = node.children && node.children.length > 0;
+        const isOpen = decompState.expanded.has(node.key);
+        const arrow = expandable ? (isOpen ? "▾" : "▸") : "";
+        const pad = "&nbsp;".repeat(depth * 4);
+        const bg = depth === 0 ? "background:#eef0fb; font-weight:700;"
+                 : depth === 1 ? "background:#f7f8fd; font-weight:600;"
+                 : depth === 2 ? "background:#fafbff;" : "";
+        acc.push(`<tr data-decomp-key="${escapeAttr(node.key)}" data-expandable="${expandable ? 1 : 0}" style="${bg}cursor:${expandable ? "pointer" : "default"};">
+            <td>${pad}<span style="display:inline-block; width:14px; color:#3f51b5;">${arrow}</span> ${escapeHtml(node.label)}</td>
+            <td class="num">${fmtMoneyFull(node.sales)}</td>
+            <td class="num ${node.gp >= 0 ? "pos" : "neg"}">${fmtMoneyFull(node.gp)}</td>
+            <td class="num">${fmtPct(node.sales ? node.gp / node.sales : 0)}</td>
+            <td class="num">${fmtQty(node.qty)}</td>
+            <td class="num">${fmtPct(node.sales / grandSales)}</td>
+        </tr>`);
+        if (expandable && isOpen) for (const c of node.children) emit(c, depth + 1);
+    }
+    for (const r of tree) emit(r, 0);
+    document.querySelector("#decompTable tbody").innerHTML = acc.join("") || '<tr><td colspan="6" class="empty">No data.</td></tr>';
+    document.getElementById("decompMeta").textContent = tree.length + " " + DECOMP_DIMS[levels[0]].label.toLowerCase() + " row" + (tree.length === 1 ? "" : "s");
+}
+
+// ============================================================
 // DRILL: CUSTOMER
 // ============================================================
 function showCustomer(custNumber) {
@@ -4333,6 +4709,7 @@ function _newNode(key, label) {
 function allPostedDocs() {
     const list = [];
     for (const inv of state.invoices) {
+        if (!docInSnapshot(inv)) continue;
         list.push({ type: "Posted Sales Invoice", ileType: "Sales Invoice", sign: 1, countsTotal: true,
                     id: inv.id, number: inv.number,
                     customerNumber: inv.customerNumber, customerName: inv.customerName,
@@ -4340,6 +4717,7 @@ function allPostedDocs() {
                     lines: inv.salesInvoiceLines || [] });
     }
     for (const cm of state.creditMemos) {
+        if (!docInSnapshot(cm)) continue;
         list.push({ type: "Posted Sales CR/Adj Note", ileType: "Sales Credit Memo", sign: -1, countsTotal: true,
                     id: cm.id, number: cm.number,
                     customerNumber: cm.customerNumber, customerName: cm.customerName,
@@ -4347,6 +4725,7 @@ function allPostedDocs() {
                     lines: cm.salesCreditMemoLines || [] });
     }
     for (const s of state.shipments) {
+        if (!docInSnapshot(s)) continue;
         list.push({ type: "Posted Sales Shipment", ileType: "Sales Shipment", sign: 1, countsTotal: false,
                     id: s.id, number: s.number,
                     customerNumber: s.customerNumber, customerName: s.customerName,
@@ -4354,6 +4733,7 @@ function allPostedDocs() {
                     lines: s.salesShipmentLines || [] });
     }
     for (const r of state.returnReceipts) {
+        if (!docInSnapshot(r)) continue;
         list.push({ type: "Posted Sales Return Receipt", ileType: "Sales Return Receipt", sign: -1, countsTotal: false,
                     id: r.id, number: r.number,
                     customerNumber: r.customerNumber, customerName: r.customerName,
@@ -4739,6 +5119,11 @@ function wireEvents() {
         state.filters.customerName = opt ? (opt.dataset.name || "") : "";
         rebuildFiltered(); renderCurrentTab();
     });
+    document.getElementById("snapshotAsOf").addEventListener("change", e => {
+        const v = e.target.value;
+        state.snapshotAsOf = v ? new Date(v) : null;
+        rebuildFiltered(); renderCurrentTab();
+    });
     document.getElementById("itemFilterBox").addEventListener("change", e => {
         const v = (e.target.value || "").trim();
         // Validate against the datalist — accept only if it matches a real item code
@@ -4956,6 +5341,30 @@ function wireEvents() {
     document.addEventListener("keydown", e => {
         if (e.key === "Escape" && document.getElementById("topNModal").style.display === "flex") closeTopNModal();
     });
+
+    // Decomposition tree expand/collapse + Build tree button
+    document.querySelector("#decompTable tbody").addEventListener("click", e => {
+        const tr = e.target.closest("tr[data-decomp-key]"); if (!tr) return;
+        if (tr.dataset.expandable !== "1") return;
+        const key = tr.dataset.decompKey;
+        if (decompState.expanded.has(key)) decompState.expanded.delete(key);
+        else decompState.expanded.add(key);
+        renderDecomposition();
+    });
+    document.getElementById("decompApply").addEventListener("click", () => {
+        decompState.levels = [
+            document.getElementById("decompL1").value,
+            document.getElementById("decompL2").value,
+            document.getElementById("decompL3").value,
+            document.getElementById("decompL4").value,
+        ].filter(v => v);
+        decompState.expanded.clear();
+        renderDecomposition();
+    });
+
+    // Retention history filters
+    document.getElementById("rhStatusFilter").addEventListener("change", () => renderRetentionHistory());
+    document.getElementById("rhSearch").addEventListener("input", () => renderRetentionHistory());
 }
 
 // ============================================================
