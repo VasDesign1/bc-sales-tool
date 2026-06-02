@@ -888,33 +888,111 @@
 
             <!-- TAB: Sales Quote Overview -->
             <section data-tab-content="quotes" style="display:none;">
+                <div class="hint">
+                    Every chart on this page is clickable. Click any bar / slice / row to drill into the underlying quotes.
+                    <strong>Won</strong> = quote status <em>Accepted</em>.
+                    <strong>Lost</strong> = status <em>Lost</em>.
+                    <strong>Open / Sent</strong> = anything still pending (Draft / Open / Sent).
+                    <strong>Win rate</strong> = Won ÷ (Won + Lost).
+                </div>
+
                 <div class="kpi-row">
-                    <div class="kpi k-rev"><div class="label">Quote Sales (LCY)</div><div class="value" id="qKpiSales">—</div></div>
-                    <div class="kpi k-qty"><div class="label">No. of Sales Quotes</div><div class="value" id="qKpiCount">—</div></div>
+                    <div class="kpi k-rev"><div class="label">Total Quote Value</div><div class="value" id="qKpiSales">—</div></div>
+                    <div class="kpi k-qty"><div class="label">No. of Quotes</div><div class="value" id="qKpiCount">—</div></div>
                     <div class="kpi k-inv"><div class="label">Quote Quantity</div><div class="value" id="qKpiQty">—</div></div>
                     <div class="kpi k-gpp"><div class="label">Avg Quote Value</div><div class="value" id="qKpiAvg">—</div></div>
                 </div>
+
+                <div class="kpi-row">
+                    <div class="kpi k-gp"><div class="label">Won (Accepted)</div><div class="value" id="qKpiWon">—</div><div class="sub" id="qKpiWonSub"></div></div>
+                    <div class="kpi k-avg" style="background:linear-gradient(135deg,#b71c1c,#c62828);"><div class="label">Lost</div><div class="value" id="qKpiLost">—</div><div class="sub" id="qKpiLostSub"></div></div>
+                    <div class="kpi k-cust"><div class="label">Open / Sent / Follow-up</div><div class="value" id="qKpiOpen">—</div><div class="sub" id="qKpiOpenSub"></div></div>
+                    <div class="kpi k-loc"><div class="label">Win rate</div><div class="value" id="qKpiWinRate">—</div><div class="sub">Won ÷ (Won + Lost)</div></div>
+                </div>
+
                 <div class="chart-grid">
+                    <div class="card span-4">
+                        <div class="head">
+                            <h3>Quote status</h3>
+                            <div class="toggle" id="qStatusMetricToggle">
+                                <button data-metric="count" class="active">Count</button>
+                                <button data-metric="amount">$ Amount</button>
+                            </div>
+                        </div>
+                        <div class="chart-wrap" style="min-height:300px;"><canvas id="qStatusChart"></canvas></div>
+                    </div>
+                    <div class="card span-8">
+                        <div class="head">
+                            <h3>Quoting trend</h3>
+                            <div style="display:flex; gap:10px; align-items:center;">
+                                <select id="qTrendChartType" class="mini-select">
+                                    <option value="line" selected>Line</option>
+                                    <option value="area">Area</option>
+                                    <option value="bar">Bar</option>
+                                    <option value="column">Column</option>
+                                </select>
+                                <select id="qTrendMetric" class="mini-select">
+                                    <option value="amount" selected>$ Amount</option>
+                                    <option value="count">Count</option>
+                                </select>
+                                <div class="toggle" id="qTrendBucketToggle">
+                                    <button data-bucket="day">Day</button>
+                                    <button data-bucket="week">Week</button>
+                                    <button data-bucket="month" class="active">Month</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="chart-wrap" style="min-height:300px;"><canvas id="qTrendChart"></canvas></div>
+                    </div>
+
                     <div class="card span-6">
-                        <div class="head"><h3>Quote Amount by Salesperson</h3></div>
+                        <div class="head"><h3>Top 10 customers quoted</h3>
+                            <button class="more-btn" data-qtopn="customers">Show more…</button>
+                        </div>
+                        <div class="chart-wrap" style="min-height:340px;"><canvas id="qCustChart"></canvas></div>
+                    </div>
+                    <div class="card span-6">
+                        <div class="head"><h3>Top 10 items quoted</h3>
+                            <button class="more-btn" data-qtopn="items">Show more…</button>
+                        </div>
+                        <div class="chart-wrap" style="min-height:340px;"><canvas id="qItemChart"></canvas></div>
+                    </div>
+
+                    <div class="card span-6">
+                        <div class="head"><h3>By salesperson</h3></div>
                         <div class="chart-wrap" style="min-height:340px;"><canvas id="qSpChart"></canvas></div>
                     </div>
                     <div class="card span-6">
-                        <div class="head"><h3>Quote Amount by Item Category</h3></div>
+                        <div class="head"><h3>By item category</h3></div>
                         <div class="chart-wrap" style="min-height:340px;"><canvas id="qCatChart"></canvas></div>
                     </div>
+
+                    <div class="card span-6">
+                        <div class="head"><h3>By assigned user</h3><div class="meta" id="qUserMeta"></div></div>
+                        <div class="chart-wrap" style="min-height:320px;"><canvas id="qUserChart"></canvas></div>
+                    </div>
+                    <div class="card span-6">
+                        <div class="head"><h3>By campaign</h3><div class="meta" id="qCampaignMeta"></div></div>
+                        <div class="chart-wrap" style="min-height:320px;"><canvas id="qCampaignChart"></canvas></div>
+                    </div>
                 </div>
+
                 <div class="panel">
-                    <div class="panel-header"><h2>Sales Quotes by Customer</h2><div class="meta" id="qMeta"></div></div>
+                    <div class="panel-header">
+                        <h2>All quotes · click a row to drill into the customer</h2>
+                        <input type="text" class="search" id="qSearch" placeholder="Search customer / quote no / salesperson…">
+                        <div class="meta" id="qMeta"></div>
+                    </div>
                     <div class="table-scroll">
                         <table id="quotesTable">
                             <thead><tr>
-                                <th>Customer</th>
-                                <th>Salesperson</th>
-                                <th>Quote No</th>
-                                <th>Document Date</th>
-                                <th class="num">Quantity</th>
-                                <th class="num">Amount (excl. tax)</th>
+                                <th data-qsort="customer">Customer</th>
+                                <th data-qsort="salesperson">Salesperson</th>
+                                <th data-qsort="number">Quote No</th>
+                                <th data-qsort="date">Document Date</th>
+                                <th data-qsort="status">Status</th>
+                                <th class="num" data-qsort="qty">Qty</th>
+                                <th class="num" data-qsort="amount">Amount (excl. tax)</th>
                             </tr></thead>
                             <tbody></tbody>
                         </table>
@@ -2502,12 +2580,19 @@ function renderTopNTable() {
         "Qty":          { key: "qty", num: true },
         "% of Sales":   { key: "sales", num: true },
     };
+    // Per-def header keys (override the global headMap when a definition needs
+    // different column-to-row-field mappings)
+    const customKeys = def.headerKeys || {};
+    const customNum = def.headerNumeric || new Set();
     const head = document.getElementById("topNHead");
     head.innerHTML = def.columns.map(c => {
         if (c === "") return "<th></th>";
-        const m = headMap[c]; if (!m) return "<th>" + escapeHtml(c) + "</th>";
-        const arrow = topNState.sortKey === m.key ? (topNState.sortDir === "asc" ? " ▲" : " ▼") : "";
-        return `<th class="${m.num ? "num" : ""}" data-topn-sort="${m.key}">${escapeHtml(c)}${arrow}</th>`;
+        let key, num;
+        if (customKeys[c] != null) { key = customKeys[c]; num = customNum.has(c); }
+        else if (headMap[c]) { key = headMap[c].key; num = !!headMap[c].num; }
+        else return "<th>" + escapeHtml(c) + "</th>";
+        const arrow = topNState.sortKey === key ? (topNState.sortDir === "asc" ? " ▲" : " ▼") : "";
+        return `<th class="${num ? "num" : ""}" data-topn-sort="${key}">${escapeHtml(c)}${arrow}</th>`;
     }).join("");
     const tbody = document.querySelector("#topNTable tbody");
     const fmtRow = r => {
@@ -2559,6 +2644,17 @@ function renderTopNTable() {
                 <td class="num">${fmtInt(r.count)}</td>
                 <td class="num">${fmtMoneyFull(r.sales)}</td>
                 <td class="num">${fmtPct(r.sales / totalSales)}</td>
+                <td><button class="row-action-btn" data-key="${escapeAttr(r.key)}">${def.action.label}</button></td>
+            </tr>`;
+        if (dim === "quoteList") return `
+            <tr>
+                <td>${escapeHtml(r.number)}</td>
+                <td>${escapeHtml(r.customer)}</td>
+                <td>${escapeHtml(r.salesperson)}</td>
+                <td>${fmtDate(r.date)}</td>
+                <td><span class="badge ${quoteStatusBadgeClass(r.status)}">${escapeHtml(r.status || "")}</span></td>
+                <td class="num">${fmtQty(r.qty)}</td>
+                <td class="num">${fmtMoneyFull(r.amount)}</td>
                 <td><button class="row-action-btn" data-key="${escapeAttr(r.key)}">${def.action.label}</button></td>
             </tr>`;
         return "";
@@ -3089,20 +3185,112 @@ function renderEOM() {
 // ============================================================
 // SALES QUOTE OVERVIEW TAB
 // ============================================================
-function renderQuotes() {
-    renderFilterChips();
-    const quotes = (state.quotes || []).filter(q => {
+// ----- Quote helpers (optional BC fields, status semantics, drill modal) -----
+function getQuoteCampaign(q) {
+    return q.campaignNumber || q.campaignCode || q.campaignNo || q.campaign || null;
+}
+function getQuoteAssignedUser(q) {
+    return q.assignedUserID || q.assignedUserId || q.assignedUserCode || q.assignedUser || null;
+}
+function isQuoteWon(q)  { return (q.status || "") === "Accepted"; }
+function isQuoteLost(q) { return (q.status || "") === "Lost"; }
+function quoteAmount(q) {
+    let a = 0;
+    for (const ln of (q.salesQuoteLines || [])) {
+        if (!lineMatchesFilters(ln)) continue;
+        a += lineNetAmount(ln);
+    }
+    if (!a && q.totalAmountExcludingTax != null) a = num(q.totalAmountExcludingTax);
+    return a;
+}
+function quoteQty(q) {
+    let qty = 0;
+    for (const ln of (q.salesQuoteLines || [])) {
+        if (!lineMatchesFilters(ln)) continue;
+        qty += num(ln.quantity);
+    }
+    return qty;
+}
+function quoteStatusBadgeClass(s) {
+    const k = (s || "").toLowerCase();
+    if (k === "accepted") return "badge-paid";
+    if (k === "lost")     return "badge-other";
+    if (k === "open" || k === "sent") return "badge-open";
+    return "badge-draft";
+}
+function quoteToListRow(q) {
+    return {
+        key: q.id,
+        number: q.number || "",
+        customer: q.customerName || q.customerNumber || "(unknown)",
+        customerNumber: q.customerNumber || "",
+        salesperson: q.salesperson || "(unassigned)",
+        date: q.documentDate || q.invoiceDate || "",
+        status: q.status || "(unknown)",
+        qty: quoteQty(q),
+        amount: quoteAmount(q),
+        campaign: getQuoteCampaign(q) || "",
+        assignedUser: getQuoteAssignedUser(q) || "",
+    };
+}
+function openQuoteList(predicate, title) {
+    const filtered = filteredQuotes().filter(predicate);
+    state.quoteListCache = filtered.map(quoteToListRow);
+    TOPN_DEFS.quoteList = {
+        title: title,
+        get: () => state.quoteListCache || [],
+        columns: ["Quote No", "Customer", "Salesperson", "Document Date", "Status", "Qty", "Amount", ""],
+        sortKey: "amount",
+        headerKeys: {
+            "Quote No": "number",
+            "Customer": "customer",
+            "Salesperson": "salesperson",
+            "Document Date": "date",
+            "Status": "status",
+            "Qty": "qty",
+            "Amount": "amount",
+        },
+        headerNumeric: new Set(["Qty", "Amount"]),
+        action: {
+            label: "Drill customer",
+            run: r => { closeTopNModal(); if (r.customerNumber) showCustomer(r.customerNumber); }
+        },
+    };
+    openTopNModal("quoteList");
+}
+function filteredQuotes() {
+    return (state.quotes || []).filter(q => {
         if (state.filters.salesperson && (q.salesperson || "(unassigned)") !== state.filters.salesperson) return false;
+        if (state.filters.customer && (q.customerNumber || "") !== state.filters.customer) return false;
         if (state.filters.location) {
             return (q.salesQuoteLines || []).some(ln => locationCode(ln.locationId) === state.filters.location);
         }
         return true;
     });
+}
 
-    // KPIs
+function renderQuotes() {
+    renderFilterChips();
+    const quotes = filteredQuotes();
+    state.quoteTrendBucket    = state.quoteTrendBucket    || "month";
+    state.quoteTrendChartType = state.quoteTrendChartType || "line";
+    state.quoteTrendMetric    = state.quoteTrendMetric    || "amount";
+    state.quoteStatusMetric   = state.quoteStatusMetric   || "count";
+    state.quoteSort           = state.quoteSort           || { key: "amount", dir: "desc" };
+    state.quoteSearch         = state.quoteSearch         || "";
+
+    // Detect optional fields
+    const hasCampaign = quotes.some(q => getQuoteCampaign(q));
+    const hasUser     = quotes.some(q => getQuoteAssignedUser(q));
+
+    // Aggregations
     let totalAmount = 0, totalQty = 0;
-    const bySp = new Map(), byCat = new Map(), byCust = new Map();
-    const rows = [];
+    let wonCount = 0, lostCount = 0, openCount = 0;
+    let wonAmount = 0, lostAmount = 0, openAmount = 0;
+    const bySp = new Map(), byCat = new Map(), byCust = new Map(), byItem = new Map();
+    const byStatus = new Map(), byCampaign = new Map(), byUser = new Map();
+    const byMonth = new Map(), byWeek = new Map(), byDay = new Map();
+
     for (const q of quotes) {
         let qAmount = 0, qQty = 0;
         for (const ln of (q.salesQuoteLines || [])) {
@@ -3111,76 +3299,317 @@ function renderQuotes() {
             const ql = num(ln.quantity);
             qAmount += a; qQty += ql;
             const itemNo = ln.lineObjectNumber || ln.itemId || "";
-            const cat = state.itemCategory.get(itemNo) || "(no category)";
-            byCat.set(cat, (byCat.get(cat) || 0) + a);
+            const cat = itemNo ? (state.itemCategory.get(itemNo) || "(no category)") : "(non-item)";
+            const catCur = byCat.get(cat) || { name: cat, amount: 0 };
+            catCur.amount += a;
+            byCat.set(cat, catCur);
+            if (itemNo) {
+                const itemCur = byItem.get(itemNo) || { key: itemNo, number: itemNo, description: ln.description || "", amount: 0, qty: 0 };
+                itemCur.amount += a; itemCur.qty += ql;
+                if (ln.description) itemCur.description = ln.description;
+                byItem.set(itemNo, itemCur);
+            }
         }
         if (!qAmount && q.totalAmountExcludingTax != null) qAmount = num(q.totalAmountExcludingTax);
         totalAmount += qAmount; totalQty += qQty;
+
         const sp = q.salesperson || "(unassigned)";
-        bySp.set(sp, (bySp.get(sp) || 0) + qAmount);
+        const spCur = bySp.get(sp) || { name: sp, amount: 0, count: 0 };
+        spCur.amount += qAmount; spCur.count += 1;
+        bySp.set(sp, spCur);
+
         const custKey = q.customerNumber || q.customerId || "(unknown)";
-        const custCur = byCust.get(custKey) || { customer: q.customerName || custKey, amount: 0, count: 0 };
+        const custCur = byCust.get(custKey) || { customer: q.customerName || custKey, customerNumber: custKey, amount: 0, count: 0 };
         custCur.amount += qAmount; custCur.count += 1;
         byCust.set(custKey, custCur);
-        rows.push({
-            customer: q.customerName || q.customerNumber || "(unknown)",
-            salesperson: sp,
-            number: q.number || "",
-            documentDate: q.documentDate || q.invoiceDate || "",
-            qty: qQty,
-            amount: qAmount,
-        });
+
+        const status = q.status || "(unknown)";
+        const statusCur = byStatus.get(status) || { name: status, count: 0, amount: 0 };
+        statusCur.count += 1; statusCur.amount += qAmount;
+        byStatus.set(status, statusCur);
+        if (status === "Accepted")      { wonCount++;  wonAmount  += qAmount; }
+        else if (status === "Lost")     { lostCount++; lostAmount += qAmount; }
+        else                            { openCount++; openAmount += qAmount; }
+
+        const camp = getQuoteCampaign(q);
+        if (camp) {
+            const cur = byCampaign.get(camp) || { name: camp, amount: 0, count: 0 };
+            cur.amount += qAmount; cur.count += 1;
+            byCampaign.set(camp, cur);
+        }
+        const user = getQuoteAssignedUser(q);
+        if (user) {
+            const cur = byUser.get(user) || { name: user, amount: 0, count: 0 };
+            cur.amount += qAmount; cur.count += 1;
+            byUser.set(user, cur);
+        }
+
+        const dateStr = q.documentDate || q.invoiceDate || "";
+        if (dateStr) {
+            const mk = bucketKey(dateStr, "month");
+            const wk = bucketKey(dateStr, "week");
+            const dk = bucketKey(dateStr, "day");
+            for (const [map, key] of [[byMonth, mk], [byWeek, wk], [byDay, dk]]) {
+                const cur = map.get(key) || { key, amount: 0, count: 0 };
+                cur.amount += qAmount; cur.count += 1;
+                map.set(key, cur);
+            }
+        }
     }
 
+    // KPIs
     document.getElementById("qKpiSales").textContent = fmtMoneyFull(totalAmount);
     document.getElementById("qKpiCount").textContent = fmtInt(quotes.length);
     document.getElementById("qKpiQty").textContent   = fmtInt(totalQty);
     document.getElementById("qKpiAvg").textContent   = quotes.length ? fmtMoneyFull(totalAmount / quotes.length) : "—";
+    document.getElementById("qKpiWon").textContent   = fmtInt(wonCount);
+    document.getElementById("qKpiWonSub").textContent = wonCount ? fmtMoneyFull(wonAmount) : "";
+    document.getElementById("qKpiLost").textContent  = fmtInt(lostCount);
+    document.getElementById("qKpiLostSub").textContent = lostCount ? fmtMoneyFull(lostAmount) : "";
+    document.getElementById("qKpiOpen").textContent  = fmtInt(openCount);
+    document.getElementById("qKpiOpenSub").textContent = openCount ? fmtMoneyFull(openAmount) : "";
+    const decided = wonCount + lostCount;
+    document.getElementById("qKpiWinRate").textContent = decided ? fmtPct(wonCount / decided) : "—";
 
-    // Salesperson chart
+    // ---------- Quote status doughnut ----------
+    destroyChart("qStatus");
+    const statusRows = [...byStatus.values()];
+    const statusPalette = statusRows.map(r => {
+        const kk = (r.name || "").toLowerCase();
+        if (kk === "accepted") return "#2e7d32";
+        if (kk === "lost")     return "#c62828";
+        if (kk === "sent" || kk === "open") return "#e65100";
+        if (kk === "draft")    return "#607d8b";
+        return "#6a1b9a";
+    });
+    const statusValueFn = state.quoteStatusMetric === "amount" ? (r => r.amount) : (r => r.count);
+    const ctxQs = document.getElementById("qStatusChart").getContext("2d");
+    state.charts.qStatus = new Chart(ctxQs, {
+        type: "doughnut",
+        data: { labels: statusRows.map(r => r.name), datasets: [{ data: statusRows.map(statusValueFn), backgroundColor: statusPalette, borderWidth: 0 }] },
+        options: chartBase({ cutout: "62%",
+            plugins: { legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } },
+                       tooltip: { callbacks: { label: c => {
+                           const r = statusRows[c.dataIndex];
+                           return r.name + ": " + fmtInt(r.count) + " quotes · " + fmtMoneyFull(r.amount);
+                       } } } },
+            onClick: (_, els) => {
+                if (!els.length) return;
+                const r = statusRows[els[0].index];
+                openQuoteList(q => (q.status || "(unknown)") === r.name, "Quotes with status: " + r.name);
+            }
+        })
+    });
+
+    // ---------- Quoting trend ----------
+    destroyChart("qTrend");
+    const map = state.quoteTrendBucket === "day" ? byDay : state.quoteTrendBucket === "week" ? byWeek : byMonth;
+    const buckets = [...map.values()].sort((a, b) => a.key < b.key ? -1 : 1);
+    const trendData = buckets.map(b => state.quoteTrendMetric === "amount" ? b.amount : b.count);
+    const tCt = state.quoteTrendChartType;
+    let chartType = tCt === "column" ? "bar" : (tCt === "area" ? "line" : tCt);
+    const fill = (tCt === "area" || tCt === "line");
+    const dataset = (chartType === "bar")
+        ? { label: state.quoteTrendMetric === "amount" ? "Amount" : "Count", data: trendData, backgroundColor: "#3f51b5", borderRadius: 4 }
+        : { label: state.quoteTrendMetric === "amount" ? "Amount" : "Count", data: trendData, borderColor: "#3f51b5",
+            backgroundColor: tCt === "area" ? "rgba(63,81,181,0.20)" : "rgba(63,81,181,0.06)",
+            fill: fill, tension: 0.3, pointRadius: 3, pointHoverRadius: 6, borderWidth: 2 };
+    const ctxQt = document.getElementById("qTrendChart").getContext("2d");
+    state.charts.qTrend = new Chart(ctxQt, {
+        type: chartType,
+        data: { labels: buckets.map(b => b.key), datasets: [dataset] },
+        options: chartBase({
+            plugins: { legend: { display: false },
+                       tooltip: { callbacks: { label: c => {
+                           const b = buckets[c.dataIndex];
+                           return state.quoteTrendMetric === "amount"
+                               ? fmtMoneyFull(b.amount) + " · " + b.count + " quotes"
+                               : fmtInt(b.count) + " quotes · " + fmtMoneyFull(b.amount);
+                       } } } },
+            scales: { y: { ticks: { callback: v => state.quoteTrendMetric === "amount" ? fmtMoney(v) : fmtInt(v) } } },
+            onClick: (_, els) => {
+                if (!els.length) return;
+                const b = buckets[els[0].index];
+                openQuoteList(q => bucketKey(q.documentDate || q.invoiceDate || "", state.quoteTrendBucket) === b.key, "Quotes in " + b.key);
+            }
+        })
+    });
+
+    // ---------- Top 10 customers ----------
+    destroyChart("qCust");
+    const custTop = [...byCust.values()].sort((a, b) => b.amount - a.amount).slice(0, 10);
+    const ctxQc = document.getElementById("qCustChart").getContext("2d");
+    state.charts.qCust = new Chart(ctxQc, {
+        type: "bar",
+        data: { labels: custTop.map(c => truncate(c.customer, 28)),
+                datasets: [{ data: custTop.map(c => c.amount), backgroundColor: custTop.map((_, i) => barShade("#3f51b5", i / Math.max(custTop.length, 1))), borderRadius: 4 }] },
+        options: chartBase({
+            indexAxis: "y",
+            plugins: { legend: { display: false },
+                       tooltip: { callbacks: { label: c => fmtMoneyFull(c.parsed.x) + " · " + custTop[c.dataIndex].count + " quotes" } } },
+            scales: { x: { ticks: { callback: v => fmtMoney(v) } } },
+            onClick: (_, els) => {
+                if (!els.length) return;
+                const c = custTop[els[0].index];
+                openQuoteList(q => (q.customerNumber || "") === c.customerNumber, "Quotes for " + c.customer);
+            }
+        })
+    });
+
+    // ---------- Top 10 items ----------
+    destroyChart("qItem");
+    const itemTop = [...byItem.values()].sort((a, b) => b.amount - a.amount).slice(0, 10);
+    const ctxQi = document.getElementById("qItemChart").getContext("2d");
+    state.charts.qItem = new Chart(ctxQi, {
+        type: "bar",
+        data: { labels: itemTop.map(it => truncate((it.number ? it.number + " — " : "") + (it.description || ""), 30)),
+                datasets: [{ data: itemTop.map(it => it.amount), backgroundColor: itemTop.map((_, i) => barShade("#00897b", i / Math.max(itemTop.length, 1))), borderRadius: 4 }] },
+        options: chartBase({
+            indexAxis: "y",
+            plugins: { legend: { display: false },
+                       tooltip: { callbacks: { label: c => fmtMoneyFull(c.parsed.x) + " · qty " + fmtInt(itemTop[c.dataIndex].qty) } } },
+            scales: { x: { ticks: { callback: v => fmtMoney(v) } } },
+            onClick: (_, els) => {
+                if (!els.length) return;
+                const it = itemTop[els[0].index];
+                openQuoteList(q => (q.salesQuoteLines || []).some(ln => (ln.lineObjectNumber || ln.itemId || "") === it.number),
+                    "Quotes containing " + (it.number + (it.description ? " — " + it.description : "")));
+            }
+        })
+    });
+
+    // ---------- By salesperson ----------
     destroyChart("qSp");
-    const spRows = [...bySp.entries()].map(([k, v]) => ({ name: k, value: v })).sort((a, b) => b.value - a.value);
+    const spRows = [...bySp.values()].sort((a, b) => b.amount - a.amount);
     const ctxSp = document.getElementById("qSpChart").getContext("2d");
     state.charts.qSp = new Chart(ctxSp, {
         type: "bar",
         data: { labels: spRows.map(r => r.name),
-                datasets: [{ data: spRows.map(r => r.value), backgroundColor: spRows.map((_, i) => barShade("#3f51b5", i / Math.max(spRows.length, 1))), borderRadius: 4 }] },
+                datasets: [{ data: spRows.map(r => r.amount), backgroundColor: spRows.map((_, i) => barShade("#00acc1", i / Math.max(spRows.length, 1))), borderRadius: 4 }] },
         options: chartBase({
             indexAxis: "y",
-            plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => fmtMoneyFull(c.parsed.x) } } },
-            scales: { x: { ticks: { callback: v => fmtMoney(v) } } }
+            plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => fmtMoneyFull(c.parsed.x) + " · " + spRows[c.dataIndex].count + " quotes" } } },
+            scales: { x: { ticks: { callback: v => fmtMoney(v) } } },
+            onClick: (_, els) => {
+                if (!els.length) return;
+                const r = spRows[els[0].index];
+                openQuoteList(q => (q.salesperson || "(unassigned)") === r.name, "Quotes by salesperson " + r.name);
+            }
         })
     });
 
-    // Category chart
+    // ---------- By category ----------
     destroyChart("qCat");
-    const catRows = [...byCat.entries()].map(([k, v]) => ({ name: k, value: v })).filter(r => r.value > 0).sort((a, b) => b.value - a.value).slice(0, 20);
+    const catRows = [...byCat.values()].filter(r => r.amount > 0).sort((a, b) => b.amount - a.amount).slice(0, 20);
     const ctxCat = document.getElementById("qCatChart").getContext("2d");
     state.charts.qCat = new Chart(ctxCat, {
         type: "bar",
         data: { labels: catRows.map(r => truncate(r.name, 30)),
-                datasets: [{ data: catRows.map(r => r.value), backgroundColor: catRows.map((_, i) => barShade("#00897b", i / Math.max(catRows.length, 1))), borderRadius: 4 }] },
+                datasets: [{ data: catRows.map(r => r.amount), backgroundColor: catRows.map((_, i) => barShade("#fb8c00", i / Math.max(catRows.length, 1))), borderRadius: 4 }] },
         options: chartBase({
             indexAxis: "y",
             plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => fmtMoneyFull(c.parsed.x) } } },
-            scales: { x: { ticks: { callback: v => fmtMoney(v) } } }
+            scales: { x: { ticks: { callback: v => fmtMoney(v) } } },
+            onClick: (_, els) => {
+                if (!els.length) return;
+                const r = catRows[els[0].index];
+                openQuoteList(q => (q.salesQuoteLines || []).some(ln => {
+                    const itemNo = ln.lineObjectNumber || ln.itemId || "";
+                    const cat = itemNo ? (state.itemCategory.get(itemNo) || "(no category)") : "(non-item)";
+                    return cat === r.name;
+                }), "Quotes touching category " + r.name);
+            }
         })
     });
 
-    // Table
-    rows.sort((a, b) => b.amount - a.amount);
+    // ---------- By assigned user ----------
+    destroyChart("qUser");
+    const userMetaEl = document.getElementById("qUserMeta");
+    const ctxQu = document.getElementById("qUserChart").getContext("2d");
+    if (!hasUser) {
+        userMetaEl.textContent = "Field not exposed by this BC tenant";
+        ctxQu.clearRect(0, 0, ctxQu.canvas.width, ctxQu.canvas.height);
+    } else {
+        userMetaEl.textContent = byUser.size + " user" + (byUser.size === 1 ? "" : "s");
+        const userRows = [...byUser.values()].sort((a, b) => b.amount - a.amount);
+        state.charts.qUser = new Chart(ctxQu, {
+            type: "bar",
+            data: { labels: userRows.map(r => r.name),
+                    datasets: [{ data: userRows.map(r => r.amount), backgroundColor: userRows.map((_, i) => barShade("#6a3ab2", i / Math.max(userRows.length, 1))), borderRadius: 4 }] },
+            options: chartBase({
+                indexAxis: "y",
+                plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => fmtMoneyFull(c.parsed.x) + " · " + userRows[c.dataIndex].count + " quotes" } } },
+                scales: { x: { ticks: { callback: v => fmtMoney(v) } } },
+                onClick: (_, els) => {
+                    if (!els.length) return;
+                    const r = userRows[els[0].index];
+                    openQuoteList(q => getQuoteAssignedUser(q) === r.name, "Quotes by user " + r.name);
+                }
+            })
+        });
+    }
+
+    // ---------- By campaign ----------
+    destroyChart("qCampaign");
+    const campMetaEl = document.getElementById("qCampaignMeta");
+    const ctxQcp = document.getElementById("qCampaignChart").getContext("2d");
+    if (!hasCampaign) {
+        campMetaEl.textContent = "Field not exposed by this BC tenant";
+        ctxQcp.clearRect(0, 0, ctxQcp.canvas.width, ctxQcp.canvas.height);
+    } else {
+        campMetaEl.textContent = byCampaign.size + " campaign" + (byCampaign.size === 1 ? "" : "s");
+        const campRows = [...byCampaign.values()].sort((a, b) => b.amount - a.amount);
+        state.charts.qCampaign = new Chart(ctxQcp, {
+            type: "bar",
+            data: { labels: campRows.map(r => r.name),
+                    datasets: [{ data: campRows.map(r => r.amount), backgroundColor: campRows.map((_, i) => barShade("#c2185b", i / Math.max(campRows.length, 1))), borderRadius: 4 }] },
+            options: chartBase({
+                indexAxis: "y",
+                plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => fmtMoneyFull(c.parsed.x) + " · " + campRows[c.dataIndex].count + " quotes" } } },
+                scales: { x: { ticks: { callback: v => fmtMoney(v) } } },
+                onClick: (_, els) => {
+                    if (!els.length) return;
+                    const r = campRows[els[0].index];
+                    openQuoteList(q => getQuoteCampaign(q) === r.name, "Quotes in campaign " + r.name);
+                }
+            })
+        });
+    }
+
+    // ---------- Detail table ----------
+    let tblRows = quotes.map(quoteToListRow);
+    if (state.quoteSearch) {
+        const s = state.quoteSearch.toLowerCase();
+        tblRows = tblRows.filter(r => (r.customer + " " + r.number + " " + r.salesperson + " " + r.status).toLowerCase().includes(s));
+    }
+    const sk = state.quoteSort.key, dirMul = state.quoteSort.dir === "asc" ? 1 : -1;
+    tblRows.sort((a, b) => {
+        let av = a[sk], bv = b[sk];
+        if (av == null) av = (typeof bv === "number") ? 0 : "";
+        if (bv == null) bv = (typeof av === "number") ? 0 : "";
+        if (typeof av === "number" && typeof bv === "number") return (av - bv) * dirMul;
+        return String(av).localeCompare(String(bv)) * dirMul;
+    });
     const tbody = document.querySelector("#quotesTable tbody");
-    tbody.innerHTML = rows.slice(0, 2000).map(r => `
-        <tr>
+    tbody.innerHTML = tblRows.slice(0, 2000).map(r => `
+        <tr class="clickable" data-cust="${escapeAttr(r.customerNumber)}">
             <td>${escapeHtml(r.customer)}</td>
             <td>${escapeHtml(r.salesperson)}</td>
             <td>${escapeHtml(r.number)}</td>
-            <td>${fmtDate(r.documentDate)}</td>
-            <td class="num">${fmtInt(r.qty)}</td>
+            <td>${fmtDate(r.date)}</td>
+            <td><span class="badge ${quoteStatusBadgeClass(r.status)}">${escapeHtml(r.status)}</span></td>
+            <td class="num">${fmtQty(r.qty)}</td>
             <td class="num">${fmtMoneyFull(r.amount)}</td>
         </tr>
-    `).join("") || '<tr><td colspan="6" class="empty">No quotes loaded for this period.</td></tr>';
-    document.getElementById("qMeta").textContent = quotes.length + " quote" + (quotes.length === 1 ? "" : "s");
+    `).join("") || '<tr><td colspan="7" class="empty">No quotes loaded for this period.</td></tr>';
+    document.getElementById("qMeta").textContent = tblRows.length + " of " + quotes.length + " quote" + (quotes.length === 1 ? "" : "s");
+    // Sort indicators
+    document.querySelectorAll("#quotesTable th[data-qsort]").forEach(th => {
+        th.classList.remove("sorted-asc", "sorted-desc");
+        if (th.dataset.qsort === state.quoteSort.key) {
+            th.classList.add(state.quoteSort.dir === "asc" ? "sorted-asc" : "sorted-desc");
+        }
+    });
 }
 
 // ============================================================
@@ -5558,6 +5987,108 @@ function wireEvents() {
     document.querySelector("#retentionTable tbody").addEventListener("click", e => {
         const tr = e.target.closest("tr.clickable"); if (!tr) return;
         if (tr.dataset.mk) openCustomersInMonth(tr.dataset.mk, monthLabelFromKey(tr.dataset.mk));
+    });
+
+    // -------- Sales Quote Overview controls --------
+    document.querySelectorAll("#qStatusMetricToggle button").forEach(btn => {
+        btn.addEventListener("click", () => {
+            document.querySelectorAll("#qStatusMetricToggle button").forEach(b => b.classList.remove("active"));
+            btn.classList.add("active");
+            state.quoteStatusMetric = btn.dataset.metric;
+            renderQuotes();
+        });
+    });
+    document.getElementById("qTrendChartType").addEventListener("change", e => { state.quoteTrendChartType = e.target.value; renderQuotes(); });
+    document.getElementById("qTrendMetric").addEventListener("change",    e => { state.quoteTrendMetric    = e.target.value; renderQuotes(); });
+    document.querySelectorAll("#qTrendBucketToggle button").forEach(btn => {
+        btn.addEventListener("click", () => {
+            document.querySelectorAll("#qTrendBucketToggle button").forEach(b => b.classList.remove("active"));
+            btn.classList.add("active");
+            state.quoteTrendBucket = btn.dataset.bucket;
+            renderQuotes();
+        });
+    });
+    // Quote "Show more…" buttons (top customers / items)
+    document.querySelectorAll("[data-qtopn]").forEach(btn => {
+        btn.addEventListener("click", () => {
+            const which = btn.dataset.qtopn;
+            const quotes = filteredQuotes();
+            if (which === "customers") {
+                const byCust = new Map();
+                for (const q of quotes) {
+                    const k = q.customerNumber || q.customerId || "(unknown)";
+                    const cur = byCust.get(k) || { customer: q.customerName || k, customerNumber: k, amount: 0, count: 0 };
+                    cur.amount += quoteAmount(q); cur.count += 1;
+                    byCust.set(k, cur);
+                }
+                const rows = [...byCust.values()].sort((a, b) => b.amount - a.amount);
+                state.quoteListCache = rows.map(c => ({
+                    key: c.customerNumber, number: "", customer: c.customer, customerNumber: c.customerNumber,
+                    salesperson: "", date: "", status: c.count + " quote" + (c.count === 1 ? "" : "s"),
+                    qty: 0, amount: c.amount,
+                }));
+                TOPN_DEFS.quoteList = {
+                    title: "All customers quoted (" + rows.length + ")",
+                    get: () => state.quoteListCache,
+                    columns: ["Customer No", "Customer", "Quotes", "Amount", ""],
+                    sortKey: "amount",
+                    headerKeys: { "Customer No": "customerNumber", "Customer": "customer", "Quotes": "status", "Amount": "amount" },
+                    headerNumeric: new Set(["Amount"]),
+                    action: { label: "Quotes for this customer", run: r => {
+                        closeTopNModal();
+                        openQuoteList(q => (q.customerNumber || "") === r.customerNumber, "Quotes for " + r.customer);
+                    } },
+                };
+                openTopNModal("quoteList");
+            } else if (which === "items") {
+                const byItem = new Map();
+                for (const q of quotes) {
+                    for (const ln of (q.salesQuoteLines || [])) {
+                        if (!lineMatchesFilters(ln)) continue;
+                        const itemNo = ln.lineObjectNumber || ln.itemId || "";
+                        if (!itemNo) continue;
+                        const cur = byItem.get(itemNo) || { key: itemNo, number: itemNo, description: ln.description || "", amount: 0, qty: 0 };
+                        cur.amount += lineNetAmount(ln); cur.qty += num(ln.quantity);
+                        if (ln.description) cur.description = ln.description;
+                        byItem.set(itemNo, cur);
+                    }
+                }
+                const rows = [...byItem.values()].sort((a, b) => b.amount - a.amount);
+                state.quoteListCache = rows.map(it => ({
+                    key: it.number, number: it.number, customer: it.description,
+                    customerNumber: "", salesperson: "", date: "", status: "",
+                    qty: it.qty, amount: it.amount,
+                }));
+                TOPN_DEFS.quoteList = {
+                    title: "All items quoted (" + rows.length + ")",
+                    get: () => state.quoteListCache,
+                    columns: ["Item No", "Description", "Qty", "Amount", ""],
+                    sortKey: "amount",
+                    headerKeys: { "Item No": "number", "Description": "customer", "Qty": "qty", "Amount": "amount" },
+                    headerNumeric: new Set(["Qty", "Amount"]),
+                    action: { label: "Quotes for this item", run: r => {
+                        closeTopNModal();
+                        openQuoteList(q => (q.salesQuoteLines || []).some(ln => (ln.lineObjectNumber || ln.itemId || "") === r.number),
+                            "Quotes containing item " + r.number);
+                    } },
+                };
+                openTopNModal("quoteList");
+            }
+        });
+    });
+    // Quote sort + search + row click
+    document.querySelectorAll("#quotesTable th[data-qsort]").forEach(th => {
+        th.addEventListener("click", () => {
+            const k = th.dataset.qsort;
+            if (state.quoteSort.key === k) state.quoteSort.dir = state.quoteSort.dir === "asc" ? "desc" : "asc";
+            else { state.quoteSort.key = k; state.quoteSort.dir = (k === "customer" || k === "salesperson" || k === "number" || k === "status" || k === "date") ? "asc" : "desc"; }
+            renderQuotes();
+        });
+    });
+    document.getElementById("qSearch").addEventListener("input", e => { state.quoteSearch = e.target.value; renderQuotes(); });
+    document.querySelector("#quotesTable tbody").addEventListener("click", e => {
+        const tr = e.target.closest("tr.clickable"); if (!tr) return;
+        if (tr.dataset.cust) showCustomer(tr.dataset.cust);
     });
     // Pareto dimension checkboxes — re-render when any toggled
     document.querySelectorAll("input[data-pdim]").forEach(cb => {
