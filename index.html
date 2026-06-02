@@ -1677,7 +1677,7 @@ const BC_API_URL  = BC_API_BASE + "/api/v2.0";
 const BC_ODATA_URL = BC_API_BASE + "/ODataV4";
 const BC_SCOPES   = ["https://api.businesscentral.dynamics.com/.default"];
 
-let bcMsalInstance = null, bcAccessToken = null, bcCompanyId = null;
+let bcMsalInstance = null, bcAccessToken = null, bcCompanyId = null, bcCompanyInternalName = null, bcODataMetadata = null;
 
 function initMsal() {
     if (bcMsalInstance) return;
@@ -1728,10 +1728,92 @@ async function bcGetCompanyId() {
     const data = await bcFetch(BC_API_URL + "/companies");
     const companies = data.value || [];
     if (!companies.length) throw new Error("No companies found.");
-    let match = companies.find(c => (c.displayName || c.name || "").toLowerCase() === BC_CONFIG.companyName.toLowerCase());
-    if (!match) match = companies[0];
+    const target = BC_CONFIG.companyName.toLowerCase();
+    let match = companies.find(c => (c.name || "").toLowerCase() === target)
+             || companies.find(c => (c.displayName || "").toLowerCase() === target)
+             || companies[0];
     bcCompanyId = match.id;
+    bcCompanyInternalName = match.name || match.displayName;
     return bcCompanyId;
+}
+async function bcGetCompanyInternalName() {
+    if (bcCompanyInternalName) return bcCompanyInternalName;
+    await bcGetCompanyId();
+    return bcCompanyInternalName;
+}
+
+// ============================================================
+// OData $metadata discovery — calendar-viewer pattern.
+// Sales Quote / Blanket Sales Order entities are published under
+// tenant-specific names. Fetch $metadata once, list every EntitySet,
+// find the one matching the desired hints + required fields, and use
+// the real published name in the OData URL.
+// ============================================================
+async function bcGetODataMetadata() {
+    if (bcODataMetadata) return bcODataMetadata;
+    const token = await bcGetToken();
+    const resp = await fetch(BC_ODATA_URL + "/$metadata", { headers: { "Authorization": "Bearer " + token } });
+    if (!resp.ok) throw new Error("OData $metadata fetch " + resp.status);
+    const xml = await resp.text();
+    const entitySets = {};
+    const setRe = /<EntitySet\s+Name="([^"]+)"\s+EntityType="[^"]*?\.([^"]+)"/g;
+    let m;
+    while ((m = setRe.exec(xml)) !== null) entitySets[m[1]] = m[2];
+    const entityTypes = {};
+    const typeBlockRe = /<EntityType\s+Name="([^"]+)"[^>]*>([\s\S]*?)<\/EntityType>/g;
+    while ((m = typeBlockRe.exec(xml)) !== null) {
+        const propRe = /<Property\s+Name="([^"]+)"/g;
+        const fields = []; let p;
+        while ((p = propRe.exec(m[2])) !== null) fields.push(p[1]);
+        entityTypes[m[1]] = fields;
+    }
+    bcODataMetadata = { entitySets, entityTypes };
+    return bcODataMetadata;
+}
+function bcFindField(names, patterns) {
+    for (const p of patterns) { const hit = names.find(n => p.test(n)); if (hit) return hit; }
+    return null;
+}
+// kind: "quote" | "blanket"
+async function bcDiscoverSalesEntity(kind) {
+    const md = await bcGetODataMetadata();
+    const allSets = Object.keys(md.entitySets);
+    const excluded = /^purchase|^vendor|^item|^job|^journal|^ledger|^chart|^contact|price.?list|^accountant|^company|^segment|^dimension|^stockkeep|template|^bank|^res.?ledger|^fa.?ledger|^cust.?ledger|workflow/i;
+    const included = /sales|quote|blanket|document|pipeline|opportunity|dashboard/i;
+    const docTypeNeeded = kind === "blanket" ? /blanket/i : /quote/i;
+    const docTypeValue = kind === "blanket" ? "Blanket Order" : "Quote";
+    const CUST_NO = [/^sell.?to.?cust.*no/i, /^sell.?to.?customer.*no/i, /^customer.?no$/i, /customer.?no/i, /customerNumber/i];
+    const CUST_NAME = [/^sell.?to.?cust.*name/i, /^sell.?to.?customer.*name/i, /^customer.?name$/i, /customer.?name/i, /customerName/i];
+    const AMOUNT = [/^amount.*excl/i, /^total.*amount.*excl/i, /^total.*excl/i, /excl.?gst/i, /excl.?vat/i, /^amount$/i, /totalAmountExcl/i];
+    const CAMPAIGN = [/^campaign.?no/i, /campaign.?no/i, /^campaign$/i, /campaignNumber/i];
+    const ASSIGNED = [/^assigned.?user.?id/i, /assigned.?user/i, /assignedUserId/i];
+    const DOC_TYPE = [/^document.?type$/i, /^doc.?type$/i, /^documentType$/i];
+    const DOC_DATE = [/^document.?date$/i, /documentDate/i, /^order.?date$/i, /orderDate/i];
+    const NO_FIELD = [/^no$/i, /^number$/i];
+    const candidates = allSets.filter(n => included.test(n) && !excluded.test(n));
+    for (const candidate of candidates) {
+        const typeName = md.entitySets[candidate];
+        const fields = md.entityTypes[typeName] || [];
+        if (!fields.length) continue;
+        const fCustNo = bcFindField(fields, CUST_NO);
+        const fCustName = bcFindField(fields, CUST_NAME);
+        const fAmount = bcFindField(fields, AMOUNT);
+        const fCampaign = bcFindField(fields, CAMPAIGN);
+        const fDocType = bcFindField(fields, DOC_TYPE);
+        const fDocDate = bcFindField(fields, DOC_DATE);
+        const fAssigned = bcFindField(fields, ASSIGNED);
+        const fNo = bcFindField(fields, NO_FIELD);
+        if (!fCustNo || !fCustName || !fAmount) continue;
+        const nameMatchesKind = docTypeNeeded.test(candidate);
+        if (!nameMatchesKind && !fDocType) continue;
+        return {
+            entity: candidate,
+            fields,
+            fCustNo, fCustName, fAmount, fCampaign, fAssigned, fDocType, fDocDate, fNo,
+            docTypeValue, nameMatchesKind,
+        };
+    }
+    return null;
 }
 function updateBCProgress(label, detail) {
     const el = document.getElementById("bcProgressText");
@@ -1832,75 +1914,105 @@ async function fetchSalesQuotes(fromISO, toISO) {
     catch (e) { console.warn("Quotes fetch failed:", e.message); return []; }
 }
 
-// Blanket Sales Orders aren't a documented v2.0 REST endpoint. Try both
-// REST and OData v4 (and a couple of common entity-name variations).
+// Blanket Sales Orders aren't a documented v2.0 REST endpoint. Discover
+// the actual published OData entity via $metadata (same pattern as the
+// calendar-viewer tool) and pull from there.
 async function fetchBlanketSalesOrders(fromISO, toISO) {
-    const compId = await bcGetCompanyId();
-    const compName = encodeURIComponent(BC_CONFIG.companyName);
-    const dateFilter = "documentDate ge " + fromISO + " and documentDate le " + toISO;
-    const odataDateFilter = "Document_Date ge " + fromISO + " and Document_Date le " + toISO;
-    const tries = [
-        // v2.0 REST API attempts (most likely 404 — not standard)
-        { url: BC_API_URL + "/companies(" + compId + ")/blanketSalesOrders?$filter=" + encodeURIComponent(dateFilter) + "&$expand=blanketSalesOrderLines&$top=2000", label: "v2 blanketSalesOrders" },
-        { url: BC_API_URL + "/companies(" + compId + ")/blanketSalesOrders?$top=2000", label: "v2 blanketSalesOrders (no filter)" },
-        // OData v4 fallback — needs to be published as Web Service in BC
-        { url: BC_ODATA_URL + "/Company('" + compName + "')/BlanketSalesOrder?$filter=" + encodeURIComponent(odataDateFilter) + "&$top=2000", label: "OData BlanketSalesOrder" },
-        { url: BC_ODATA_URL + "/Company('" + compName + "')/BlanketSalesOrders?$filter=" + encodeURIComponent(odataDateFilter) + "&$top=2000", label: "OData BlanketSalesOrders" },
-        { url: BC_ODATA_URL + "/Company('" + compName + "')/BlanketSalesOrder?$top=10", label: "OData BlanketSalesOrder (sample)" },
-    ];
     state.blanketOrdersDiagnostic = "";
-    for (const t of tries) {
-        try {
-            const rows = await bcFetchAll(t.url, t.label);
-            console.log("[Blanket SO] " + t.label + " → " + rows.length + " rows");
-            if (rows.length) {
-                console.log("[Blanket SO] sample row keys:", Object.keys(rows[0]).join(", "));
-                state.blanketOrdersSource = t.label;
-                state.blanketOrdersDiagnostic = "Source: " + t.label + " · " + rows.length + " orders loaded.";
-                return rows;
-            }
-        } catch (e) {
-            console.warn("[Blanket SO] " + t.label + " failed:", e.message);
-            state.blanketOrdersDiagnostic += "Tried " + t.label + " → " + e.message + ". ";
-        }
+    state.blanketOrdersSource = "";
+    let info;
+    try { info = await bcDiscoverSalesEntity("blanket"); }
+    catch (e) {
+        console.warn("[Blanket SO] metadata discovery failed:", e.message);
+        state.blanketOrdersDiagnostic = "OData $metadata fetch failed: " + e.message;
+        return [];
     }
-    console.warn("[Blanket SO] all attempts failed");
-    return [];
+    if (!info) {
+        state.blanketOrdersDiagnostic = "No published OData entity found for Blanket Sales Orders. Ask BC admin to publish page 9305 (BlanketSalesOrder) as a Web Service.";
+        console.warn("[Blanket SO] no candidate entity found in $metadata");
+        return [];
+    }
+    const coName = encodeURIComponent(await bcGetCompanyInternalName());
+    const filters = [];
+    if (info.fDocDate) filters.push(info.fDocDate + " ge " + fromISO + " and " + info.fDocDate + " le " + toISO);
+    if (!info.nameMatchesKind && info.fDocType) filters.push(info.fDocType + " eq '" + info.docTypeValue + "'");
+    const params = ["$top=10000"];
+    if (filters.length) params.push("$filter=" + encodeURIComponent(filters.join(" and ")));
+    const url = BC_ODATA_URL + "/Company('" + coName + "')/" + info.entity + "?" + params.join("&");
+    try {
+        const rows = await bcFetchAll(url, "Blanket sales orders (" + info.entity + ")");
+        console.log("[Blanket SO] " + info.entity + " → " + rows.length + " rows");
+        if (rows.length) console.log("[Blanket SO] sample row keys:", Object.keys(rows[0]).join(", "));
+        // Extra field hints for the normalize step
+        const fields = info.fields || [];
+        const fStatus = bcFindField(fields, [/^status$/i]);
+        const fSalesperson = bcFindField(fields, [/^salesperson.?code/i, /salespersonCode/i, /^salesperson$/i]);
+        const fOrderDate = bcFindField(fields, [/^order.?date$/i, /orderDate/i]);
+        // Map OData → v2-shape so the renderer code doesn't need to change
+        const normalized = rows.map(r => ({
+            number:         info.fNo ? r[info.fNo] : (r.No || r.No_ || r.Number || ""),
+            customerNumber: info.fCustNo ? r[info.fCustNo] : "",
+            customerName:   info.fCustName ? r[info.fCustName] : "",
+            totalAmountExcludingTax: info.fAmount ? r[info.fAmount] : 0,
+            campaignNumber: info.fCampaign ? r[info.fCampaign] : "",
+            assignedUserID: info.fAssigned ? r[info.fAssigned] : "",
+            status:         fStatus ? r[fStatus] : "",
+            salesperson:    fSalesperson ? r[fSalesperson] : "",
+            documentDate:   info.fDocDate ? r[info.fDocDate] : "",
+            orderDate:      fOrderDate ? r[fOrderDate] : "",
+            blanketSalesOrderLines: [],
+            _raw: r,
+        }));
+        state.blanketOrdersSource = "OData: " + info.entity;
+        state.blanketOrdersDiagnostic = "Source: OData " + info.entity + " · " + rows.length + " orders. (Lines not yet pulled — header-level totals only.)";
+        state.blanketOrdersFieldMap = info;
+        return normalized;
+    } catch (e) {
+        console.warn("[Blanket SO] OData fetch failed:", e.message);
+        state.blanketOrdersDiagnostic = "OData " + info.entity + " fetch failed: " + e.message;
+        return [];
+    }
 }
 
 // BC v2.0 REST API doesn't expose Campaign No or Assigned User ID on
-// salesQuotes. OData v4 does — provided the entity is published as a
-// Web Service in BC. Try several entity-name and selector variations.
+// salesQuotes. Discover the actual published OData entity via $metadata
+// and pull Campaign No / Assigned User ID from there.
 async function fetchSalesQuoteExtras(fromISO, toISO) {
-    const compName = encodeURIComponent(BC_CONFIG.companyName);
-    const dateFilter = "Document_Date ge " + fromISO + " and Document_Date le " + toISO;
-    const tries = [
-        // Standard published Web Service names, with $select narrowed down
-        { url: BC_ODATA_URL + "/Company('" + compName + "')/SalesQuotes?$filter=" + encodeURIComponent(dateFilter) + "&$select=No,Campaign_No,Assigned_User_ID&$top=10000", label: "SalesQuotes + $select" },
-        { url: BC_ODATA_URL + "/Company('" + compName + "')/SalesQuotes?$filter=" + encodeURIComponent(dateFilter) + "&$top=10000", label: "SalesQuotes (all fields)" },
-        // Singular form — some tenants publish this name
-        { url: BC_ODATA_URL + "/Company('" + compName + "')/SalesQuote?$filter=" + encodeURIComponent(dateFilter) + "&$top=10000", label: "SalesQuote singular" },
-        // No filter (small datasets) — exposes all rows so we can see fields even if filter syntax is off
-        { url: BC_ODATA_URL + "/Company('" + compName + "')/SalesQuotes?$top=10", label: "SalesQuotes (no filter, sample)" },
-    ];
     state.quoteExtrasDiagnostic = "";
-    for (const t of tries) {
-        try {
-            const rows = await bcFetchAll(t.url, t.label);
-            console.log("[Quote extras] " + t.label + " → " + rows.length + " rows");
-            if (rows.length) {
-                console.log("[Quote extras] sample row keys:", Object.keys(rows[0]).join(", "));
-                console.log("[Quote extras] sample row:", rows[0]);
-                state.quoteExtrasDiagnostic = "OData v4 source: " + t.label + " (" + rows.length + " rows). Fields: " + Object.keys(rows[0]).join(", ");
-                return rows;
-            }
-        } catch (e) {
-            console.warn("[Quote extras] " + t.label + " failed:", e.message);
-            state.quoteExtrasDiagnostic += "Tried " + t.label + " → " + e.message + ". ";
-        }
+    let info;
+    try { info = await bcDiscoverSalesEntity("quote"); }
+    catch (e) {
+        console.warn("[Quote extras] metadata discovery failed:", e.message);
+        state.quoteExtrasDiagnostic = "OData $metadata fetch failed: " + e.message;
+        return [];
     }
-    console.warn("[Quote extras] all OData v4 attempts failed");
-    return [];
+    if (!info) {
+        state.quoteExtrasDiagnostic = "No published OData entity found for Sales Quotes. Ask BC admin to publish page 9300 (SalesQuotes) as a Web Service.";
+        console.warn("[Quote extras] no candidate entity found in $metadata");
+        return [];
+    }
+    const coName = encodeURIComponent(await bcGetCompanyInternalName());
+    const filters = [];
+    if (info.fDocDate) filters.push(info.fDocDate + " ge " + fromISO + " and " + info.fDocDate + " le " + toISO);
+    if (!info.nameMatchesKind && info.fDocType) filters.push(info.fDocType + " eq '" + info.docTypeValue + "'");
+    const selectFields = [info.fNo, info.fCustNo, info.fCustName, info.fAmount, info.fCampaign, info.fAssigned, info.fDocDate].filter(Boolean);
+    const params = ["$top=10000"];
+    if (selectFields.length) params.push("$select=" + selectFields.join(","));
+    if (filters.length) params.push("$filter=" + encodeURIComponent(filters.join(" and ")));
+    const url = BC_ODATA_URL + "/Company('" + coName + "')/" + info.entity + "?" + params.join("&");
+    try {
+        const rows = await bcFetchAll(url, "Sales quote extras (" + info.entity + ")");
+        console.log("[Quote extras] " + info.entity + " → " + rows.length + " rows");
+        if (rows.length) console.log("[Quote extras] sample row keys:", Object.keys(rows[0]).join(", "));
+        state.quoteExtrasSource = "OData: " + info.entity;
+        state.quoteExtrasDiagnostic = "Source: OData " + info.entity + " (" + rows.length + " rows). Campaign field: " + (info.fCampaign || "—") + ", Assigned User: " + (info.fAssigned || "—") + ".";
+        state.quoteExtrasFieldMap = info;
+        return rows;
+    } catch (e) {
+        console.warn("[Quote extras] OData fetch failed:", e.message);
+        state.quoteExtrasDiagnostic = "OData " + info.entity + " fetch failed: " + e.message;
+        return [];
+    }
 }
 
 // ============================================================
@@ -3361,15 +3473,19 @@ function getQuoteCampaign(q) {
     const direct = q.campaignNumber || q.campaignCode || q.campaignNo || q.campaign;
     if (direct) return direct;
     const ex = state.quoteExtras && state.quoteExtras.get(q.number);
-    if (ex) return ex.Campaign_No || ex.Campaign_No_ || ex.campaignNo || null;
-    return null;
+    if (!ex) return null;
+    const fm = state.quoteExtrasFieldMap;
+    if (fm && fm.fCampaign && ex[fm.fCampaign]) return ex[fm.fCampaign];
+    return ex.Campaign_No || ex.Campaign_No_ || ex.campaignNo || null;
 }
 function getQuoteAssignedUser(q) {
     const direct = q.assignedUserID || q.assignedUserId || q.assignedUserCode || q.assignedUser;
     if (direct) return direct;
     const ex = state.quoteExtras && state.quoteExtras.get(q.number);
-    if (ex) return ex.Assigned_User_ID || ex.assignedUserID || null;
-    return null;
+    if (!ex) return null;
+    const fm = state.quoteExtrasFieldMap;
+    if (fm && fm.fAssigned && ex[fm.fAssigned]) return ex[fm.fAssigned];
+    return ex.Assigned_User_ID || ex.assignedUserID || null;
 }
 function isQuoteWon(q)  { return (q.status || "") === "Accepted"; }
 function isQuoteLost(q) { return (q.status || "") === "Lost"; }
@@ -6323,9 +6439,10 @@ async function handleLoad() {
         }
         // Build extras map keyed by quote No so we can look up Campaign / Assigned User
         state.quoteExtras = new Map();
+        const fmNo = state.quoteExtrasFieldMap && state.quoteExtrasFieldMap.fNo;
         for (const ex of (quoteExtras || [])) {
-            const no = ex.No || ex.no || ex.number;
-            if (no) state.quoteExtras.set(no, ex);
+            const no = (fmNo && ex[fmNo]) || ex.No || ex.No_ || ex.no || ex.number;
+            if (no) state.quoteExtras.set(String(no), ex);
         }
         console.log("[Quote extras] loaded " + state.quoteExtras.size + " extras rows for " + quotes.length + " quotes");
         state.locations = new Map(locs.map(l => [l.id, l.code || l.displayName || "(unnamed)"]));
