@@ -97,6 +97,39 @@
             font-family: inherit;
             box-sizing: border-box;
         }
+
+        /* Custom combo box for Item — native datalist had two problems:
+           positioning was browser-controlled (sometimes opened off to the
+           side), and the dropdown arrow disappears when the list is empty
+           (i.e. before sales are loaded). This combo always shows the
+           arrow, and the popup is anchored directly below the input. */
+        .toolbar .combo { position: relative; width: 160px; }
+        .toolbar .combo input { width: 100%; padding-right: 26px; }
+        .toolbar .combo-arrow {
+            position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+            font-size: 11px; color: #888; pointer-events: none;
+            line-height: 1;
+        }
+        .toolbar .combo-popup {
+            display: none; position: absolute; top: calc(100% + 4px); left: 0;
+            background: white; border: 1px solid #d6d8eb; border-radius: 8px;
+            min-width: 100%; width: max-content; max-width: 480px;
+            max-height: 320px; overflow-y: auto;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.15); z-index: 200;
+            font-size: 12px;
+        }
+        .toolbar .combo-popup.open { display: block; }
+        .toolbar .combo-popup .opt {
+            padding: 7px 12px; cursor: pointer;
+            border-bottom: 1px solid #f1f2f8;
+            white-space: nowrap;
+        }
+        .toolbar .combo-popup .opt:hover, .toolbar .combo-popup .opt.active { background: #eef0fb; }
+        .toolbar .combo-popup .opt:last-child { border-bottom: none; }
+        .toolbar .combo-popup .opt .code { font-weight: 600; color: #2c2f4a; }
+        .toolbar .combo-popup .opt .desc { color: #888; margin-left: 6px; }
+        .toolbar .combo-popup .opt.empty { color: #888; cursor: default; font-style: italic; }
+        .toolbar .combo-popup .opt.empty:hover { background: transparent; }
         .toolbar .spacer { flex: 1; }
         .btn {
             padding: 8px 18px; border: none; border-radius: 8px;
@@ -536,6 +569,15 @@
         html.theme-onyx .hint { background: #141416; border-left-color: #d4af7a; color: #c8c4bb; }
         html.theme-onyx .more-btn { background: transparent; color: #d4af7a; border-color: #2a2820; }
         html.theme-onyx .more-btn:hover { background: #1c1b18; }
+        html.theme-onyx .row-action-btn { background: #1c1b18; color: #d4af7a; border: 1px solid #2a2820; }
+        html.theme-onyx .row-action-btn:hover { background: #d4af7a; color: #0a0a0b; }
+        html.theme-onyx .toolbar .combo-arrow { color: #88837a; }
+        html.theme-onyx .toolbar .combo-popup { background: #141416; border-color: #2a2820; box-shadow: 0 8px 24px rgba(0,0,0,0.6); }
+        html.theme-onyx .toolbar .combo-popup .opt { border-bottom-color: #1c1b18; }
+        html.theme-onyx .toolbar .combo-popup .opt:hover, html.theme-onyx .toolbar .combo-popup .opt.active { background: #1c1b18; }
+        html.theme-onyx .toolbar .combo-popup .opt .code { color: #d4af7a; }
+        html.theme-onyx .toolbar .combo-popup .opt .desc { color: #88837a; }
+        html.theme-onyx .toolbar .combo-popup .opt.empty { color: #88837a; }
         html.theme-onyx .modal-card { background: #141416; }
         html.theme-onyx .modal-header { border-bottom-color: #1c1b18; }
         html.theme-onyx .modal-header h2 { color: #d4af7a; font-family: 'Cormorant Garamond', serif; }
@@ -610,6 +652,15 @@
         html.theme-linen .badge-other { background: rgba(45,42,36,0.08); color: #6e6a60; }
         html.theme-linen .hint { background: rgba(91,110,63,0.08); border-left-color: #5b6e3f; color: #1a1a1a; }
         html.theme-linen .more-btn { background: transparent; color: #5b6e3f; border-color: rgba(45,42,36,0.24); }
+        html.theme-linen .row-action-btn { background: rgba(91,110,63,0.10); color: #5b6e3f; }
+        html.theme-linen .row-action-btn:hover { background: #5b6e3f; color: #f4f1eb; }
+        html.theme-linen .toolbar .combo-arrow { color: #6e6a60; }
+        html.theme-linen .toolbar .combo-popup { background: #f4f1eb; border-color: rgba(45,42,36,0.24); box-shadow: 0 8px 24px rgba(45,42,36,0.18); }
+        html.theme-linen .toolbar .combo-popup .opt { border-bottom-color: rgba(45,42,36,0.10); }
+        html.theme-linen .toolbar .combo-popup .opt:hover, html.theme-linen .toolbar .combo-popup .opt.active { background: rgba(45,42,36,0.06); }
+        html.theme-linen .toolbar .combo-popup .opt .code { color: #1a1a1a; }
+        html.theme-linen .toolbar .combo-popup .opt .desc { color: #6e6a60; }
+        html.theme-linen .toolbar .combo-popup .opt.empty { color: #6e6a60; }
         html.theme-linen .modal-card { background: #f4f1eb; }
         html.theme-linen .modal-header { border-bottom-color: rgba(45,42,36,0.16); }
         html.theme-linen .modal-header h2 { color: #1a1a1a; font-family: 'Fraunces', serif; }
@@ -718,6 +769,15 @@
         html.theme-aurora .hint { background: rgba(181,123,255,0.10); border-left-color: #b57bff; color: #eaeaf2; }
         html.theme-aurora .more-btn { background: transparent; color: #d4baff; border-color: rgba(255,255,255,0.12); }
         html.theme-aurora .more-btn:hover { background: rgba(181,123,255,0.12); }
+        html.theme-aurora .row-action-btn { background: rgba(181,123,255,0.18); color: #d4baff; border: 1px solid rgba(255,255,255,0.12); }
+        html.theme-aurora .row-action-btn:hover { background: linear-gradient(135deg, #b57bff, #6be0ff); color: #08081b; }
+        html.theme-aurora .toolbar .combo-arrow { color: #b8b6cc; }
+        html.theme-aurora .toolbar .combo-popup { background: rgba(20,20,35,0.92); backdrop-filter: blur(20px); border-color: rgba(255,255,255,0.10); box-shadow: 0 12px 32px rgba(0,0,0,0.5); color: #eaeaf2; }
+        html.theme-aurora .toolbar .combo-popup .opt { border-bottom-color: rgba(255,255,255,0.06); }
+        html.theme-aurora .toolbar .combo-popup .opt:hover, html.theme-aurora .toolbar .combo-popup .opt.active { background: rgba(181,123,255,0.18); }
+        html.theme-aurora .toolbar .combo-popup .opt .code { color: #d4baff; }
+        html.theme-aurora .toolbar .combo-popup .opt .desc { color: #b8b6cc; }
+        html.theme-aurora .toolbar .combo-popup .opt.empty { color: #b8b6cc; }
         html.theme-aurora .modal-card { background: rgba(20,20,35,0.92); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.08); }
         html.theme-aurora .modal-header { border-bottom-color: rgba(255,255,255,0.08); }
         html.theme-aurora .modal-header h2 { color: #eaeaf2; }
@@ -793,6 +853,16 @@
         html.theme-atelier .hint { background: #fff; border: 2px solid #000; border-left-width: 6px; border-left-color: #ff4400; color: #000; border-radius: 0; }
         html.theme-atelier .more-btn { background: #fff; color: #000; border: 2px solid #000; border-radius: 0; font-weight: 700; }
         html.theme-atelier .more-btn:hover { background: #000; color: #fff; }
+        html.theme-atelier .row-action-btn { background: #fff; color: #000; border: 2px solid #000; border-radius: 0; font-weight: 700; text-transform: uppercase; padding: 3px 10px; }
+        html.theme-atelier .row-action-btn:hover { background: #ff4400; color: #fff; }
+        html.theme-atelier .toolbar .combo-arrow { color: #000; font-weight: 900; }
+        html.theme-atelier .toolbar .combo-popup { background: #fff; border: 2px solid #000; border-radius: 0; box-shadow: 4px 4px 0 #000; color: #000; }
+        html.theme-atelier .toolbar .combo-popup .opt { border-bottom: 1px solid #000; }
+        html.theme-atelier .toolbar .combo-popup .opt:hover, html.theme-atelier .toolbar .combo-popup .opt.active { background: #ff4400; color: #fff; }
+        html.theme-atelier .toolbar .combo-popup .opt:hover .code, html.theme-atelier .toolbar .combo-popup .opt:hover .desc { color: #fff; }
+        html.theme-atelier .toolbar .combo-popup .opt .code { color: #000; font-weight: 900; }
+        html.theme-atelier .toolbar .combo-popup .opt .desc { color: #000; opacity: 0.7; }
+        html.theme-atelier .toolbar .combo-popup .opt.empty { color: #000; opacity: 0.6; }
         html.theme-atelier .modal-card { border: 2px solid #000; border-radius: 0; }
         html.theme-atelier .modal-header { border-bottom: 2px solid #000; }
         html.theme-atelier .modal-header h2 { color: #000; font-family: 'Space Grotesk', sans-serif; text-transform: uppercase; }
@@ -871,6 +941,15 @@
         html.theme-concierge .hint { background: rgba(156,122,60,0.10); border-left-color: #9c7a3c; color: #2c2a26; }
         html.theme-concierge .more-btn { background: #f3eee5; color: #0e4d3f; border-color: rgba(44,42,38,0.18); }
         html.theme-concierge .more-btn:hover { background: rgba(14,77,63,0.08); }
+        html.theme-concierge .row-action-btn { background: rgba(14,77,63,0.10); color: #0e4d3f; }
+        html.theme-concierge .row-action-btn:hover { background: #0e4d3f; color: #f3eee5; }
+        html.theme-concierge .toolbar .combo-arrow { color: #7a7368; }
+        html.theme-concierge .toolbar .combo-popup { background: #f3eee5; border-color: rgba(44,42,38,0.18); box-shadow: 0 8px 24px rgba(44,42,38,0.18); }
+        html.theme-concierge .toolbar .combo-popup .opt { border-bottom-color: rgba(44,42,38,0.10); }
+        html.theme-concierge .toolbar .combo-popup .opt:hover, html.theme-concierge .toolbar .combo-popup .opt.active { background: rgba(156,122,60,0.10); }
+        html.theme-concierge .toolbar .combo-popup .opt .code { color: #0e4d3f; }
+        html.theme-concierge .toolbar .combo-popup .opt .desc { color: #7a7368; }
+        html.theme-concierge .toolbar .combo-popup .opt.empty { color: #7a7368; }
         html.theme-concierge .modal-card { background: #f3eee5; }
         html.theme-concierge .modal-header { border-bottom-color: rgba(44,42,38,0.10); }
         html.theme-concierge .modal-header h2 { color: #0e4d3f; font-family: 'Fraunces', serif; font-style: italic; }
@@ -984,8 +1063,11 @@
                 </div>
                 <div class="field">
                     <label for="itemFilterBox">Item</label>
-                    <input type="text" list="itemFilterList" id="itemFilterBox" placeholder="All items" autocomplete="off">
-                    <datalist id="itemFilterList"></datalist>
+                    <div class="combo" id="itemCombo">
+                        <input type="text" id="itemFilterBox" placeholder="All items" autocomplete="off">
+                        <span class="combo-arrow">▾</span>
+                        <div class="combo-popup" id="itemFilterPopup"></div>
+                    </div>
                 </div>
                 <div class="field" title="Hide documents modified after this timestamp — useful for matching a stale Power BI refresh">
                     <label for="snapshotAsOf">Compare as of</label>
@@ -7868,9 +7950,10 @@ function populateFilterDropdowns() {
             if (no && !items.has(no)) items.set(no, ln.description || "");
         }
     }
-    const sortedItems = [...items.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-    const itemList = document.getElementById("itemFilterList");
-    itemList.innerHTML = sortedItems.map(([no, desc]) => '<option value="' + escapeAttr(no) + '">' + escapeHtml(no + (desc ? " — " + desc : "")) + '</option>').join("");
+    state.itemFilterOptions = [...items.entries()]
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([number, description]) => ({ number, description }));
+    renderItemComboPopup("");
 }
 
 // ============================================================
@@ -7975,9 +8058,63 @@ async function handleLoad() {
     }
 }
 
+// Custom Item combo popup — renders the filtered item list under the input.
+function renderItemComboPopup(filter) {
+    const popup = document.getElementById("itemFilterPopup");
+    if (!popup) return;
+    const opts = state.itemFilterOptions || [];
+    if (!opts.length) {
+        popup.innerHTML = '<div class="opt empty">Load sales first to see items</div>';
+        return;
+    }
+    const q = (filter || "").toLowerCase();
+    const matched = !q ? opts : opts.filter(o =>
+        o.number.toLowerCase().includes(q) ||
+        (o.description || "").toLowerCase().includes(q)
+    );
+    if (!matched.length) {
+        popup.innerHTML = '<div class="opt empty">No items match "' + escapeHtml(filter) + '"</div>';
+        return;
+    }
+    const shown = matched.slice(0, 200);
+    popup.innerHTML = shown.map(o =>
+        '<div class="opt" data-no="' + escapeAttr(o.number) + '">' +
+            '<span class="code">' + escapeHtml(o.number) + '</span>' +
+            (o.description ? '<span class="desc">— ' + escapeHtml(o.description) + '</span>' : '') +
+        '</div>'
+    ).join("") + (matched.length > 200 ? '<div class="opt empty">…' + (matched.length - 200) + ' more — keep typing to narrow</div>' : "");
+}
+
 function wireEvents() {
     document.getElementById("signInBtn").addEventListener("click", handleSignIn);
     document.getElementById("loadBtn").addEventListener("click", handleLoad);
+
+    // Item combo: focus/click → open, input → filter, outside click → close
+    const itemBox = document.getElementById("itemFilterBox");
+    const itemPopup = document.getElementById("itemFilterPopup");
+    const itemCombo = document.getElementById("itemCombo");
+    if (itemBox && itemPopup && itemCombo) {
+        const openPopup = () => { renderItemComboPopup(itemBox.value); itemPopup.classList.add("open"); };
+        const closePopup = () => itemPopup.classList.remove("open");
+        itemBox.addEventListener("focus", openPopup);
+        itemBox.addEventListener("click", openPopup);
+        itemBox.addEventListener("input", () => { renderItemComboPopup(itemBox.value); itemPopup.classList.add("open"); });
+        itemBox.addEventListener("keydown", e => {
+            if (e.key === "Escape") { closePopup(); itemBox.blur(); }
+            if (e.key === "Enter") { closePopup(); itemBox.dispatchEvent(new Event("change", { bubbles: true })); }
+        });
+        itemPopup.addEventListener("mousedown", e => {
+            const opt = e.target.closest(".opt[data-no]");
+            if (!opt) return;
+            e.preventDefault();
+            itemBox.value = opt.dataset.no;
+            closePopup();
+            itemBox.dispatchEvent(new Event("change", { bubbles: true }));
+        });
+        document.addEventListener("click", e => {
+            if (!itemCombo.contains(e.target)) closePopup();
+        });
+    }
 
     document.getElementById("quickRange").addEventListener("change", e => { if (e.target.value) applyQuickRange(e.target.value); });
     ["fromDate", "toDate"].forEach(id => {
@@ -8005,23 +8142,22 @@ function wireEvents() {
     });
     document.getElementById("itemFilterBox").addEventListener("change", e => {
         const v = (e.target.value || "").trim();
-        // Validate against the datalist — accept only if it matches a real item code
-        const opts = [...document.querySelectorAll("#itemFilterList option")];
-        const match = opts.find(o => o.value === v);
+        const opts = state.itemFilterOptions || [];
+        const match = opts.find(o => o.number === v);
         if (v && !match) {
-            // Try matching by prefix or "code — desc" entry
-            const found = opts.find(o => o.value === v || o.textContent.startsWith(v));
+            // Try matching by prefix
+            const found = opts.find(o => o.number.startsWith(v) || (o.description || "").toLowerCase().includes(v.toLowerCase()));
             if (!found) {
                 state.filters.item = "";
                 state.filters.itemDesc = "";
             } else {
-                state.filters.item = found.value;
-                state.filters.itemDesc = (found.textContent.split("—")[1] || "").trim();
-                e.target.value = found.value;
+                state.filters.item = found.number;
+                state.filters.itemDesc = found.description || "";
+                e.target.value = found.number;
             }
         } else if (match) {
-            state.filters.item = match.value;
-            state.filters.itemDesc = (match.textContent.split("—")[1] || "").trim();
+            state.filters.item = match.number;
+            state.filters.itemDesc = match.description || "";
         } else {
             state.filters.item = "";
             state.filters.itemDesc = "";
@@ -8519,6 +8655,8 @@ function wireEvents() {
 // ============================================================
 applyQuickRange("365");
 wireEvents();
+state.itemFilterOptions = state.itemFilterOptions || [];
+renderItemComboPopup("");
 
 // ============================================================
 // THEME PICKER  —  six interchangeable visual templates
