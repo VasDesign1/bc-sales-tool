@@ -2338,16 +2338,6 @@
     <h1>Choose your interface</h1>
     <div class="lead">Five interchangeable visual systems. Pick the one that fits the moment — you can switch any time via the Theme button in the header. Your choice persists across sessions on this device.</div>
     <div class="grid">
-        <div class="opt classic" data-theme="classic">
-            <div class="tag">00 · Original</div>
-            <div class="name">Classic</div>
-            <div class="tagline">The original interface — indigo sidebar, gradient KPI tiles, white cards. Familiar and proven.</div>
-            <div class="preview">
-                <div class="kpi-mini"><span class="lbl">Total Sales</span><span class="val">$2.74M</span></div>
-                <div class="kpi-mini"><span class="lbl">Win Rate</span><span class="val">68%</span></div>
-                <div class="bar"></div>
-            </div>
-        </div>
         <div class="opt onyx" data-theme="onyx">
             <div class="tag">01 · Dark Editorial</div>
             <div class="name">Onyx</div>
@@ -2399,7 +2389,11 @@
             </div>
         </div>
     </div>
-    <div class="footer">Click any tile to apply. Use the Theme button in the header to switch later.</div>
+    <div class="footer">
+        Click any tile to apply. Use the Theme button in the header to switch later.
+        <span style="margin: 0 8px; opacity: 0.4;">·</span>
+        Prefer the original interface? <a href="#" id="themePickerClassic" data-theme="classic" style="color: inherit; text-decoration: underline; cursor: pointer;">Stay on Classic</a>
+    </div>
 </div>
 
 <div class="progress" id="bcProgress"><span id="bcProgressText"></span></div>
@@ -8574,6 +8568,12 @@ document.querySelectorAll("#themePicker .opt").forEach(opt => {
         applyTheme(t);
         hideThemePicker();
     });
+});
+const themePickerClassic = document.getElementById("themePickerClassic");
+if (themePickerClassic) themePickerClassic.addEventListener("click", e => {
+    e.preventDefault();
+    applyTheme("classic");
+    hideThemePicker();
 });
 const themeBtn = document.getElementById("themeBtn");
 if (themeBtn) themeBtn.addEventListener("click", () => showThemePicker(true));
