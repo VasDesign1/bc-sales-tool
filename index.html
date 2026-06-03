@@ -1499,8 +1499,18 @@
                 <div class="chart-grid">
                     <div class="card span-8">
                         <div class="head">
-                            <h3>Sales by month · stacked by branch</h3>
-                            <div class="meta">click a bar segment to filter to that branch</div>
+                            <h3>Sales by month</h3>
+                            <div style="display:flex; gap:10px; align-items:center;">
+                                <div class="meta">click → filter</div>
+                                <select id="brTrendChartType" class="mini-select">
+                                    <option value="stackedcolumn" selected>Stacked column</option>
+                                    <option value="stackedarea">Stacked area</option>
+                                    <option value="groupedcolumn">Grouped column</option>
+                                    <option value="lines">Lines</option>
+                                    <option value="smoothlines">Smooth lines</option>
+                                    <option value="total">Total (one series)</option>
+                                </select>
+                            </div>
                         </div>
                         <div class="chart-wrap" style="min-height:340px;"><canvas id="brTrendChart"></canvas></div>
                     </div>
@@ -1571,8 +1581,18 @@
                 <div class="chart-grid">
                     <div class="card span-8">
                         <div class="head">
-                            <h3>Sales by month · stacked by salesperson</h3>
-                            <div class="meta">click a bar segment to filter to that salesperson</div>
+                            <h3>Sales by month</h3>
+                            <div style="display:flex; gap:10px; align-items:center;">
+                                <div class="meta">click → filter</div>
+                                <select id="spTrendChartType" class="mini-select">
+                                    <option value="stackedcolumn" selected>Stacked column</option>
+                                    <option value="stackedarea">Stacked area</option>
+                                    <option value="groupedcolumn">Grouped column</option>
+                                    <option value="lines">Lines</option>
+                                    <option value="smoothlines">Smooth lines</option>
+                                    <option value="total">Total (one series)</option>
+                                </select>
+                            </div>
                         </div>
                         <div class="chart-wrap" style="min-height:340px;"><canvas id="spTrendChart"></canvas></div>
                     </div>
@@ -4582,7 +4602,7 @@ function renderEntityCharts(rows, opts) {
         .sort((a, b) => b.sales - a.sales);
     const entityIndex = new Map(entitySorted.map((e, i) => [e.name, i]));
 
-    // ----- 1. Stacked monthly trend -----
+    // ----- 1. Monthly trend (chart type picker drives the shape) -----
     destroyChart(prefix + "Trend");
     const monthMap = new Map(); // monthKey -> {monthKey, fy, perEntity:{name: sales}}
     for (const r of rows) {
@@ -4594,32 +4614,60 @@ function renderEntityCharts(rows, opts) {
     const months = [...monthMap.values()].sort((a, b) => a.monthKey < b.monthKey ? -1 : 1);
     const topEntitiesForStack = entitySorted.slice(0, 10).map(e => e.name);
     const trendCanvas = document.getElementById(prefix + "TrendChart");
+    const stateKey = prefix + "TrendChartType";
+    const ct = state[stateKey] || "stackedcolumn";
     if (trendCanvas) {
-        const datasets = topEntitiesForStack.map((name, i) => ({
-            label: name, stack: "s",
+        const monthLabels = months.map(m => monthLabelFromKey(m.monthKey));
+        let datasets, chartType, scales, legendDisplay = true;
+        // Per-entity series — used by every variant except "total"
+        const perEntitySeries = topEntitiesForStack.map((name, i) => ({
+            name,
             data: months.map(m => m.perEntity[name] || 0),
-            backgroundColor: ENTITY_PALETTE[i % ENTITY_PALETTE.length],
-            borderRadius: 2,
+            color: ENTITY_PALETTE[i % ENTITY_PALETTE.length],
         }));
-        // "Other" bucket for everything beyond top 10
         const othersSum = months.map(m => {
             let s = 0;
             for (const [name, val] of Object.entries(m.perEntity))
                 if (!topEntitiesForStack.includes(name)) s += val;
             return s;
         });
-        if (othersSum.some(v => v > 0)) datasets.push({ label: "Other", stack: "s", data: othersSum, backgroundColor: "#bdbdbd", borderRadius: 2 });
+        if (othersSum.some(v => v > 0)) perEntitySeries.push({ name: "Other", data: othersSum, color: "#bdbdbd" });
+
+        if (ct === "stackedcolumn") {
+            chartType = "bar";
+            datasets = perEntitySeries.map(s => ({ label: s.name, stack: "s", data: s.data, backgroundColor: s.color, borderRadius: 2 }));
+            scales = { x: { stacked: true }, y: { stacked: true, ticks: { callback: v => fmtMoney(v) } } };
+        } else if (ct === "stackedarea") {
+            chartType = "line";
+            datasets = perEntitySeries.map(s => ({ label: s.name, data: s.data, borderColor: s.color, backgroundColor: alphaHex(s.color, 0.45), fill: true, tension: 0.3, pointRadius: 0, borderWidth: 1 }));
+            scales = { x: {}, y: { stacked: true, ticks: { callback: v => fmtMoney(v) } } };
+        } else if (ct === "groupedcolumn") {
+            chartType = "bar";
+            datasets = perEntitySeries.map(s => ({ label: s.name, data: s.data, backgroundColor: s.color, borderRadius: 2 }));
+            scales = { x: {}, y: { ticks: { callback: v => fmtMoney(v) } } };
+        } else if (ct === "lines" || ct === "smoothlines") {
+            chartType = "line";
+            const tension = ct === "smoothlines" ? 0.4 : 0;
+            datasets = perEntitySeries.map(s => ({ label: s.name, data: s.data, borderColor: s.color, backgroundColor: "transparent", fill: false, tension, pointRadius: 2, borderWidth: 2 }));
+            scales = { x: {}, y: { ticks: { callback: v => fmtMoney(v) } } };
+        } else { // "total" — sum across all entities per month
+            chartType = "bar";
+            const totals = months.map(m => Object.values(m.perEntity).reduce((s, v) => s + v, 0));
+            datasets = [{ label: "Total sales", data: totals, backgroundColor: paletteBase || "#3949ab", borderRadius: 4 }];
+            scales = { x: {}, y: { ticks: { callback: v => fmtMoney(v) } } };
+            legendDisplay = false;
+        }
         state.charts[prefix + "Trend"] = new Chart(trendCanvas.getContext("2d"), {
-            type: "bar",
-            data: { labels: months.map(m => monthLabelFromKey(m.monthKey)), datasets },
+            type: chartType,
+            data: { labels: monthLabels, datasets },
             options: chartBase({
-                plugins: { legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } },
+                plugins: { legend: { display: legendDisplay, position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } },
                            tooltip: { callbacks: { label: c => c.dataset.label + ": " + fmtMoneyFull(c.parsed.y) } } },
-                scales: { x: { stacked: true }, y: { stacked: true, ticks: { callback: v => fmtMoney(v) } } },
+                scales,
                 onClick: (_, els) => {
                     if (!els.length) return;
                     const name = datasets[els[0].datasetIndex].label;
-                    if (name === "Other") return;
+                    if (!name || name === "Other" || name === "Total sales") return;
                     state.filters[filterKey] = (state.filters[filterKey] === name) ? "" : name;
                     if (filterEl) { const el = document.getElementById(filterEl); if (el) el.value = state.filters[filterKey]; }
                     rebuildFiltered(); renderCurrentTab();
@@ -8433,6 +8481,10 @@ function wireEvents() {
     });
     document.getElementById("trendSplit").addEventListener("change", e => { state.trendSplit = e.target.value; renderTrendChart(); });
     document.getElementById("trendChartType").addEventListener("change", e => { state.trendChartType = e.target.value; renderTrendChart(); });
+    const brTrendSel = document.getElementById("brTrendChartType");
+    if (brTrendSel) brTrendSel.addEventListener("change", e => { state.brTrendChartType = e.target.value; renderBranch(); });
+    const spTrendSel = document.getElementById("spTrendChartType");
+    if (spTrendSel) spTrendSel.addEventListener("change", e => { state.spTrendChartType = e.target.value; renderSalesperson(); });
     document.getElementById("dowChartType").addEventListener("change", e => { state.dowChartType = e.target.value; renderDayOfWeekChart(); });
     // Status metric toggle (count / amount)
     document.querySelectorAll("#statusMetricToggle button").forEach(btn => {
