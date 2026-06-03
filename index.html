@@ -1389,9 +1389,13 @@
                             <div style="display:flex; gap:10px; align-items:center;">
                                 <select id="trendChartType" class="mini-select" title="Chart type">
                                     <option value="line" selected>Line</option>
+                                    <option value="smoothline">Smooth line</option>
                                     <option value="area">Area</option>
-                                    <option value="bar">Bar</option>
+                                    <option value="smootharea">Smooth area</option>
+                                    <option value="stepped">Stepped</option>
                                     <option value="column">Column</option>
+                                    <option value="bar">Bar (horizontal)</option>
+                                    <option value="combo">Combo (bars + line)</option>
                                 </select>
                                 <select id="trendSplit" class="mini-select">
                                     <option value="">Split by: none</option>
@@ -1768,9 +1772,13 @@
                             <div style="display:flex; gap:10px; align-items:center;">
                                 <select id="qTrendChartType" class="mini-select">
                                     <option value="line" selected>Line</option>
+                                    <option value="smoothline">Smooth line</option>
                                     <option value="area">Area</option>
-                                    <option value="bar">Bar</option>
+                                    <option value="smootharea">Smooth area</option>
+                                    <option value="stepped">Stepped</option>
                                     <option value="column">Column</option>
+                                    <option value="bar">Bar (horizontal)</option>
+                                    <option value="combo">Combo (bars + line)</option>
                                 </select>
                                 <select id="qTrendMetric" class="mini-select">
                                     <option value="amount" selected>$ Amount</option>
@@ -1885,9 +1893,13 @@
                             <div style="display:flex; gap:10px; align-items:center;">
                                 <select id="boTrendChartType" class="mini-select">
                                     <option value="line" selected>Line</option>
+                                    <option value="smoothline">Smooth line</option>
                                     <option value="area">Area</option>
-                                    <option value="bar">Bar</option>
+                                    <option value="smootharea">Smooth area</option>
+                                    <option value="stepped">Stepped</option>
                                     <option value="column">Column</option>
+                                    <option value="bar">Bar (horizontal)</option>
+                                    <option value="combo">Combo (bars + line)</option>
                                 </select>
                                 <select id="boTrendMetric" class="mini-select">
                                     <option value="amount" selected>$ Amount</option>
@@ -3762,6 +3774,99 @@ function ringDataLabels(opts) {
 }
 function chartBase(opts) { return Object.assign({ responsive: true, maintainAspectRatio: false, animation: { duration: 400 } }, opts); }
 
+// Convert a hex colour to rgba(r,g,b,alpha) for fill backgrounds.
+function alphaHex(hex, alpha) {
+    const m = (hex || "").match(/^#([0-9a-f]{6})$/i);
+    if (!m) return hex;
+    const r = parseInt(m[1].substr(0, 2), 16);
+    const g = parseInt(m[1].substr(2, 2), 16);
+    const b = parseInt(m[1].substr(4, 2), 16);
+    return "rgba(" + r + "," + g + "," + b + "," + alpha + ")";
+}
+
+// Build a Chart.js trend-chart config from a chart-type token.
+// Used by Overview, Sales Quote, and Blanket Sales Order trend charts so
+// each token (line / smoothline / area / smootharea / stepped / column /
+// bar / combo) produces a genuinely different visualisation.
+//   opts: {
+//     labels: x-axis labels (or y-axis labels in horizontal-bar mode),
+//     primary: numeric array (revenue, amount, etc.),
+//     primaryLabel: dataset label for primary,
+//     secondary: numeric array (count overlay for "combo"),
+//     secondaryLabel: dataset label for secondary,
+//     color: hex string for primary,
+//     comboColor: hex string for combo overlay line (defaults to amber),
+//     yTickFmt: function(v) → string for the value axis ticks,
+//     tooltipLabel: function(ctx, i, isHoriz) → string for tooltip rows,
+//     extraOptions: deep-merged into the final options object,
+//   }
+function buildTrendChartConfig(ct, opts) {
+    opts = opts || {};
+    const labels = opts.labels || [];
+    const primary = opts.primary || [];
+    const color = opts.color || "#3f51b5";
+    const label = opts.primaryLabel || "Value";
+    const yTickFmt = opts.yTickFmt || (v => v);
+
+    const fill = (ct === "area" || ct === "smootharea" || ct === "stepped");
+    const tension = (ct === "smoothline" || ct === "smootharea") ? 0.4 : 0;
+    const stepped = (ct === "stepped");
+    const isBarH = (ct === "bar");
+    const isCombo = (ct === "combo");
+    const isColumn = (ct === "column");
+    const useBarType = isBarH || isColumn || isCombo;
+
+    let datasets;
+    let scales;
+    if (isCombo) {
+        const comboColor = opts.comboColor || "#f57c00";
+        datasets = [
+            { type: "bar", label, data: primary, backgroundColor: color, borderRadius: 4, yAxisID: "y" }
+        ];
+        if (opts.secondary) {
+            datasets.push({
+                type: "line", label: opts.secondaryLabel || "Count",
+                data: opts.secondary, borderColor: comboColor,
+                backgroundColor: alphaHex(comboColor, 0.10),
+                fill: false, tension: 0.2, borderWidth: 2, pointRadius: 3,
+                yAxisID: "y1",
+            });
+        }
+        scales = {
+            y:  { position: "left",  ticks: { callback: yTickFmt } },
+            y1: { position: "right", grid: { drawOnChartArea: false }, ticks: { callback: v => fmtInt(v) } },
+        };
+    } else if (useBarType) {
+        datasets = [{ label, data: primary, backgroundColor: color, borderRadius: 4 }];
+        scales = isBarH
+            ? { x: { ticks: { callback: yTickFmt } }, y: {} }
+            : { x: {}, y: { ticks: { callback: yTickFmt } } };
+    } else {
+        datasets = [{
+            label, data: primary,
+            borderColor: color,
+            backgroundColor: fill ? alphaHex(color, stepped ? 0.10 : 0.25) : "transparent",
+            fill, tension,
+            stepped: stepped ? "before" : false,
+            pointRadius: 3, pointHoverRadius: 6, borderWidth: 2,
+        }];
+        scales = { y: { ticks: { callback: yTickFmt } } };
+    }
+
+    const tooltipLabel = opts.tooltipLabel || ((c, i, isHoriz) =>
+        label + ": " + yTickFmt(isHoriz ? c.parsed.x : c.parsed.y));
+    const options = chartBase(Object.assign({
+        indexAxis: isBarH ? "y" : "x",
+        plugins: {
+            legend: { display: isCombo, position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } },
+            tooltip: { callbacks: { label: c => tooltipLabel(c, c.dataIndex, isBarH) } },
+        },
+        scales,
+    }, opts.extraOptions || {}));
+
+    return { type: useBarType ? "bar" : "line", data: { labels, datasets }, options };
+}
+
 // Generic table sorter — used by every flat-table renderer so columns
 // honour the active sortState ({key, dir}). Numeric values compare
 // numerically; everything else falls back to a locale-aware string sort.
@@ -4200,22 +4305,21 @@ function renderTrendChart() {
         return;
     }
     const buckets = bucketInvoices(state.filtered, state.dashboardBucket);
-    let chartType = ct === "column" ? "bar" : (ct === "area" ? "line" : ct);
-    const fill = (ct === "area" || ct === "line");
-    const dataset = (chartType === "bar")
-        ? { label: "Revenue", data: buckets.map(b => b.revenue), backgroundColor: "#3f51b5", borderRadius: 4 }
-        : { label: "Revenue", data: buckets.map(b => b.revenue), borderColor: "#3f51b5",
-            backgroundColor: ct === "area" ? "rgba(63,81,181,0.20)" : "rgba(63,81,181,0.06)",
-            fill: fill, tension: 0.3, pointRadius: 3, pointHoverRadius: 6, borderWidth: 2 };
-    state.charts.trend = new Chart(ctx, {
-        type: chartType,
-        data: { labels: buckets.map(b => b.key), datasets: [dataset] },
-        options: chartBase({
-            plugins: { legend: { display: false },
-                       tooltip: { callbacks: { label: c => fmtMoneyFull(c.parsed.y) + " (" + buckets[c.dataIndex].count + " inv)" } } },
-            scales: { y: { ticks: { callback: v => fmtMoney(v) } } }
-        })
+    const cfg = buildTrendChartConfig(ct, {
+        labels: buckets.map(b => b.key),
+        primary: buckets.map(b => b.revenue),
+        primaryLabel: "Revenue",
+        secondary: buckets.map(b => b.count),
+        secondaryLabel: "Invoices",
+        color: "#3f51b5",
+        yTickFmt: v => fmtMoney(v),
+        tooltipLabel: (c, i, isHoriz) => {
+            const v = isHoriz ? c.parsed.x : c.parsed.y;
+            if (c.dataset.label === "Invoices") return "Invoices: " + fmtInt(v);
+            return fmtMoneyFull(v) + " (" + buckets[i].count + " inv)";
+        },
     });
+    state.charts.trend = new Chart(ctx, cfg);
 }
 
 function renderTopCustomersChart() {
@@ -5182,35 +5286,32 @@ function renderQuotes() {
     destroyChart("qTrend");
     const map = state.quoteTrendBucket === "day" ? byDay : state.quoteTrendBucket === "week" ? byWeek : byMonth;
     const buckets = [...map.values()].sort((a, b) => a.key < b.key ? -1 : 1);
-    const trendData = buckets.map(b => state.quoteTrendMetric === "amount" ? b.amount : b.count);
-    const tCt = state.quoteTrendChartType;
-    let chartType = tCt === "column" ? "bar" : (tCt === "area" ? "line" : tCt);
-    const fill = (tCt === "area" || tCt === "line");
-    const dataset = (chartType === "bar")
-        ? { label: state.quoteTrendMetric === "amount" ? "Amount" : "Count", data: trendData, backgroundColor: "#3f51b5", borderRadius: 4 }
-        : { label: state.quoteTrendMetric === "amount" ? "Amount" : "Count", data: trendData, borderColor: "#3f51b5",
-            backgroundColor: tCt === "area" ? "rgba(63,81,181,0.20)" : "rgba(63,81,181,0.06)",
-            fill: fill, tension: 0.3, pointRadius: 3, pointHoverRadius: 6, borderWidth: 2 };
+    const isAmt = state.quoteTrendMetric === "amount";
+    const trendData = buckets.map(b => isAmt ? b.amount : b.count);
     const ctxQt = document.getElementById("qTrendChart").getContext("2d");
-    state.charts.qTrend = new Chart(ctxQt, {
-        type: chartType,
-        data: { labels: buckets.map(b => b.key), datasets: [dataset] },
-        options: chartBase({
-            plugins: { legend: { display: false },
-                       tooltip: { callbacks: { label: c => {
-                           const b = buckets[c.dataIndex];
-                           return state.quoteTrendMetric === "amount"
-                               ? fmtMoneyFull(b.amount) + " · " + b.count + " quotes"
-                               : fmtInt(b.count) + " quotes · " + fmtMoneyFull(b.amount);
-                       } } } },
-            scales: { y: { ticks: { callback: v => state.quoteTrendMetric === "amount" ? fmtMoney(v) : fmtInt(v) } } },
-            onClick: (_, els) => {
-                if (!els.length) return;
-                const b = buckets[els[0].index];
-                openQuoteList(q => bucketKey(q.documentDate || q.invoiceDate || "", state.quoteTrendBucket) === b.key, "Quotes in " + b.key);
-            }
-        })
+    const qCfg = buildTrendChartConfig(state.quoteTrendChartType, {
+        labels: buckets.map(b => b.key),
+        primary: trendData,
+        primaryLabel: isAmt ? "Amount" : "Count",
+        secondary: buckets.map(b => isAmt ? b.count : b.amount),
+        secondaryLabel: isAmt ? "Quotes" : "Amount",
+        color: "#3f51b5",
+        yTickFmt: v => isAmt ? fmtMoney(v) : fmtInt(v),
+        tooltipLabel: (c, i, isHoriz) => {
+            const b = buckets[i];
+            if (c.dataset.label === "Quotes") return "Quotes: " + fmtInt(b.count);
+            if (c.dataset.label === "Amount" && !isAmt) return "Amount: " + fmtMoneyFull(b.amount);
+            return isAmt
+                ? fmtMoneyFull(b.amount) + " · " + b.count + " quotes"
+                : fmtInt(b.count) + " quotes · " + fmtMoneyFull(b.amount);
+        },
+        extraOptions: { onClick: (_, els) => {
+            if (!els.length) return;
+            const b = buckets[els[0].index];
+            openQuoteList(q => bucketKey(q.documentDate || q.invoiceDate || "", state.quoteTrendBucket) === b.key, "Quotes in " + b.key);
+        } },
     });
+    state.charts.qTrend = new Chart(ctxQt, qCfg);
 
     // ---------- Top 10 customers ----------
     destroyChart("qCust");
@@ -5690,30 +5791,27 @@ function renderBlanketOrders() {
     destroyChart("boTrend");
     const map = state.boTrendBucket === "day" ? byDay : state.boTrendBucket === "week" ? byWeek : byMonth;
     const buckets = [...map.values()].sort((a, b) => a.key < b.key ? -1 : 1);
-    const trendData = buckets.map(b => state.boTrendMetric === "amount" ? b.amount : b.count);
-    const tCt = state.boTrendChartType;
-    let chartType = tCt === "column" ? "bar" : (tCt === "area" ? "line" : tCt);
-    const fill = (tCt === "area" || tCt === "line");
-    const dataset = (chartType === "bar")
-        ? { label: state.boTrendMetric === "amount" ? "Amount" : "Count", data: trendData, backgroundColor: "#3f51b5", borderRadius: 4 }
-        : { label: state.boTrendMetric === "amount" ? "Amount" : "Count", data: trendData, borderColor: "#3f51b5",
-            backgroundColor: tCt === "area" ? "rgba(63,81,181,0.20)" : "rgba(63,81,181,0.06)",
-            fill: fill, tension: 0.3, pointRadius: 3, borderWidth: 2 };
+    const isAmtBo = state.boTrendMetric === "amount";
+    const trendData = buckets.map(b => isAmtBo ? b.amount : b.count);
     const ctxBt = document.getElementById("boTrendChart").getContext("2d");
-    state.charts.boTrend = new Chart(ctxBt, {
-        type: chartType,
-        data: { labels: buckets.map(b => b.key), datasets: [dataset] },
-        options: chartBase({
-            plugins: { legend: { display: false },
-                       tooltip: { callbacks: { label: c => {
-                           const b = buckets[c.dataIndex];
-                           return state.boTrendMetric === "amount"
-                               ? fmtMoneyFull(b.amount) + " · " + b.count + " orders"
-                               : fmtInt(b.count) + " orders · " + fmtMoneyFull(b.amount);
-                       } } } },
-            scales: { y: { ticks: { callback: v => state.boTrendMetric === "amount" ? fmtMoney(v) : fmtInt(v) } } }
-        })
+    const boCfg = buildTrendChartConfig(state.boTrendChartType, {
+        labels: buckets.map(b => b.key),
+        primary: trendData,
+        primaryLabel: isAmtBo ? "Amount" : "Count",
+        secondary: buckets.map(b => isAmtBo ? b.count : b.amount),
+        secondaryLabel: isAmtBo ? "Orders" : "Amount",
+        color: "#3f51b5",
+        yTickFmt: v => isAmtBo ? fmtMoney(v) : fmtInt(v),
+        tooltipLabel: (c, i) => {
+            const b = buckets[i];
+            if (c.dataset.label === "Orders") return "Orders: " + fmtInt(b.count);
+            if (c.dataset.label === "Amount" && !isAmtBo) return "Amount: " + fmtMoneyFull(b.amount);
+            return isAmtBo
+                ? fmtMoneyFull(b.amount) + " · " + b.count + " orders"
+                : fmtInt(b.count) + " orders · " + fmtMoneyFull(b.amount);
+        },
     });
+    state.charts.boTrend = new Chart(ctxBt, boCfg);
 
     // Top 10 customers (cross-filter)
     destroyChart("boCust");
