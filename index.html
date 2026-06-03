@@ -4312,14 +4312,66 @@ function renderTrendChart() {
     const ctx = document.getElementById("trendChart").getContext("2d");
     const ct = state.trendChartType || "line";
     if (state.trendSplit) {
-        // When stacked-by, force a bar shape (line stacks badly)
-        const { labels, datasets } = bucketInvoicesSplitBy(state.filtered, state.dashboardBucket, state.trendSplit);
+        // Split mode: re-shape the per-series datasets to honour the same
+        // chart-type vocabulary as the non-split path. column / bar stay
+        // stacked; lines/areas swap to type=line; "combo" falls back to
+        // stacked column (combo doesn't really apply to multi-series).
+        const raw = bucketInvoicesSplitBy(state.filtered, state.dashboardBucket, state.trendSplit);
+        const labels = raw.labels;
+        const seriesColors = raw.datasets.map(d => d.backgroundColor || d.borderColor || "#3f51b5");
+        let chartType, datasets, scales;
+        if (ct === "line" || ct === "smoothline") {
+            chartType = "line";
+            const tension = ct === "smoothline" ? 0.4 : 0;
+            datasets = raw.datasets.map((d, i) => ({
+                label: d.label, data: d.data,
+                borderColor: seriesColors[i], backgroundColor: "transparent",
+                fill: false, tension, pointRadius: 2, borderWidth: 2,
+            }));
+            scales = { x: {}, y: { ticks: { callback: v => fmtMoney(v) } } };
+        } else if (ct === "area" || ct === "smootharea") {
+            chartType = "line";
+            const tension = ct === "smootharea" ? 0.4 : 0;
+            datasets = raw.datasets.map((d, i) => ({
+                label: d.label, data: d.data,
+                borderColor: seriesColors[i],
+                backgroundColor: alphaHex(seriesColors[i], 0.45),
+                fill: true, tension, pointRadius: 0, borderWidth: 1,
+            }));
+            scales = { x: {}, y: { stacked: true, ticks: { callback: v => fmtMoney(v) } } };
+        } else if (ct === "stepped") {
+            chartType = "line";
+            datasets = raw.datasets.map((d, i) => ({
+                label: d.label, data: d.data,
+                borderColor: seriesColors[i],
+                backgroundColor: alphaHex(seriesColors[i], 0.20),
+                fill: true, stepped: "before", pointRadius: 0, borderWidth: 1,
+            }));
+            scales = { x: {}, y: { stacked: true, ticks: { callback: v => fmtMoney(v) } } };
+        } else if (ct === "bar") {
+            chartType = "bar";
+            datasets = raw.datasets.map((d, i) => ({
+                label: d.label, stack: "s", data: d.data,
+                backgroundColor: seriesColors[i], borderRadius: 2,
+            }));
+            scales = { x: { stacked: true, ticks: { callback: v => fmtMoney(v) } }, y: { stacked: true } };
+        } else { // column (default), and combo (no meaningful overlay in split mode)
+            chartType = "bar";
+            datasets = raw.datasets.map((d, i) => ({
+                label: d.label, stack: "s", data: d.data,
+                backgroundColor: seriesColors[i], borderRadius: 2,
+            }));
+            scales = { x: { stacked: true }, y: { stacked: true, ticks: { callback: v => fmtMoney(v) } } };
+        }
+        const isBarH = (ct === "bar");
         state.charts.trend = new Chart(ctx, {
-            type: "bar", data: { labels, datasets },
+            type: chartType,
+            data: { labels, datasets },
             options: chartBase({
+                indexAxis: isBarH ? "y" : "x",
                 plugins: { legend: { position: "bottom", labels: { boxWidth: 10, font: { size: 11 } } },
-                           tooltip: { callbacks: { label: c => c.dataset.label + ": " + fmtMoneyFull(c.parsed.y) } } },
-                scales: { x: { stacked: true }, y: { stacked: true, ticks: { callback: v => fmtMoney(v) } } }
+                           tooltip: { callbacks: { label: c => c.dataset.label + ": " + fmtMoneyFull(isBarH ? c.parsed.x : c.parsed.y) } } },
+                scales,
             })
         });
         return;
