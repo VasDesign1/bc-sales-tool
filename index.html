@@ -3297,18 +3297,22 @@ function monthKey(iso) {
 // COST / GP COMPUTATION (from item ledger entries)
 // ============================================================
 function buildCostMaps(iles) {
-    // Item-level average unit cost approach: BC's ILE.documentNumber holds
-    // the shipment / return-receipt number, not the invoice number, so direct
-    // doc-key matching fails. Instead, compute average unit cost per item
-    // from all ILE rows, then derive each line's cost as avg × line quantity.
-    // This mirrors what Power BI's "Adjusted Cost (LCY)" measure does.
+    // Hybrid cost lookup. Build BOTH:
+    //   (a) per-document × per-item maps   — gives exact line cost for the
+    //       Ship+Invoice workflow where ILE.documentNumber matches the
+    //       invoice/credit-memo number. This is the PBI-equivalent path.
+    //   (b) the existing avg-unit-cost maps (item, item+month,
+    //       cust+item+month) — fallback when the document-key lookup
+    //       misses (Ship-first-Invoice-later workflows, etc.).
     state.itemAvgCost = new Map();
     state.itemAvgCostNonInv = new Map();
     state.itemMonthAvgCost = new Map();         // key "itemNo|YYYY-MM" -> avg unit cost
     state.itemMonthAvgCostNonInv = new Map();
     state.custItemMonthAvgCost = new Map();     // key "custNo|itemNo|YYYY-MM" -> avg unit cost
     state.custItemMonthAvgCostNonInv = new Map();
-    state.costStats = { rows: 0, items: 0, monthBuckets: 0, custBuckets: 0, totalCost: 0, totalQty: 0, sampleLines: 0, matched: 0, fields: null };
+    state.costByItemDocKey      = new Map();    // key "docNo|itemNo" -> {cost, qty}
+    state.costNonInvByItemDocKey = new Map();   // key "docNo|itemNo" -> {cost, qty}
+    state.costStats = { rows: 0, items: 0, monthBuckets: 0, custBuckets: 0, docKeys: 0, totalCost: 0, totalQty: 0, sampleLines: 0, matched: 0, exactDocHits: 0, fields: null };
 
     // Build documentNumber → customerNumber map from all loaded posted documents.
     // ILE entries store the shipment / return-receipt number (or invoice number
@@ -3346,13 +3350,24 @@ function buildCostMaps(iles) {
         const cur = byItem.get(itemNo) || { qty: 0, cost: 0, costNI: 0 };
         cur.qty += qty; cur.cost += cost; cur.costNI += costNI;
         byItem.set(itemNo, cur);
+        // (a) exact per-(documentNumber, item) cost — used by the Ship+Invoice
+        // workflow where ILE.documentNumber == the invoice / credit-memo No.
+        const docNo = e.documentNumber || "";
+        if (docNo) {
+            const dk = docNo + "|" + itemNo;
+            const curD = state.costByItemDocKey.get(dk) || { qty: 0, cost: 0 };
+            curD.qty += qty; curD.cost += cost;
+            state.costByItemDocKey.set(dk, curD);
+            const curDN = state.costNonInvByItemDocKey.get(dk) || { qty: 0, cost: 0 };
+            curDN.qty += qty; curDN.cost += costNI;
+            state.costNonInvByItemDocKey.set(dk, curDN);
+        }
         const mk = e[fDate] ? monthKey(e[fDate]) : null;
         if (mk) {
             const k = itemNo + "|" + mk;
             const curM = byItemMonth.get(k) || { qty: 0, cost: 0, costNI: 0 };
             curM.qty += qty; curM.cost += cost; curM.costNI += costNI;
             byItemMonth.set(k, curM);
-            const docNo = e.documentNumber || "";
             const cust = docToCust.get(docNo);
             if (cust) {
                 custLinked++;
@@ -3363,6 +3378,7 @@ function buildCostMaps(iles) {
             }
         }
     }
+    state.costStats.docKeys = state.costByItemDocKey.size;
     for (const [k, v] of byItem) {
         state.itemAvgCost.set(k, v.qty ? v.cost / v.qty : 0);
         state.itemAvgCostNonInv.set(k, v.qty ? v.costNI / v.qty : 0);
@@ -3382,19 +3398,25 @@ function buildCostMaps(iles) {
                 state.costStats.monthBuckets + " item-month · " +
                 state.costStats.custBuckets + " cust-item-month (" + custLinked + " ILE rows linked to a customer)");
 
-    // Spot-check: how many invoice lines have a matching avg-cost
+    console.log("[ILE] " + state.costStats.docKeys + " (docNumber|item) keys built for exact-cost lookup");
+
+    // Spot-check: how many invoice lines have a matching avg-cost AND
+    // how many would hit the exact-document cost path (Ship+Invoice).
     if (state.invoices && state.invoices.length) {
-        let lineCount = 0, matched = 0;
+        let lineCount = 0, matched = 0, exact = 0;
         for (const inv of state.invoices.slice(0, 100)) {
             for (const ln of (inv.salesInvoiceLines || [])) {
                 lineCount++;
                 const itemNo = ln.lineObjectNumber || ln.itemId || "";
                 if (itemNo && state.itemAvgCost.has(itemNo) && state.itemAvgCost.get(itemNo) > 0) matched++;
+                if (inv.number && itemNo && state.costByItemDocKey.has(inv.number + "|" + itemNo)) exact++;
             }
         }
         state.costStats.sampleLines = lineCount;
         state.costStats.matched = matched;
         const pct = lineCount ? Math.round(matched / lineCount * 100) : 0;
+        const exactPct = lineCount ? Math.round(exact / lineCount * 100) : 0;
+        console.log("[ILE] exact-doc coverage: " + exact + "/" + lineCount + " (" + exactPct + "%) sample lines match by invoice No.");
         console.log("[ILE] line-item coverage: " + matched + "/" + lineCount + " (" + pct + "%) sample lines have an avg-cost match");
     }
 }
@@ -3421,15 +3443,25 @@ function lineEntryType(ln) {
     return (ln.lineObjectNumber || ln.itemId) ? "Item" : "G/L Account";
 }
 
-function costFromLine(line, sign, postingDate, customerNumber) {
+function costFromLine(line, sign, postingDate, customerNumber, documentNumber) {
     if (!isItemLine(line)) return 0;
     sign = (sign == null) ? 1 : sign;
     const itemNo = line.lineObjectNumber || line.itemId || "";
     const qty = Math.abs(num(line.quantity));
-    // 3-tier lookup, closest match to Power BI's specific-cost-layer:
+    // Tier 0: exact per-document cost (Ship+Invoice workflow — ILE doc
+    // number matches the invoice / credit-memo number). Gives PBI-exact
+    // line cost when present.
+    if (documentNumber && itemNo) {
+        const d = state.costByItemDocKey && state.costByItemDocKey.get(documentNumber + "|" + itemNo);
+        if (d && d.qty > 0) {
+            if (state.costStats) state.costStats.exactDocHits++;
+            return (d.cost / d.qty) * qty * sign;
+        }
+    }
+    // 3-tier average fallback, closest match to Power BI's specific-cost-layer:
     //   1. cust + item + month   (the actual shipment for this customer)
     //   2. item + month          (any shipment of this item that month)
-    //   3. global item average   (fallback)
+    //   3. global item average   (last resort)
     let uc = 0;
     if (postingDate) {
         const mk = monthKey(postingDate);
@@ -3451,15 +3483,20 @@ function costFromLine(line, sign, postingDate, customerNumber) {
 // combined helper so the headline number matches PBI. The drill-down
 // trees keep the two parts separate via costFromLine + costNonInvFromLine
 // because they expose distinct "Adj Cost" and "Cost Non-Inv" columns.
-function totalCostFromLine(line, sign, postingDate, customerNumber) {
-    return costFromLine(line, sign, postingDate, customerNumber) +
-           costNonInvFromLine(line, sign, postingDate, customerNumber);
+function totalCostFromLine(line, sign, postingDate, customerNumber, documentNumber) {
+    return costFromLine(line, sign, postingDate, customerNumber, documentNumber) +
+           costNonInvFromLine(line, sign, postingDate, customerNumber, documentNumber);
 }
-function costNonInvFromLine(line, sign, postingDate, customerNumber) {
+function costNonInvFromLine(line, sign, postingDate, customerNumber, documentNumber) {
     if (!isItemLine(line)) return 0;
     sign = (sign == null) ? 1 : sign;
     const itemNo = line.lineObjectNumber || line.itemId || "";
     const qty = Math.abs(num(line.quantity));
+    // Tier 0: exact per-document non-invtbl cost (Ship+Invoice workflow).
+    if (documentNumber && itemNo) {
+        const d = state.costNonInvByItemDocKey && state.costNonInvByItemDocKey.get(documentNumber + "|" + itemNo);
+        if (d && d.qty > 0) return (d.cost / d.qty) * qty * sign;
+    }
     let uc = 0;
     if (postingDate) {
         const mk = monthKey(postingDate);
@@ -3476,7 +3513,7 @@ function costNonInvFromLine(line, sign, postingDate, customerNumber) {
     return uc * qty * sign;
 }
 function invoiceCost(inv) {
-    return (inv.salesInvoiceLines || []).reduce((s, ln) => s + totalCostFromLine(ln, 1, inv.postingDate, inv.customerNumber), 0);
+    return (inv.salesInvoiceLines || []).reduce((s, ln) => s + totalCostFromLine(ln, 1, inv.postingDate, inv.customerNumber, inv.number), 0);
 }
 function invoiceGP(inv) {
     return num(inv.totalAmountExcludingTax) - invoiceCost(inv);
@@ -3649,7 +3686,7 @@ function aggregateByItem(invoices) {
             }
             if (ln.description) g.description = ln.description;
             g.revenue += lineNetAmount(ln);
-            g.cost    += totalCostFromLine(ln, 1, inv.postingDate, inv.customerNumber);
+            g.cost    += totalCostFromLine(ln, 1, inv.postingDate, inv.customerNumber, inv.number);
             g.qty     += num(ln.quantity);
             g.lineCount += 1;
         }
@@ -3672,7 +3709,7 @@ function aggregateByLocation(invoices) {
             let g = map.get(code);
             if (!g) { g = { code, revenue: 0, cost: 0, qty: 0, lineCount: 0 }; map.set(code, g); }
             g.revenue += lineNetAmount(ln);
-            g.cost    += totalCostFromLine(ln, 1, inv.postingDate, inv.customerNumber);
+            g.cost    += totalCostFromLine(ln, 1, inv.postingDate, inv.customerNumber, inv.number);
             g.qty     += num(ln.quantity);
             g.lineCount += 1;
         }
@@ -3714,7 +3751,7 @@ function aggregateBranchMonthly(invoices) {
             let g = lineGroups.get(k);
             if (!g) { g = { fy, monthKey: mk, branch: code, sales: 0, cost: 0, qty: 0 }; lineGroups.set(k, g); }
             g.sales += lineNetAmount(ln);
-            g.cost  += totalCostFromLine(ln, 1, inv.postingDate, inv.customerNumber);
+            g.cost  += totalCostFromLine(ln, 1, inv.postingDate, inv.customerNumber, inv.number);
             g.qty   += num(ln.quantity);
         }
         for (const [k, g] of lineGroups) {
@@ -3753,7 +3790,7 @@ function buildEOMRows(invoices) {
             if (!lineMatchesFilters(ln)) continue;
             const itemNo = ln.lineObjectNumber || ln.itemId || "";
             const sales = lineNetAmount(ln);
-            const cost  = totalCostFromLine(ln, 1, inv.postingDate, inv.customerNumber);
+            const cost  = totalCostFromLine(ln, 1, inv.postingDate, inv.customerNumber, inv.number);
             rows.push({
                 customer:    inv.customerName || inv.customerNumber || "(unknown)",
                 salesperson: inv.salesperson || "(unassigned)",
@@ -3918,7 +3955,7 @@ function getAdjustments() {
             if (!lineMatchesFilters(ln)) continue;
             cmAmount += lineNetAmount(ln);
             cmQty    += num(ln.quantity);
-            cmCost   += totalCostFromLine(ln, 1, cm.postingDate, cm.customerNumber);
+            cmCost   += totalCostFromLine(ln, 1, cm.postingDate, cm.customerNumber, cm.number);
         }
         if (!cmAmount && cm.totalAmountExcludingTax != null) cmAmount = num(cm.totalAmountExcludingTax);
         credit += cmAmount; qty += cmQty; cost += cmCost;
@@ -6370,7 +6407,7 @@ function renderReturns() {
             const a = lineNetAmount(ln);
             const q = num(ln.quantity);
             const itemNo = ln.lineObjectNumber || ln.itemId || "";
-            const c = totalCostFromLine(ln, 1, cm.postingDate, cm.customerNumber);
+            const c = totalCostFromLine(ln, 1, cm.postingDate, cm.customerNumber, cm.number);
             cmAmount += a; cmQty += q; cmCost += c;
             const ent = byItem.get(itemNo) || { number: itemNo, description: ln.description || "", credit: 0, qty: 0 };
             ent.credit += a; ent.qty += q;
@@ -6517,7 +6554,7 @@ function renderRunRateTab(opts) {
                     if (state.filters.item && (ln.lineObjectNumber || ln.itemId || "") !== state.filters.item) continue;
                     const cur = map.get(ent) || { sales: 0, cost: 0 };
                     cur.sales += lineNetAmount(ln);
-                    cur.cost  += totalCostFromLine(ln, 1, inv.postingDate, inv.customerNumber);
+                    cur.cost  += totalCostFromLine(ln, 1, inv.postingDate, inv.customerNumber, inv.number);
                     map.set(ent, cur);
                 }
             }
@@ -7185,7 +7222,7 @@ function buildDecompositionTree(levels) {
             if (!lineMatchesFilters(ln)) continue;
             const s = lineNetAmount(ln);
             const q = num(ln.quantity);
-            const c = totalCostFromLine(ln, 1, inv.postingDate, inv.customerNumber);
+            const c = totalCostFromLine(ln, 1, inv.postingDate, inv.customerNumber, inv.number);
             let map = root;
             const path = [];
             for (let d = 0; d < dims.length; d++) {
@@ -7354,7 +7391,7 @@ function buildCustomerItemRows(g) {
             r.revenue += lineNetAmount(ln);
             r.qty += num(ln.quantity);
             r.lineCount++;
-            r.cost += totalCostFromLine(ln, 1, inv.postingDate, inv.customerNumber);
+            r.cost += totalCostFromLine(ln, 1, inv.postingDate, inv.customerNumber, inv.number);
             if (!seenThisInv.has(key)) { r.invoiceIds.add(inv.id); seenThisInv.add(key); }
             if (inv.postingDate && (!r.lastDate || inv.postingDate > r.lastDate)) r.lastDate = inv.postingDate;
         }
@@ -8048,7 +8085,7 @@ function aggregateByCategory(invoices) {
             const cat = state.itemCategory.get(itemNo) || "(no category)";
             const cur = map.get(cat) || { cat, sales: 0, cost: 0, qty: 0 };
             cur.sales += lineNetAmount(ln);
-            cur.cost  += totalCostFromLine(ln, 1, inv.postingDate, inv.customerNumber);
+            cur.cost  += totalCostFromLine(ln, 1, inv.postingDate, inv.customerNumber, inv.number);
             cur.qty   += num(ln.quantity);
             map.set(cat, cur);
         }
@@ -8241,8 +8278,8 @@ function buildCustomerDrillTree(customer) {
             const mult = d.countsTotal ? 1 : 0;
             const s = lineNetAmount(ln) * d.sign * mult;
             const q = num(ln.quantity) * d.sign * mult;
-            const c = costFromLine(ln, d.sign, d.postingDate, d.customerNumber) * mult;
-            const cn = costNonInvFromLine(ln, d.sign, d.postingDate, d.customerNumber) * mult;
+            const c = costFromLine(ln, d.sign, d.postingDate, d.customerNumber, d.number) * mult;
+            const cn = costNonInvFromLine(ln, d.sign, d.postingDate, d.customerNumber, d.number) * mult;
             const leaf = _newNode("ct-line-" + et + "-" + d.type + "-" + d.id + "-" + (ln.id || ln.sequence || itemNo),
                 (itemNo || (et === "G/L Account" ? "(no account)" : "(no item)")) + (ln.description ? " · " + ln.description : ""));
             leaf.children = null;
@@ -8286,8 +8323,8 @@ function buildBranchDrillTree(_invoices) {
             const mult = d.countsTotal ? 1 : 0;
             const s = lineNetAmount(ln) * d.sign * mult;
             const q = num(ln.quantity) * d.sign * mult;
-            const c = costFromLine(ln, d.sign, d.postingDate, d.customerNumber) * mult;
-            const cn = costNonInvFromLine(ln, d.sign, d.postingDate, d.customerNumber) * mult;
+            const c = costFromLine(ln, d.sign, d.postingDate, d.customerNumber, d.number) * mult;
+            const cn = costNonInvFromLine(ln, d.sign, d.postingDate, d.customerNumber, d.number) * mult;
             const leaf = _newNode("bt-line-" + locCode + "-" + d.type + "-" + d.id + "-" + (ln.id || ln.sequence || itemNo),
                 (itemNo ? "Item " + itemNo : "(non-item)") + (ln.description ? " · " + ln.description : ""));
             leaf.children = null;
@@ -8349,8 +8386,8 @@ function buildSalespersonDrillTree(_invoices) {
             const mult = d.countsTotal ? 1 : 0;
             const s = lineNetAmount(ln) * d.sign * mult;
             const q = num(ln.quantity) * d.sign * mult;
-            const c = costFromLine(ln, d.sign, d.postingDate, d.customerNumber) * mult;
-            const cn = costNonInvFromLine(ln, d.sign, d.postingDate, d.customerNumber) * mult;
+            const c = costFromLine(ln, d.sign, d.postingDate, d.customerNumber, d.number) * mult;
+            const cn = costNonInvFromLine(ln, d.sign, d.postingDate, d.customerNumber, d.number) * mult;
             const leaf = _newNode("st-line-" + sp + "-" + custKey + "-" + et + "-" + d.type + "-" + d.id + "-" + (ln.id || ln.sequence || itemNo),
                 (itemNo || (et === "G/L Account" ? "(no account)" : "(no item)")) + (ln.description ? " · " + ln.description : ""));
             leaf.children = null;
