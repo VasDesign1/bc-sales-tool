@@ -3312,6 +3312,8 @@ function buildCostMaps(iles) {
     state.custItemMonthAvgCostNonInv = new Map();
     state.costByItemDocKey      = new Map();    // key "docNo|itemNo" -> {cost, qty}
     state.costNonInvByItemDocKey = new Map();   // key "docNo|itemNo" -> {cost, qty}
+    state.custItemDateAvgCost = new Map();      // key "cust|item|YYYY-MM-DD" -> avg unit cost
+    state.custItemDateAvgCostNonInv = new Map();
     state.costStats = { rows: 0, items: 0, monthBuckets: 0, custBuckets: 0, docKeys: 0, totalCost: 0, totalQty: 0, sampleLines: 0, matched: 0, exactDocHits: 0, fields: null };
 
     // Build documentNumber → customerNumber map from all loaded posted documents.
@@ -3341,6 +3343,7 @@ function buildCostMaps(iles) {
     const byItem = new Map();
     const byItemMonth = new Map();
     const byCustItemMonth = new Map();
+    const byCustItemDate  = new Map();   // tighter than byCustItemMonth — same-day match
     let custLinked = 0;
     for (const e of iles) {
         state.costStats.rows++;
@@ -3367,7 +3370,9 @@ function buildCostMaps(iles) {
             curDN.qty += qty; curDN.cost += costNI;
             state.costNonInvByItemDocKey.set(dk, curDN);
         }
-        const mk = e[fDate] ? monthKey(e[fDate]) : null;
+        const dateRaw = e[fDate];
+        const mk = dateRaw ? monthKey(dateRaw) : null;
+        const dk = dateRaw ? String(dateRaw).substring(0, 10) : null;   // YYYY-MM-DD
         if (mk) {
             const k = itemNo + "|" + mk;
             const curM = byItemMonth.get(k) || { qty: 0, cost: 0, costNI: 0 };
@@ -3380,6 +3385,14 @@ function buildCostMaps(iles) {
                 const curC = byCustItemMonth.get(ck) || { qty: 0, cost: 0, costNI: 0 };
                 curC.qty += qty; curC.cost += cost; curC.costNI += costNI;
                 byCustItemMonth.set(ck, curC);
+                // Daily granularity — catches same-day Ship+Invoice flow
+                // without averaging across the month.
+                if (dk) {
+                    const cdk = cust + "|" + itemNo + "|" + dk;
+                    const curCD = byCustItemDate.get(cdk) || { qty: 0, cost: 0, costNI: 0 };
+                    curCD.qty += qty; curCD.cost += cost; curCD.costNI += costNI;
+                    byCustItemDate.set(cdk, curCD);
+                }
             }
         }
     }
@@ -3396,6 +3409,10 @@ function buildCostMaps(iles) {
         state.custItemMonthAvgCost.set(k, v.qty ? v.cost / v.qty : 0);
         state.custItemMonthAvgCostNonInv.set(k, v.qty ? v.costNI / v.qty : 0);
     }
+    for (const [k, v] of byCustItemDate) {
+        state.custItemDateAvgCost.set(k, v.qty ? v.cost / v.qty : 0);
+        state.custItemDateAvgCostNonInv.set(k, v.qty ? v.costNI / v.qty : 0);
+    }
     state.costStats.items = state.itemAvgCost.size;
     state.costStats.monthBuckets = state.itemMonthAvgCost.size;
     state.costStats.custBuckets  = state.custItemMonthAvgCost.size;
@@ -3408,20 +3425,25 @@ function buildCostMaps(iles) {
     // Spot-check: how many invoice lines have a matching avg-cost AND
     // how many would hit the exact-document cost path (Ship+Invoice).
     if (state.invoices && state.invoices.length) {
-        let lineCount = 0, matched = 0, exact = 0;
+        let lineCount = 0, matched = 0, exact = 0, sameDay = 0;
         for (const inv of state.invoices.slice(0, 100)) {
+            const invDate = inv.postingDate ? String(inv.postingDate).substring(0, 10) : "";
             for (const ln of (inv.salesInvoiceLines || [])) {
                 lineCount++;
                 const itemNo = ln.lineObjectNumber || ln.itemId || "";
                 if (itemNo && state.itemAvgCost.has(itemNo) && state.itemAvgCost.get(itemNo) > 0) matched++;
                 if (inv.number && itemNo && state.costByItemDocKey.has(inv.number + "|" + itemNo)) exact++;
+                if (inv.customerNumber && itemNo && invDate &&
+                    state.custItemDateAvgCost.has(inv.customerNumber + "|" + itemNo + "|" + invDate)) sameDay++;
             }
         }
         state.costStats.sampleLines = lineCount;
         state.costStats.matched = matched;
         const pct = lineCount ? Math.round(matched / lineCount * 100) : 0;
         const exactPct = lineCount ? Math.round(exact / lineCount * 100) : 0;
+        const sameDayPct = lineCount ? Math.round(sameDay / lineCount * 100) : 0;
         console.log("[ILE] exact-doc coverage: " + exact + "/" + lineCount + " (" + exactPct + "%) sample lines match by invoice No.");
+        console.log("[ILE] same-day coverage: " + sameDay + "/" + lineCount + " (" + sameDayPct + "%) sample lines match by (cust+item+date).");
         console.log("[ILE] line-item coverage: " + matched + "/" + lineCount + " (" + pct + "%) sample lines have an avg-cost match");
     }
 }
@@ -3463,12 +3485,18 @@ function costFromLine(line, sign, postingDate, customerNumber, documentNumber) {
             return (d.cost / d.qty) * qty * sign;
         }
     }
-    // 3-tier average fallback, closest match to Power BI's specific-cost-layer:
-    //   1. cust + item + month   (the actual shipment for this customer)
-    //   2. item + month          (any shipment of this item that month)
-    //   3. global item average   (last resort)
+    // Tiered fallback, tightest-match first:
+    //   1. cust + item + date    (same-day ILE entry — Ship+Invoice exact)
+    //   2. cust + item + month   (the actual shipment for this customer)
+    //   3. item + month          (any shipment of this item that month)
+    //   4. global item average   (last resort)
     let uc = 0;
-    if (postingDate) {
+    if (postingDate && customerNumber) {
+        const dk = String(postingDate).substring(0, 10);
+        const v = state.custItemDateAvgCost.get(customerNumber + "|" + itemNo + "|" + dk);
+        if (v != null && v > 0) uc = v;
+    }
+    if (uc === 0 && postingDate) {
         const mk = monthKey(postingDate);
         if (customerNumber) {
             const v = state.custItemMonthAvgCost.get(customerNumber + "|" + itemNo + "|" + mk);
@@ -3503,7 +3531,12 @@ function costNonInvFromLine(line, sign, postingDate, customerNumber, documentNum
         if (d && d.qty > 0) return (d.cost / d.qty) * qty * sign;
     }
     let uc = 0;
-    if (postingDate) {
+    if (postingDate && customerNumber) {
+        const dk = String(postingDate).substring(0, 10);
+        const v = state.custItemDateAvgCostNonInv.get(customerNumber + "|" + itemNo + "|" + dk);
+        if (v != null && v > 0) uc = v;
+    }
+    if (uc === 0 && postingDate) {
         const mk = monthKey(postingDate);
         if (customerNumber) {
             const v = state.custItemMonthAvgCostNonInv.get(customerNumber + "|" + itemNo + "|" + mk);
