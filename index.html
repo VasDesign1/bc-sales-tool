@@ -90,12 +90,14 @@
             font-size: 13px; min-width: 140px; max-width: 200px;
             background: white; color: #2c2f4a;
             font-family: inherit;
+            box-sizing: border-box;
+            -webkit-appearance: none; appearance: none;
         }
         /* Cap select width so the customer dropdown doesn't expand after
            data loads (BC names are long), which used to force the toolbar
            to wrap to two rows. */
-        .toolbar select { width: 160px; }
-        .toolbar input[type="date"], .toolbar input[type="datetime-local"] { min-width: 160px; }
+        .toolbar select { width: 160px; appearance: auto; -webkit-appearance: auto; }
+        .toolbar input[type="date"], .toolbar input[type="datetime-local"] { min-width: 160px; appearance: auto; -webkit-appearance: auto; }
         .toolbar .spacer { flex: 1; }
         .btn {
             padding: 8px 18px; border: none; border-radius: 8px;
@@ -929,7 +931,10 @@
     <div class="main">
 
         <div class="header">
-            <h2 id="headerTitle">Overview</h2>
+            <div style="display:flex; align-items:center; gap:18px;">
+                <h2 id="headerTitle">Overview</h2>
+                <button class="btn btn-primary" id="loadBtn" disabled>Load sales</button>
+            </div>
             <div class="right" style="display:flex; align-items:center; gap:14px;">
                 <div>
                     <div class="user" id="userBadge">not signed in</div>
@@ -980,14 +985,13 @@
                 </div>
                 <div class="field">
                     <label for="itemFilterBox">Item</label>
-                    <input list="itemFilterList" id="itemFilterBox" placeholder="All items" autocomplete="off">
+                    <input type="text" list="itemFilterList" id="itemFilterBox" placeholder="All items" autocomplete="off">
                     <datalist id="itemFilterList"></datalist>
                 </div>
                 <div class="field" title="Hide documents modified after this timestamp — useful for matching a stale Power BI refresh">
                     <label for="snapshotAsOf">Compare as of</label>
                     <input type="datetime-local" id="snapshotAsOf">
                 </div>
-                <button class="btn btn-primary" id="loadBtn" disabled>Load sales</button>
             </div>
 
             <div class="filter-chips" id="filterChips"></div>
