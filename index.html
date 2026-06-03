@@ -3506,12 +3506,65 @@ function docInSnapshot(doc) {
     if (!t) return true; // no timestamp — include conservatively
     return new Date(t) <= state.snapshotAsOf;
 }
+// Read the From / To inputs once and return a predicate that accepts
+// any ISO-style date string (YYYY-MM-DD…) inside the inclusive range.
+// Empty inputs ⇒ no constraint on that side.
+function getDateRangePredicate() {
+    const fromEl = document.getElementById("fromDate");
+    const toEl   = document.getElementById("toDate");
+    const from = fromEl ? fromEl.value : "";
+    const to   = toEl   ? toEl.value   : "";
+    if (!from && !to) return () => true;
+    return iso => {
+        if (!iso) return false;
+        const k = String(iso).substring(0, 10); // YYYY-MM-DD
+        if (from && k < from) return false;
+        if (to   && k > to)   return false;
+        return true;
+    };
+}
+
 function rebuildFiltered() {
-    state.filtered = state.invoices.filter(inv => docInSnapshot(inv) && invoiceMatchesFilters(inv));
+    const inRange = getDateRangePredicate();
+    state.filtered = state.invoices.filter(inv =>
+        inRange(inv.postingDate) && docInSnapshot(inv) && invoiceMatchesFilters(inv));
     state.byCustomer = aggregateByCustomer(state.filtered);
     state.byItem     = aggregateByItem(state.filtered);
     state.byLocation = aggregateByLocation(state.filtered);
     state.bySalesperson = aggregateBySalesperson(state.filtered);
+    updateDateRangeWarning();
+}
+
+// Show a yellow banner under the toolbar when the active From/To window
+// falls (partly or wholly) outside the range that was last fetched from
+// BC. The user has to click Reload sales to actually pull fresh data
+// from outside the loaded window.
+function updateDateRangeWarning() {
+    let banner = document.getElementById("dateRangeWarning");
+    const from = (document.getElementById("fromDate") || {}).value || "";
+    const to   = (document.getElementById("toDate")   || {}).value || "";
+    const loadedFrom = state.loadedFrom || "";
+    const loadedTo   = state.loadedTo   || "";
+    let warn = "";
+    if (loadedFrom && loadedTo && from && to) {
+        if (from < loadedFrom || to > loadedTo) {
+            warn = "Selected window " + from + " → " + to +
+                " falls outside the loaded range " + loadedFrom + " → " + loadedTo +
+                ". Click Reload sales to pull fresh data from BC.";
+        }
+    }
+    if (!warn) { if (banner) banner.style.display = "none"; return; }
+    if (!banner) {
+        banner = document.createElement("div");
+        banner.id = "dateRangeWarning";
+        banner.className = "hint";
+        banner.style.background = "#fff8e1";
+        banner.style.borderLeftColor = "#ffca28";
+        const filters = document.getElementById("filterChips");
+        if (filters && filters.parentNode) filters.parentNode.insertBefore(banner, filters);
+    }
+    banner.textContent = warn;
+    banner.style.display = "block";
 }
 
 // ============================================================
@@ -3840,8 +3893,10 @@ function chartBase(opts) { return Object.assign({ responsive: true, maintainAspe
 // shows a sales-KPI row. Credit revenue and the implied cost are
 // subtracted from gross totals to give "net of returns" figures.
 function getAdjustments() {
+    const inRange = getDateRangePredicate();
     let credit = 0, qty = 0, cost = 0;
     for (const cm of (state.creditMemos || [])) {
+        if (!inRange(cm.postingDate)) continue;
         if (state.filters.salesperson && (cm.salesperson || "(unassigned)") !== state.filters.salesperson) continue;
         if (state.filters.customer && cm.customerNumber !== state.filters.customer) continue;
         if (state.filters.location) {
@@ -5330,7 +5385,9 @@ function openQuoteList(predicate, title) {
     openTopNModal("quoteList");
 }
 function filteredQuotes() {
+    const inRange = getDateRangePredicate();
     return (state.quotes || []).filter(q => {
+        if (!inRange(q.documentDate || q.invoiceDate)) return false;
         if (state.filters.salesperson && (q.salesperson || "(unassigned)") !== state.filters.salesperson) return false;
         if (state.filters.customer && (q.customerNumber || "") !== state.filters.customer) return false;
         if (state.filters.location) {
@@ -5814,7 +5871,9 @@ function boStatusBadgeClass(s) {
     return "badge-draft";
 }
 function filteredBlanketOrders() {
+    const inRange = getDateRangePredicate();
     return (state.blanketOrders || []).filter(bo => {
+        if (!inRange(bo.documentDate || bo.orderDate)) return false;
         if (state.filters.salesperson && (bo.salesperson || "(unassigned)") !== state.filters.salesperson) return false;
         if (state.filters.customer && (bo.customerNumber || "") !== state.filters.customer) return false;
         if (state.filters.status && (bo.status || "") !== state.filters.status) return false;
@@ -6272,7 +6331,9 @@ function renderBlanketOrderCustomerTree(orders) {
 
 function renderReturns() {
     renderFilterChips();
+    const inRange = getDateRangePredicate();
     const cms = (state.creditMemos || []).filter(cm => {
+        if (!inRange(cm.postingDate)) return false;
         if (state.filters.salesperson && (cm.salesperson || "(unassigned)") !== state.filters.salesperson) return false;
         if (state.filters.location) {
             return (cm.salesCreditMemoLines || []).some(ln => locationCode(ln.locationId) === state.filters.location);
@@ -8476,6 +8537,8 @@ async function handleLoad() {
         state.custCity = new Map(customers.map(c => [c.number || c.id, c.city || ""]));
         state.invoices = invoices;
         state.iles = iles;
+        state.loadedFrom = from;
+        state.loadedTo   = to;
         buildCostMaps(iles);
         updateCostQualityBadge();
         populateFilterDropdowns();
@@ -8548,10 +8611,18 @@ function wireEvents() {
         });
     }
 
-    document.getElementById("quickRange").addEventListener("change", e => { if (e.target.value) applyQuickRange(e.target.value); });
+    document.getElementById("quickRange").addEventListener("change", e => {
+        if (e.target.value) applyQuickRange(e.target.value);
+        if (state.invoices && state.invoices.length) { rebuildFiltered(); renderCurrentTab(); }
+    });
     ["fromDate", "toDate"].forEach(id => {
         document.getElementById(id).addEventListener("change", () => {
-            document.getElementById("quickRange").value = ""; setPeriodBadge();
+            document.getElementById("quickRange").value = "";
+            setPeriodBadge();
+            // Already-loaded data: re-filter in place so the user gets
+            // instant feedback. Out-of-range warning is shown by
+            // updateDateRangeWarning() called from rebuildFiltered.
+            if (state.invoices && state.invoices.length) { rebuildFiltered(); renderCurrentTab(); }
         });
     });
 
