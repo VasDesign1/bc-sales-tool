@@ -3233,7 +3233,7 @@ function renderTopNTable() {
     const tbody = document.querySelector("#topNTable tbody");
     const fmtRow = r => {
         const dim = topNState.dim;
-        if (dim === "customers") return `
+        if (dim === "customers" || dim === "customers_in_month") return `
             <tr>
                 <td>${escapeHtml(r.num)}</td>
                 <td>${escapeHtml(r.name)}</td>
@@ -7680,17 +7680,18 @@ function wireEvents() {
                     byCust.set(k, cur);
                 }
                 const rows = [...byCust.values()].sort((a, b) => b.amount - a.amount);
+                // 8 columns to match the 8-cell quoteList row template
                 state.quoteListCache = rows.map(c => ({
-                    key: c.customerNumber, number: "", customer: c.customer, customerNumber: c.customerNumber,
+                    key: c.customerNumber, number: c.customerNumber, customer: c.customer, customerNumber: c.customerNumber,
                     salesperson: "", date: "", status: c.count + " quote" + (c.count === 1 ? "" : "s"),
                     qty: 0, amount: c.amount,
                 }));
                 TOPN_DEFS.quoteList = {
                     title: "All customers quoted (" + rows.length + ")",
                     get: () => state.quoteListCache,
-                    columns: ["Customer No", "Customer", "Quotes", "Amount", ""],
+                    columns: ["Customer No", "Customer", "", "", "Quotes", "", "Amount", ""],
                     sortKey: "amount",
-                    headerKeys: { "Customer No": "customerNumber", "Customer": "customer", "Quotes": "status", "Amount": "amount" },
+                    headerKeys: { "Customer No": "number", "Customer": "customer", "Quotes": "status", "Amount": "amount" },
                     headerNumeric: new Set(["Amount"]),
                     action: { label: "Quotes for this customer", run: r => {
                         closeTopNModal();
@@ -7720,7 +7721,7 @@ function wireEvents() {
                 TOPN_DEFS.quoteList = {
                     title: "All items quoted (" + rows.length + ")",
                     get: () => state.quoteListCache,
-                    columns: ["Item No", "Description", "Qty", "Amount", ""],
+                    columns: ["Item No", "Description", "", "", "", "Qty", "Amount", ""],
                     sortKey: "amount",
                     headerKeys: { "Item No": "number", "Description": "customer", "Qty": "qty", "Amount": "amount" },
                     headerNumeric: new Set(["Qty", "Amount"]),
@@ -7786,17 +7787,21 @@ function wireEvents() {
                     byCust.set(k, cur);
                 }
                 const rows = [...byCust.values()].sort((a, b) => b.amount - a.amount);
+                // Reuses the 8-cell quoteList row template
+                // (number, customer, salesperson, date, status, qty, amount, action),
+                // so headers must declare 8 slots — empty strings for the cells
+                // we don't want labelled.
                 state.quoteListCache = rows.map(c => ({
-                    key: c.customerNumber, number: "", customer: c.customer, customerNumber: c.customerNumber,
+                    key: c.customerNumber, number: c.customerNumber, customer: c.customer, customerNumber: c.customerNumber,
                     salesperson: "", date: "", status: c.count + " order" + (c.count === 1 ? "" : "s"),
                     qty: 0, amount: c.amount,
                 }));
                 TOPN_DEFS.quoteList = {
                     title: "All customers with blanket orders (" + rows.length + ")",
                     get: () => state.quoteListCache,
-                    columns: ["Customer No", "Customer", "Orders", "Amount", ""],
+                    columns: ["Customer No", "Customer", "", "", "Orders", "", "Amount", ""],
                     sortKey: "amount",
-                    headerKeys: { "Customer No": "customerNumber", "Customer": "customer", "Orders": "status", "Amount": "amount" },
+                    headerKeys: { "Customer No": "number", "Customer": "customer", "Orders": "status", "Amount": "amount" },
                     headerNumeric: new Set(["Amount"]),
                     action: { label: "Drill customer", run: r => { closeTopNModal(); if (r.customerNumber) showCustomer(r.customerNumber); } },
                 };
@@ -7823,7 +7828,7 @@ function wireEvents() {
                 TOPN_DEFS.quoteList = {
                     title: "All items on blanket orders (" + rows.length + ")",
                     get: () => state.quoteListCache,
-                    columns: ["Item No", "Description", "Qty", "Amount", ""],
+                    columns: ["Item No", "Description", "", "", "", "Qty", "Amount", ""],
                     sortKey: "amount",
                     headerKeys: { "Item No": "number", "Description": "customer", "Qty": "qty", "Amount": "amount" },
                     headerNumeric: new Set(["Qty", "Amount"]),
