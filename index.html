@@ -106,9 +106,12 @@
         .toolbar .combo { position: relative; width: 160px; }
         .toolbar .combo input { width: 100%; padding-right: 26px; }
         .toolbar .combo-arrow {
-            position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
-            font-size: 11px; color: #888; pointer-events: none;
-            line-height: 1;
+            position: absolute; right: 9px; top: 50%; transform: translateY(-50%);
+            width: 0; height: 0; pointer-events: none;
+            border-left: 5px solid transparent;
+            border-right: 5px solid transparent;
+            border-top: 6px solid currentColor;
+            color: #2c2f4a;
         }
         .toolbar .combo-popup {
             display: none; position: absolute; top: calc(100% + 4px); left: 0;
@@ -567,8 +570,10 @@
         html.theme-onyx .badge-draft { background: #1c1b18; color: #88837a; }
         html.theme-onyx .badge-other { background: rgba(212,175,122,0.15); color: #d4af7a; }
         html.theme-onyx .hint { background: #141416; border-left-color: #d4af7a; color: #c8c4bb; }
-        html.theme-onyx .more-btn { background: transparent; color: #d4af7a; border-color: #2a2820; }
-        html.theme-onyx .more-btn:hover { background: #1c1b18; }
+        html.theme-onyx .card .head .more-btn,
+        html.theme-onyx .panel-header .more-btn { background: transparent; color: #d4af7a; border-color: #2a2820; }
+        html.theme-onyx .card .head .more-btn:hover,
+        html.theme-onyx .panel-header .more-btn:hover { background: #1c1b18; }
         html.theme-onyx .row-action-btn { background: #1c1b18; color: #d4af7a; border: 1px solid #2a2820; }
         html.theme-onyx .row-action-btn:hover { background: #d4af7a; color: #0a0a0b; }
         html.theme-onyx .toolbar .combo-arrow { color: #88837a; }
@@ -651,7 +656,10 @@
         html.theme-linen .badge-draft { background: rgba(45,42,36,0.08); color: #6e6a60; }
         html.theme-linen .badge-other { background: rgba(45,42,36,0.08); color: #6e6a60; }
         html.theme-linen .hint { background: rgba(91,110,63,0.08); border-left-color: #5b6e3f; color: #1a1a1a; }
-        html.theme-linen .more-btn { background: transparent; color: #5b6e3f; border-color: rgba(45,42,36,0.24); }
+        html.theme-linen .card .head .more-btn,
+        html.theme-linen .panel-header .more-btn { background: transparent; color: #5b6e3f; border-color: rgba(45,42,36,0.24); }
+        html.theme-linen .card .head .more-btn:hover,
+        html.theme-linen .panel-header .more-btn:hover { background: rgba(91,110,63,0.10); }
         html.theme-linen .row-action-btn { background: rgba(91,110,63,0.10); color: #5b6e3f; }
         html.theme-linen .row-action-btn:hover { background: #5b6e3f; color: #f4f1eb; }
         html.theme-linen .toolbar .combo-arrow { color: #6e6a60; }
@@ -767,8 +775,10 @@
         html.theme-aurora .badge-draft { background: rgba(255,255,255,0.06); color: #b8b6cc; }
         html.theme-aurora .badge-other { background: rgba(181,123,255,0.18); color: #d4baff; }
         html.theme-aurora .hint { background: rgba(181,123,255,0.10); border-left-color: #b57bff; color: #eaeaf2; }
-        html.theme-aurora .more-btn { background: transparent; color: #d4baff; border-color: rgba(255,255,255,0.12); }
-        html.theme-aurora .more-btn:hover { background: rgba(181,123,255,0.12); }
+        html.theme-aurora .card .head .more-btn,
+        html.theme-aurora .panel-header .more-btn { background: transparent; color: #d4baff; border-color: rgba(255,255,255,0.12); }
+        html.theme-aurora .card .head .more-btn:hover,
+        html.theme-aurora .panel-header .more-btn:hover { background: rgba(181,123,255,0.12); }
         html.theme-aurora .row-action-btn { background: rgba(181,123,255,0.18); color: #d4baff; border: 1px solid rgba(255,255,255,0.12); }
         html.theme-aurora .row-action-btn:hover { background: linear-gradient(135deg, #b57bff, #6be0ff); color: #08081b; }
         html.theme-aurora .toolbar .combo-arrow { color: #b8b6cc; }
@@ -851,8 +861,10 @@
         html.theme-atelier .badge-draft { background: #fff; color: #000; border: 1px solid #000; }
         html.theme-atelier .badge-other { background: #ffe4d4; color: #ff4400; }
         html.theme-atelier .hint { background: #fff; border: 2px solid #000; border-left-width: 6px; border-left-color: #ff4400; color: #000; border-radius: 0; }
-        html.theme-atelier .more-btn { background: #fff; color: #000; border: 2px solid #000; border-radius: 0; font-weight: 700; }
-        html.theme-atelier .more-btn:hover { background: #000; color: #fff; }
+        html.theme-atelier .card .head .more-btn,
+        html.theme-atelier .panel-header .more-btn { background: #fff; color: #000; border: 2px solid #000; border-radius: 0; font-weight: 700; }
+        html.theme-atelier .card .head .more-btn:hover,
+        html.theme-atelier .panel-header .more-btn:hover { background: #000; color: #fff; }
         html.theme-atelier .row-action-btn { background: #fff; color: #000; border: 2px solid #000; border-radius: 0; font-weight: 700; text-transform: uppercase; padding: 3px 10px; }
         html.theme-atelier .row-action-btn:hover { background: #ff4400; color: #fff; }
         html.theme-atelier .toolbar .combo-arrow { color: #000; font-weight: 900; }
@@ -939,8 +951,10 @@
         html.theme-concierge .badge-draft { background: rgba(44,42,38,0.08); color: #7a7368; }
         html.theme-concierge .badge-other { background: rgba(92,31,43,0.12); color: #5c1f2b; }
         html.theme-concierge .hint { background: rgba(156,122,60,0.10); border-left-color: #9c7a3c; color: #2c2a26; }
-        html.theme-concierge .more-btn { background: #f3eee5; color: #0e4d3f; border-color: rgba(44,42,38,0.18); }
-        html.theme-concierge .more-btn:hover { background: rgba(14,77,63,0.08); }
+        html.theme-concierge .card .head .more-btn,
+        html.theme-concierge .panel-header .more-btn { background: #f3eee5; color: #0e4d3f; border-color: rgba(44,42,38,0.18); }
+        html.theme-concierge .card .head .more-btn:hover,
+        html.theme-concierge .panel-header .more-btn:hover { background: rgba(14,77,63,0.08); }
         html.theme-concierge .row-action-btn { background: rgba(14,77,63,0.10); color: #0e4d3f; }
         html.theme-concierge .row-action-btn:hover { background: #0e4d3f; color: #f3eee5; }
         html.theme-concierge .toolbar .combo-arrow { color: #7a7368; }
@@ -1065,7 +1079,7 @@
                     <label for="itemFilterBox">Item</label>
                     <div class="combo" id="itemCombo">
                         <input type="text" id="itemFilterBox" placeholder="All items" autocomplete="off">
-                        <span class="combo-arrow">▾</span>
+                        <span class="combo-arrow" aria-hidden="true"></span>
                         <div class="combo-popup" id="itemFilterPopup"></div>
                     </div>
                 </div>
