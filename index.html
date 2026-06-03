@@ -2847,12 +2847,9 @@ function avgDaysBetween(dates) {
 // CHART HELPERS
 // ============================================================
 function destroyChart(key) { if (state.charts[key]) { state.charts[key].destroy(); state.charts[key] = null; } }
-// Register the datalabels plugin globally but DISABLE it by default —
-// individual chart configs opt in via plugins.datalabels.display = true.
-if (typeof ChartDataLabels !== "undefined") {
-    Chart.register(ChartDataLabels);
-    Chart.defaults.set("plugins.datalabels.display", false);
-}
+// Datalabels plugin is NOT globally registered — each doughnut chart
+// opts in by adding `plugins: [ChartDataLabels]` at the chart-config
+// level. That way bar/line/pareto charts stay clean.
 // Standard label config for doughnut/pie slices: count and % of total,
 // hide labels for tiny slices to keep the chart readable.
 function ringDataLabels(opts) {
@@ -3409,6 +3406,7 @@ function renderStatusChart() {
     state.charts.status = new Chart(ctx, {
         type: "doughnut",
         data: { labels, datasets: [{ data, backgroundColor: palette, borderWidth: 0 }] },
+        plugins: [ChartDataLabels],
         options: chartBase({ cutout: "62%",
             plugins: { legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } },
                        tooltip: { callbacks: {
@@ -3700,6 +3698,7 @@ function renderByItem() {
             type: "doughnut",
             data: { labels: cats.map(c => c.name),
                     datasets: [{ data: cats.map(c => c.amount), backgroundColor: cats.map((_, i) => palette[i % palette.length]) }] },
+            plugins: [ChartDataLabels],
             options: chartBase({
                 plugins: { legend: { position: "right", labels: { boxWidth: 12 } },
                            tooltip: { callbacks: { label: c => c.label + ": " + fmtMoneyFull(c.parsed) + " (" + cats[c.dataIndex].count + " items)" } },
@@ -4082,6 +4081,7 @@ function renderQuotes() {
     state.charts.qStatus = new Chart(ctxQs, {
         type: "doughnut",
         data: { labels: statusRows.map(r => r.name), datasets: [{ data: statusRows.map(statusValueFn), backgroundColor: statusPalette, borderWidth: 0 }] },
+        plugins: [ChartDataLabels],
         options: chartBase({ cutout: "62%",
             plugins: { legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } },
                        tooltip: { callbacks: { label: c => {
@@ -4568,6 +4568,7 @@ function renderBlanketOrders() {
     state.charts.boStatus = new Chart(ctxBs, {
         type: "doughnut",
         data: { labels: statusRows.map(r => r.name), datasets: [{ data: statusRows.map(statusValueFn), backgroundColor: statusPalette, borderWidth: 0 }] },
+        plugins: [ChartDataLabels],
         options: chartBase({ cutout: "62%",
             plugins: { legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } },
                        tooltip: { callbacks: { label: c => {
