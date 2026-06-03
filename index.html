@@ -6,6 +6,7 @@
     <title>Sales Analytics (Wiise Connected)</title>
     <script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -111,6 +112,7 @@
         .kpi.k-inv   { background: linear-gradient(135deg, #00695c, #00897b); }
         .kpi.k-cust  { background: linear-gradient(135deg, #4527a0, #6a3ab2); }
         .kpi.k-avg   { background: linear-gradient(135deg, #c2185b, #e91e63); }
+        .kpi.k-loc   { background: linear-gradient(135deg, #4e342e, #6d4c41); }
 
         /* ---------- CHART CARDS ---------- */
         .chart-grid {
@@ -2845,6 +2847,29 @@ function avgDaysBetween(dates) {
 // CHART HELPERS
 // ============================================================
 function destroyChart(key) { if (state.charts[key]) { state.charts[key].destroy(); state.charts[key] = null; } }
+// Register the datalabels plugin globally but DISABLE it by default —
+// individual chart configs opt in via plugins.datalabels.display = true.
+if (typeof ChartDataLabels !== "undefined") {
+    Chart.register(ChartDataLabels);
+    Chart.defaults.set("plugins.datalabels.display", false);
+}
+// Standard label config for doughnut/pie slices: count and % of total,
+// hide labels for tiny slices to keep the chart readable.
+function ringDataLabels(opts) {
+    opts = opts || {};
+    const formatter = opts.formatter || ((value, ctx) => {
+        const data = ctx.chart.data.datasets[0].data || [];
+        const total = data.reduce((s, v) => s + (Number(v) || 0), 0);
+        const pct = total ? (value / total * 100) : 0;
+        if (pct < 4) return "";
+        return fmtInt(value) + "\n" + pct.toFixed(0) + "%";
+    });
+    return {
+        display: true, color: "white", textAlign: "center",
+        font: { weight: 700, size: 11 }, textShadowBlur: 4, textShadowColor: "rgba(0,0,0,0.45)",
+        formatter,
+    };
+}
 function chartBase(opts) { return Object.assign({ responsive: true, maintainAspectRatio: false, animation: { duration: 400 } }, opts); }
 function barShade(hex, t) {
     const c = hex.replace("#", "");
@@ -3391,7 +3416,16 @@ function renderStatusChart() {
                                const m = map.get(c.label);
                                return c.label + ": " + fmtMoneyFull(m.amount) + " · " + fmtInt(m.count) + " inv";
                            }
-                       } } },
+                       } },
+                       datalabels: ringDataLabels({
+                           formatter: (value, ctx) => {
+                               const total = data.reduce((s, v) => s + (Number(v) || 0), 0);
+                               const pct = total ? (value / total * 100) : 0;
+                               if (pct < 4) return "";
+                               const valStr = isAmount ? fmtMoney(value) : fmtInt(value);
+                               return valStr + "\n" + pct.toFixed(0) + "%";
+                           }
+                       }) },
             onClick: (_, els) => {
                 if (!els.length) return;
                 const status = labels[els[0].index];
@@ -3668,7 +3702,15 @@ function renderByItem() {
                     datasets: [{ data: cats.map(c => c.amount), backgroundColor: cats.map((_, i) => palette[i % palette.length]) }] },
             options: chartBase({
                 plugins: { legend: { position: "right", labels: { boxWidth: 12 } },
-                           tooltip: { callbacks: { label: c => c.label + ": " + fmtMoneyFull(c.parsed) + " (" + cats[c.dataIndex].count + " items)" } } },
+                           tooltip: { callbacks: { label: c => c.label + ": " + fmtMoneyFull(c.parsed) + " (" + cats[c.dataIndex].count + " items)" } },
+                           datalabels: ringDataLabels({
+                               formatter: (value, ctx) => {
+                                   const total = cats.reduce((s, c) => s + c.amount, 0);
+                                   const pct = total ? (value / total * 100) : 0;
+                                   if (pct < 5) return "";
+                                   return fmtMoney(value) + "\n" + pct.toFixed(0) + "%";
+                               }
+                           }) },
                 onClick: (_, els) => {
                     if (!els.length) return;
                     const cat = cats[els[0].index].name;
@@ -4045,7 +4087,16 @@ function renderQuotes() {
                        tooltip: { callbacks: { label: c => {
                            const r = statusRows[c.dataIndex];
                            return r.name + ": " + fmtInt(r.count) + " quotes · " + fmtMoneyFull(r.amount);
-                       } } } },
+                       } } },
+                       datalabels: ringDataLabels({
+                           formatter: (value, ctx) => {
+                               const total = statusRows.reduce((s, r) => s + statusValueFn(r), 0);
+                               const pct = total ? (value / total * 100) : 0;
+                               if (pct < 4) return "";
+                               const valStr = state.quoteStatusMetric === "amount" ? fmtMoney(value) : fmtInt(value);
+                               return valStr + "\n" + pct.toFixed(0) + "%";
+                           }
+                       }) },
             onClick: (_, els) => {
                 // Toggle status as a global filter so the whole tab re-aggregates
                 if (!els.length) return;
@@ -4383,15 +4434,33 @@ function filteredBlanketOrders() {
 
 function renderBlanketOrders() {
     renderFilterChips();
-    // Diagnostic banner
+    // Diagnostic banner — also shows the discovered-entity status when
+    // headers loaded but lines didn't, so we can tell whether the lines
+    // entity was picked, missed, or had a different field-name shape.
     const diag = document.getElementById("boExtrasDiagnostic");
     if (diag) {
-        if (!state.blanketOrders || state.blanketOrders.length === 0) {
+        const headers = state.blanketOrders || [];
+        const linesAttached = headers.reduce((s, bo) => s + ((bo.blanketSalesOrderLines && bo.blanketSalesOrderLines.length) ? 1 : 0), 0);
+        if (!headers.length) {
             diag.style.display = "block";
             diag.innerHTML = "<strong>No blanket sales orders loaded.</strong> " +
                 "BC's v2.0 REST API doesn't expose <code>blanketSalesOrders</code> as a documented endpoint, and the OData v4 fallback also didn't return data. " +
                 (state.blanketOrdersDiagnostic ? "<br><span style='font-family:monospace; font-size:11px;'>" + escapeHtml(state.blanketOrdersDiagnostic) + "</span>" : "") +
                 "<br>Most likely cause: <em>Blanket Sales Order</em> (page 9305) isn't published as an OData Web Service in your BC tenant. Ask your BC admin to publish it (Web Services → New → Page, Object ID 9305, Service Name <code>BlanketSalesOrder</code>, ☑ Published), then Reload sales.";
+        } else if (linesAttached === 0) {
+            const linesInfo = state.blanketOrdersLinesFieldMap;
+            diag.style.display = "block";
+            diag.innerHTML = "<strong>Headers loaded but no line rows attached.</strong> " +
+                fmtInt(headers.length) + " blanket orders found, 0 lines attached. " +
+                "Per-item / per-line aggregations (Top items, Order Quantity, etc.) will be empty. " +
+                (state.blanketOrdersDiagnostic ? "<br><span style='font-family:monospace; font-size:11px;'>" + escapeHtml(state.blanketOrdersDiagnostic) + "</span>" : "") +
+                (linesInfo ? "<br><span style='font-family:monospace; font-size:11px;'>Lines entity picked: " + escapeHtml(linesInfo.entity) + " · DocNo=" + escapeHtml(linesInfo.fDocNo || "—") + " · Qty=" + escapeHtml(linesInfo.fQty || "—") + " · Amount=" + escapeHtml(linesInfo.fAmount || "—") + " · ItemNo=" + escapeHtml(linesInfo.fItemNo || "—") + "</span>" : "<br><span style='font-family:monospace; font-size:11px;'>No lines entity matched in $metadata.</span>") +
+                "<br>Open F12 → Console and copy the <code>[Blanket SO lines]</code> log lines so we can fix the discovery.";
+        } else if (linesAttached < headers.length) {
+            diag.style.display = "block";
+            diag.innerHTML = "<strong>Partial lines coverage.</strong> " +
+                fmtInt(linesAttached) + " of " + fmtInt(headers.length) + " orders have lines attached. " +
+                (state.blanketOrdersDiagnostic ? "<br><span style='font-family:monospace; font-size:11px;'>" + escapeHtml(state.blanketOrdersDiagnostic) + "</span>" : "");
         } else {
             diag.style.display = "none";
         }
@@ -4504,7 +4573,16 @@ function renderBlanketOrders() {
                        tooltip: { callbacks: { label: c => {
                            const r = statusRows[c.dataIndex];
                            return r.name + ": " + fmtInt(r.count) + " orders · " + fmtMoneyFull(r.amount);
-                       } } } },
+                       } } },
+                       datalabels: ringDataLabels({
+                           formatter: (value, ctx) => {
+                               const total = statusRows.reduce((s, r) => s + statusValueFn(r), 0);
+                               const pct = total ? (value / total * 100) : 0;
+                               if (pct < 4) return "";
+                               const valStr = state.boStatusMetric === "amount" ? fmtMoney(value) : fmtInt(value);
+                               return valStr + "\n" + pct.toFixed(0) + "%";
+                           }
+                       }) },
             onClick: (_, els) => {
                 if (!els.length) return;
                 const r = statusRows[els[0].index];
