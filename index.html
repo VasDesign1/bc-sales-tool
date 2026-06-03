@@ -1382,6 +1382,12 @@
                     <div class="kpi k-qty"><div class="label">Qty sold</div><div class="value" id="kpiQty">—</div><div class="sub" id="kpiQtySub">across all lines</div></div>
                 </div>
 
+                <div class="kpi-row" style="grid-template-columns: repeat(3, 1fr);">
+                    <div class="kpi k-inv"><div class="label">Adjusted Sales</div><div class="value" id="kpiAdjSales">—</div><div class="sub" id="kpiAdjSalesSub">net of returns</div></div>
+                    <div class="kpi k-cust"><div class="label">Adjusted Profit</div><div class="value" id="kpiAdjGp">—</div><div class="sub" id="kpiAdjGpSub">net of returns</div></div>
+                    <div class="kpi k-avg"><div class="label">Adjusted Profit Margin</div><div class="value" id="kpiAdjGpp">—</div><div class="sub" id="kpiAdjGppSub">after credit memos</div></div>
+                </div>
+
                 <div class="chart-grid">
                     <div class="card span-12">
                         <div class="head">
@@ -1495,6 +1501,11 @@
                     <div class="kpi k-gp"><div class="label">Gross Profit</div><div class="value" id="brKpiGp">—</div></div>
                     <div class="kpi k-gpp"><div class="label">Gross Profit Margin</div><div class="value" id="brKpiGpp">—</div></div>
                 </div>
+                <div class="kpi-row" style="grid-template-columns: repeat(3, 1fr);">
+                    <div class="kpi k-inv"><div class="label">Adjusted Sales</div><div class="value" id="brKpiAdjSales">—</div><div class="sub" id="brKpiAdjSalesSub">net of returns</div></div>
+                    <div class="kpi k-cust"><div class="label">Adjusted Profit</div><div class="value" id="brKpiAdjGp">—</div><div class="sub" id="brKpiAdjGpSub">net of returns</div></div>
+                    <div class="kpi k-avg"><div class="label">Adjusted Profit Margin</div><div class="value" id="brKpiAdjGpp">—</div><div class="sub" id="brKpiAdjGppSub">after credit memos</div></div>
+                </div>
 
                 <div class="chart-grid">
                     <div class="card span-8">
@@ -1576,6 +1587,11 @@
                     <div class="kpi k-qty"><div class="label">Sales Quantity</div><div class="value" id="spKpiQty">—</div></div>
                     <div class="kpi k-gp"><div class="label">Gross Profit</div><div class="value" id="spKpiGp">—</div></div>
                     <div class="kpi k-gpp"><div class="label">Gross Profit Margin</div><div class="value" id="spKpiGpp">—</div></div>
+                </div>
+                <div class="kpi-row" style="grid-template-columns: repeat(3, 1fr);">
+                    <div class="kpi k-inv"><div class="label">Adjusted Sales</div><div class="value" id="spKpiAdjSales">—</div><div class="sub" id="spKpiAdjSalesSub">net of returns</div></div>
+                    <div class="kpi k-cust"><div class="label">Adjusted Profit</div><div class="value" id="spKpiAdjGp">—</div><div class="sub" id="spKpiAdjGpSub">net of returns</div></div>
+                    <div class="kpi k-avg"><div class="label">Adjusted Profit Margin</div><div class="value" id="spKpiAdjGpp">—</div><div class="sub" id="spKpiAdjGppSub">after credit memos</div></div>
                 </div>
 
                 <div class="chart-grid">
@@ -1659,6 +1675,11 @@
                     <div class="kpi k-gp"><div class="label">GP $</div><div class="value" id="itKpiGp">—</div></div>
                     <div class="kpi k-gpp"><div class="label">GP %</div><div class="value" id="itKpiGpp">—</div></div>
                 </div>
+                <div class="kpi-row" style="grid-template-columns: repeat(3, 1fr);">
+                    <div class="kpi k-inv"><div class="label">Adjusted Sales</div><div class="value" id="itKpiAdjSales">—</div><div class="sub" id="itKpiAdjSalesSub">net of returns</div></div>
+                    <div class="kpi k-cust"><div class="label">Adjusted Profit</div><div class="value" id="itKpiAdjGp">—</div><div class="sub" id="itKpiAdjGpSub">net of returns</div></div>
+                    <div class="kpi k-avg"><div class="label">Adjusted Profit Margin</div><div class="value" id="itKpiAdjGpp">—</div><div class="sub" id="itKpiAdjGppSub">after credit memos</div></div>
+                </div>
 
                 <div class="hint" id="itCategoryFilterBanner" style="display:none; background:#e8f5e9; border-left-color:#43a047;">
                     Filtered by category: <strong id="itCategoryFilterName"></strong>
@@ -1715,6 +1736,11 @@
                     <div class="kpi k-qty"><div class="label">Sales Quantity</div><div class="value" id="eomKpiQty">—</div></div>
                     <div class="kpi k-gp"><div class="label">Gross Profit</div><div class="value" id="eomKpiGp">—</div></div>
                     <div class="kpi k-gpp"><div class="label">Gross Profit Margin</div><div class="value" id="eomKpiGpp">—</div></div>
+                </div>
+                <div class="kpi-row" style="grid-template-columns: repeat(3, 1fr);">
+                    <div class="kpi k-inv"><div class="label">Adjusted Sales</div><div class="value" id="eomKpiAdjSales">—</div><div class="sub" id="eomKpiAdjSalesSub">net of returns</div></div>
+                    <div class="kpi k-cust"><div class="label">Adjusted Profit</div><div class="value" id="eomKpiAdjGp">—</div><div class="sub" id="eomKpiAdjGpSub">net of returns</div></div>
+                    <div class="kpi k-avg"><div class="label">Adjusted Profit Margin</div><div class="value" id="eomKpiAdjGpp">—</div><div class="sub" id="eomKpiAdjGppSub">after credit memos</div></div>
                 </div>
                 <div class="panel">
                     <div class="panel-header">
@@ -1955,6 +1981,14 @@
                     <div class="card span-6">
                         <div class="head"><h3>By item category</h3></div>
                         <div class="chart-wrap" style="min-height:340px;"><canvas id="boCatChart"></canvas></div>
+                    </div>
+                    <div class="card span-6">
+                        <div class="head"><h3>By assigned user</h3><div class="meta" id="boUserMeta"></div></div>
+                        <div class="chart-wrap" style="min-height:320px;"><canvas id="boUserChart"></canvas></div>
+                    </div>
+                    <div class="card span-6">
+                        <div class="head"><h3>By campaign</h3><div class="meta" id="boCampaignMeta"></div></div>
+                        <div class="chart-wrap" style="min-height:320px;"><canvas id="boCampaignChart"></canvas></div>
                     </div>
                 </div>
 
@@ -3796,6 +3830,47 @@ function ringDataLabels(opts) {
 }
 function chartBase(opts) { return Object.assign({ responsive: true, maintainAspectRatio: false, animation: { duration: 400 } }, opts); }
 
+// Return credit-memo totals respecting the current toolbar filters —
+// used to compute "Adjusted Sales / Profit / Margin" on every tab that
+// shows a sales-KPI row. Credit revenue and the implied cost are
+// subtracted from gross totals to give "net of returns" figures.
+function getAdjustments() {
+    let credit = 0, qty = 0, cost = 0;
+    for (const cm of (state.creditMemos || [])) {
+        if (state.filters.salesperson && (cm.salesperson || "(unassigned)") !== state.filters.salesperson) continue;
+        if (state.filters.customer && cm.customerNumber !== state.filters.customer) continue;
+        if (state.filters.location) {
+            const hit = (cm.salesCreditMemoLines || []).some(ln => locationCode(ln.locationId) === state.filters.location);
+            if (!hit) continue;
+        }
+        let cmAmount = 0, cmQty = 0, cmCost = 0;
+        for (const ln of (cm.salesCreditMemoLines || [])) {
+            if (!lineMatchesFilters(ln)) continue;
+            cmAmount += lineNetAmount(ln);
+            cmQty    += num(ln.quantity);
+            cmCost   += costFromLine(ln, 1, cm.postingDate, cm.customerNumber);
+        }
+        if (!cmAmount && cm.totalAmountExcludingTax != null) cmAmount = num(cm.totalAmountExcludingTax);
+        credit += cmAmount; qty += cmQty; cost += cmCost;
+    }
+    return { credit, qty, cost, gpImpact: credit - cost };
+}
+// Stamp Adjusted Sales / Profit / Margin into the three KPI tiles
+// identified by the given prefix (e.g. "kpi", "brKpi", "spKpi").
+function paintAdjustedKpis(prefix, grossSales, grossGp) {
+    const adj = getAdjustments();
+    const adjSales = grossSales - adj.credit;
+    const adjGp = grossGp - adj.gpImpact;
+    const adjGpp = adjSales ? adjGp / adjSales : 0;
+    const el = id => document.getElementById(prefix + id);
+    if (el("AdjSales")) el("AdjSales").textContent = fmtMoneyFull(adjSales);
+    if (el("AdjGp"))    el("AdjGp").textContent    = fmtMoneyFull(adjGp);
+    if (el("AdjGpp"))   el("AdjGpp").textContent   = fmtPct(adjGpp);
+    if (el("AdjSalesSub")) el("AdjSalesSub").textContent = adj.credit ? "−" + fmtMoneyFull(adj.credit) + " returns" : "no returns";
+    if (el("AdjGpSub"))    el("AdjGpSub").textContent    = adj.gpImpact ? "−" + fmtMoneyFull(adj.gpImpact) + " return GP" : "no returns";
+    if (el("AdjGppSub"))   el("AdjGppSub").textContent   = "after credit memos";
+}
+
 // Convert a hex colour to rgba(r,g,b,alpha) for fill backgrounds.
 function alphaHex(hex, alpha) {
     const m = (hex || "").match(/^#([0-9a-f]{6})$/i);
@@ -4295,6 +4370,7 @@ function renderOverview() {
     document.getElementById("kpiGpSub").textContent    = totalInv ? fmtMoney(totalGp / totalInv) + " avg/inv" : "";
     document.getElementById("kpiGpp").textContent      = fmtPct(totalRev ? totalGp / totalRev : 0);
     document.getElementById("kpiQty").textContent      = fmtInt(totalQty);
+    paintAdjustedKpis("kpi", totalRev, totalGp);
 
     renderFilterChips();
     renderTrendChart();
@@ -4842,6 +4918,7 @@ function renderBranch() {
     document.getElementById("brKpiQty").textContent   = fmtInt(totQty);
     document.getElementById("brKpiGp").textContent    = fmtMoneyFull(totGp);
     document.getElementById("brKpiGpp").textContent   = fmtPct(totSales ? totGp / totSales : 0);
+    paintAdjustedKpis("brKpi", totSales, totGp);
 
     renderEntityCharts(rows, { entityField: "branch", prefix: "br", filterKey: "location", filterEl: "locationFilter", paletteBase: "#3949ab" });
 
@@ -4884,6 +4961,7 @@ function renderSalesperson() {
     document.getElementById("spKpiQty").textContent   = fmtInt(totQty);
     document.getElementById("spKpiGp").textContent    = fmtMoneyFull(totGp);
     document.getElementById("spKpiGpp").textContent   = fmtPct(totSales ? totGp / totSales : 0);
+    paintAdjustedKpis("spKpi", totSales, totGp);
 
     renderEntityCharts(rows, { entityField: "salesperson", prefix: "sp", filterKey: "salesperson", filterEl: "salespersonFilter", paletteBase: "#00897b" });
 
@@ -4957,6 +5035,7 @@ function renderByItem() {
     document.getElementById("itKpiQty").textContent   = fmtInt(totQty);
     document.getElementById("itKpiGp").textContent    = fmtMoneyFull(totGp);
     document.getElementById("itKpiGpp").textContent   = fmtPct(totSales ? totGp / totSales : 0);
+    paintAdjustedKpis("itKpi", totSales, totGp);
 
     // ---------- Charts (computed off the filtered rows so they honour the cross-filter) ----------
     // Top 20 items by sales
@@ -5109,6 +5188,7 @@ function renderEOM() {
     document.getElementById("eomKpiQty").textContent   = fmtInt(rows.length);
     document.getElementById("eomKpiGp").textContent    = fmtMoneyFull(totGp);
     document.getElementById("eomKpiGpp").textContent   = fmtPct(totSales ? totGp / totSales : 0);
+    paintAdjustedKpis("eomKpi", totSales, totGp);
 
     sortRowsBy(rows, state.sortEom);
     paintSortHeaders("#eomTable", state.sortEom);
@@ -5801,8 +5881,9 @@ function renderBlanketOrders() {
     let boWonCount = 0, boLostCount = 0, boFollowCount = 0, boOtherCount = 0;
     let boWonAmount = 0, boLostAmount = 0, boFollowAmount = 0, boOtherAmount = 0;
     const bySp = new Map(), byCat = new Map(), byCust = new Map(), byItem = new Map();
-    const byStatus = new Map();
+    const byStatus = new Map(), byCampaign = new Map(), byUser = new Map();
     const byMonth = new Map(), byWeek = new Map(), byDay = new Map();
+    let boHasCampaign = false, boHasUser = false;
 
     for (const bo of orders) {
         let amt = 0, q = 0;
@@ -5846,6 +5927,21 @@ function renderBlanketOrders() {
         else if (boBucket === "lost")   { boLostCount++;   boLostAmount   += amt; }
         else if (boBucket === "follow") { boFollowCount++; boFollowAmount += amt; }
         else                            { boOtherCount++;  boOtherAmount  += amt; }
+
+        const boCamp = (bo.campaignNumber || "").trim();
+        if (boCamp) {
+            boHasCampaign = true;
+            const cur = byCampaign.get(boCamp) || { name: boCamp, amount: 0, count: 0 };
+            cur.amount += amt; cur.count += 1;
+            byCampaign.set(boCamp, cur);
+        }
+        const boUser = (bo.assignedUserID || "").trim();
+        if (boUser) {
+            boHasUser = true;
+            const cur = byUser.get(boUser) || { name: boUser, amount: 0, count: 0 };
+            cur.amount += amt; cur.count += 1;
+            byUser.set(boUser, cur);
+        }
 
         const dateStr = bo.documentDate || bo.orderDate || "";
         if (dateStr) {
@@ -6028,6 +6124,50 @@ function renderBlanketOrders() {
             scales: { x: { ticks: { callback: v => fmtMoney(v) } } }
         })
     });
+
+    // ---------- By assigned user ----------
+    destroyChart("boUser");
+    const boUserMetaEl = document.getElementById("boUserMeta");
+    const ctxBu = document.getElementById("boUserChart").getContext("2d");
+    if (!boHasUser) {
+        if (boUserMetaEl) boUserMetaEl.textContent = "Field not exposed by this BC tenant";
+        if (ctxBu) ctxBu.clearRect(0, 0, ctxBu.canvas.width, ctxBu.canvas.height);
+    } else {
+        if (boUserMetaEl) boUserMetaEl.textContent = byUser.size + " user" + (byUser.size === 1 ? "" : "s");
+        const userRows = [...byUser.values()].sort((a, b) => b.amount - a.amount);
+        state.charts.boUser = new Chart(ctxBu, {
+            type: "bar",
+            data: { labels: userRows.map(r => r.name),
+                    datasets: [{ data: userRows.map(r => r.amount), backgroundColor: userRows.map((_, i) => barShade("#6a3ab2", i / Math.max(userRows.length, 1))), borderRadius: 4 }] },
+            options: chartBase({
+                indexAxis: "y",
+                plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => fmtMoneyFull(c.parsed.x) + " · " + userRows[c.dataIndex].count + " orders" } } },
+                scales: { x: { ticks: { callback: v => fmtMoney(v) } } },
+            })
+        });
+    }
+
+    // ---------- By campaign ----------
+    destroyChart("boCampaign");
+    const boCampMetaEl = document.getElementById("boCampaignMeta");
+    const ctxBcp = document.getElementById("boCampaignChart").getContext("2d");
+    if (!boHasCampaign) {
+        if (boCampMetaEl) boCampMetaEl.textContent = "Field not exposed by this BC tenant";
+        if (ctxBcp) ctxBcp.clearRect(0, 0, ctxBcp.canvas.width, ctxBcp.canvas.height);
+    } else {
+        if (boCampMetaEl) boCampMetaEl.textContent = byCampaign.size + " campaign" + (byCampaign.size === 1 ? "" : "s");
+        const campRows = [...byCampaign.values()].sort((a, b) => b.amount - a.amount);
+        state.charts.boCampaign = new Chart(ctxBcp, {
+            type: "bar",
+            data: { labels: campRows.map(r => r.name),
+                    datasets: [{ data: campRows.map(r => r.amount), backgroundColor: campRows.map((_, i) => barShade("#c2185b", i / Math.max(campRows.length, 1))), borderRadius: 4 }] },
+            options: chartBase({
+                indexAxis: "y",
+                plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => fmtMoneyFull(c.parsed.x) + " · " + campRows[c.dataIndex].count + " orders" } } },
+                scales: { x: { ticks: { callback: v => fmtMoney(v) } } },
+            })
+        });
+    }
 
     // Customer drill tree
     renderBlanketOrderCustomerTree(orders);
