@@ -85,19 +85,18 @@
         }
         .toolbar .field { display: flex; flex-direction: column; gap: 4px; }
         .toolbar label { font-size: 10px; font-weight: 700; color: #6e72a6; text-transform: uppercase; letter-spacing: 0.5px; }
+        /* Every toolbar control is pinned to the same width / padding so
+           the Item text input lines up exactly with the date pickers and
+           the select dropdowns. Without an explicit width the text input
+           shrinks to its placeholder size, leaving it visibly narrower
+           than its siblings. */
         .toolbar input, .toolbar select {
             padding: 7px 10px; border: 1px solid #d6d8eb; border-radius: 8px;
-            font-size: 13px; min-width: 140px; max-width: 200px;
+            font-size: 13px; width: 160px; height: 36px;
             background: white; color: #2c2f4a;
             font-family: inherit;
             box-sizing: border-box;
-            -webkit-appearance: none; appearance: none;
         }
-        /* Cap select width so the customer dropdown doesn't expand after
-           data loads (BC names are long), which used to force the toolbar
-           to wrap to two rows. */
-        .toolbar select { width: 160px; appearance: auto; -webkit-appearance: auto; }
-        .toolbar input[type="date"], .toolbar input[type="datetime-local"] { min-width: 160px; appearance: auto; -webkit-appearance: auto; }
         .toolbar .spacer { flex: 1; }
         .btn {
             padding: 8px 18px; border: none; border-radius: 8px;
