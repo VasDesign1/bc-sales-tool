@@ -4,6 +4,23 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sales Analytics (Wiise Connected)</title>
+    <script>
+        // Apply stored theme synchronously so first paint is already themed
+        // (no flash of unstyled content / wrong-colour flicker between paint
+        // and the picker showing).
+        (function () {
+            try {
+                var t = localStorage.getItem('bcSalesTheme');
+                if (t && /^(onyx|linen|aurora|atelier|concierge)$/.test(t)) {
+                    document.documentElement.classList.add('theme-' + t);
+                    document.documentElement.dataset.themePicked = '1';
+                }
+            } catch (e) { /* localStorage blocked — picker will show */ }
+        })();
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700;900&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
     <script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
@@ -300,6 +317,544 @@
             box-shadow: 0 4px 14px rgba(0,0,0,0.3);
             display: none; z-index: 100;
         }
+
+        /* ================================================================
+           THEME SYSTEM  —  five interchangeable visual templates.
+           Pure CSS overrides on top of the existing rules above, so the
+           old "Classic" look is preserved when no theme class is on <html>.
+           Each theme sets a class on <html> (theme-onyx / theme-linen /
+           theme-aurora / theme-atelier / theme-concierge). Theme rules use
+           the higher specificity of `html.theme-X selector` to win the
+           cascade without touching the underlying defaults.
+           ================================================================ */
+
+        /* ---------- THEME PICKER OVERLAY ---------- */
+        .theme-picker {
+            position: fixed; inset: 0; z-index: 10000;
+            background: #0a0a0b; color: #f5f4f1;
+            display: flex; flex-direction: column; align-items: center;
+            justify-content: center; padding: 40px; overflow-y: auto;
+        }
+        .theme-picker h1 {
+            font-family: 'Cormorant Garamond', serif; font-weight: 500;
+            font-size: 42px; letter-spacing: 0.5px; margin-bottom: 8px;
+        }
+        .theme-picker .lead {
+            font-family: 'Inter', sans-serif; font-size: 14px; opacity: 0.65;
+            margin-bottom: 36px; max-width: 580px; text-align: center; line-height: 1.6;
+        }
+        .theme-picker .grid {
+            display: grid; gap: 22px; max-width: 1280px; width: 100%;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        }
+        .theme-picker .opt {
+            border-radius: 14px; padding: 22px; cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            border: 1px solid transparent; overflow: hidden; position: relative;
+            min-height: 280px; display: flex; flex-direction: column;
+        }
+        .theme-picker .opt:hover { transform: translateY(-4px); box-shadow: 0 16px 40px rgba(0,0,0,0.4); }
+        .theme-picker .opt .tag {
+            font-family: 'Inter', sans-serif; font-size: 10px; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 1.5px; opacity: 0.6;
+            margin-bottom: 8px;
+        }
+        .theme-picker .opt .name { font-size: 26px; margin-bottom: 4px; }
+        .theme-picker .opt .tagline { font-family: 'Inter', sans-serif; font-size: 12px; opacity: 0.75; margin-bottom: 18px; line-height: 1.5; }
+        .theme-picker .opt .preview {
+            margin-top: auto; display: flex; flex-direction: column; gap: 8px;
+            padding: 14px; border-radius: 8px;
+        }
+        .theme-picker .opt .preview .kpi-mini {
+            display: flex; justify-content: space-between; align-items: baseline;
+            padding: 8px 10px; border-radius: 4px;
+        }
+        .theme-picker .opt .preview .kpi-mini .lbl { font-family: 'Inter', sans-serif; font-size: 9px; text-transform: uppercase; letter-spacing: 1.2px; }
+        .theme-picker .opt .preview .kpi-mini .val { font-size: 14px; font-weight: 700; }
+        .theme-picker .opt .preview .bar { height: 6px; border-radius: 2px; }
+        .theme-picker .footer {
+            margin-top: 28px; font-family: 'Inter', sans-serif; font-size: 12px; opacity: 0.5;
+        }
+        /* Onyx preview swatch */
+        .theme-picker .opt.onyx { background: #141416; border-color: #2a2820; }
+        .theme-picker .opt.onyx .name { font-family: 'Cormorant Garamond', serif; color: #d4af7a; font-weight: 600; }
+        .theme-picker .opt.onyx .preview { background: #0a0a0b; border: 1px solid #2a2820; }
+        .theme-picker .opt.onyx .kpi-mini { border: 1px solid #2a2820; }
+        .theme-picker .opt.onyx .kpi-mini .lbl { color: #88837a; }
+        .theme-picker .opt.onyx .kpi-mini .val { color: #f5f4f1; font-family: 'Inter', sans-serif; }
+        .theme-picker .opt.onyx .bar { background: linear-gradient(90deg, #d4af7a, #c2864a); }
+        /* Linen preview swatch */
+        .theme-picker .opt.linen { background: #f4f1eb; color: #1a1a1a; border-color: rgba(45,42,36,0.12); }
+        .theme-picker .opt.linen .tag { color: #6e6a60; }
+        .theme-picker .opt.linen .name { font-family: 'Fraunces', serif; color: #1a1a1a; font-weight: 500; }
+        .theme-picker .opt.linen .tagline { color: #6e6a60; }
+        .theme-picker .opt.linen .preview { background: #f4f1eb; border-top: 1px solid rgba(45,42,36,0.16); padding: 16px 0 0; border-radius: 0; }
+        .theme-picker .opt.linen .kpi-mini { border-bottom: 1px solid rgba(45,42,36,0.12); border-radius: 0; padding: 10px 0; }
+        .theme-picker .opt.linen .kpi-mini .lbl { color: #6e6a60; }
+        .theme-picker .opt.linen .kpi-mini .val { color: #1a1a1a; font-family: 'Fraunces', serif; font-weight: 500; }
+        .theme-picker .opt.linen .bar { background: #5b6e3f; }
+        /* Aurora preview swatch */
+        .theme-picker .opt.aurora {
+            background: radial-gradient(120% 80% at 0% 0%, rgba(62,31,119,0.55), transparent 50%),
+                        radial-gradient(120% 80% at 100% 100%, rgba(31,166,166,0.45), transparent 55%),
+                        #08081b;
+            border-color: rgba(255,255,255,0.10);
+        }
+        .theme-picker .opt.aurora .name {
+            font-family: 'Inter', sans-serif; font-weight: 700;
+            background: linear-gradient(135deg, #b57bff, #ff6b9d, #6be0ff);
+            -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        .theme-picker .opt.aurora .preview { background: rgba(20,20,35,0.45); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.08); }
+        .theme-picker .opt.aurora .kpi-mini { background: rgba(20,20,35,0.45); }
+        .theme-picker .opt.aurora .kpi-mini .lbl { color: #b8b6cc; }
+        .theme-picker .opt.aurora .kpi-mini .val { color: #eaeaf2; font-family: 'JetBrains Mono', monospace; }
+        .theme-picker .opt.aurora .bar { background: linear-gradient(90deg, #b57bff, #ff6b9d, #6be0ff); }
+        /* Atelier preview swatch */
+        .theme-picker .opt.atelier { background: #ffffff; color: #000; border: 2px solid #000; }
+        .theme-picker .opt.atelier .tag { color: #000; }
+        .theme-picker .opt.atelier .name { font-family: 'Space Grotesk', sans-serif; font-weight: 700; color: #000; font-size: 30px; letter-spacing: -1px; text-transform: uppercase; }
+        .theme-picker .opt.atelier .tagline { color: #000; }
+        .theme-picker .opt.atelier .preview { background: #fff; border: 2px solid #000; border-radius: 0; padding: 0; }
+        .theme-picker .opt.atelier .kpi-mini { border-radius: 0; border-bottom: 2px solid #000; }
+        .theme-picker .opt.atelier .kpi-mini:last-child { border-bottom: none; }
+        .theme-picker .opt.atelier .kpi-mini .lbl { color: #000; font-weight: 900; }
+        .theme-picker .opt.atelier .kpi-mini .val { color: #000; font-family: 'Space Grotesk', sans-serif; font-weight: 900; }
+        .theme-picker .opt.atelier .bar { background: #ff4400; height: 8px; }
+        /* Concierge preview swatch */
+        .theme-picker .opt.concierge { background: #e8e1d5; color: #2c2a26; border-color: rgba(44,42,38,0.18); }
+        .theme-picker .opt.concierge .tag { color: #7a7368; }
+        .theme-picker .opt.concierge .name { font-family: 'Fraunces', serif; color: #0e4d3f; font-weight: 500; font-style: italic; }
+        .theme-picker .opt.concierge .tagline { color: #7a7368; }
+        .theme-picker .opt.concierge .preview { background: #f3eee5; border-radius: 6px; box-shadow: inset 0 1px 0 rgba(255,255,255,0.6); }
+        .theme-picker .opt.concierge .kpi-mini { background: #fff; box-shadow: inset 0 1px 0 rgba(255,255,255,0.8); border-radius: 4px; }
+        .theme-picker .opt.concierge .kpi-mini .lbl { color: #7a7368; }
+        .theme-picker .opt.concierge .kpi-mini .val { color: #2c2a26; font-family: 'Fraunces', serif; font-weight: 500; }
+        .theme-picker .opt.concierge .bar { background: linear-gradient(90deg, #0e4d3f, #9c7a3c); }
+        .theme-picker .change-banner {
+            position: absolute; top: 20px; right: 24px;
+            font-family: 'Inter', sans-serif; font-size: 12px;
+            background: transparent; color: rgba(245,244,241,0.6);
+            border: 1px solid rgba(245,244,241,0.2); padding: 6px 12px; border-radius: 6px;
+            cursor: pointer;
+        }
+        .theme-picker .change-banner:hover { color: #f5f4f1; border-color: #f5f4f1; }
+
+        /* ---------- THEME BUTTON in header ---------- */
+        .theme-btn {
+            margin-left: 16px;
+            padding: 5px 12px; border: 1px solid #d6d8eb; background: transparent;
+            border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer;
+            color: #555; text-transform: uppercase; letter-spacing: 0.6px;
+        }
+        .theme-btn:hover { background: #eef0fb; }
+
+        /* ================================================================
+           THEME 1 · ONYX  —  editorial dark + champagne
+           ================================================================ */
+        html.theme-onyx body { background: #0a0a0b; color: #f5f4f1; font-family: 'Inter', sans-serif; }
+        html.theme-onyx .sidebar {
+            background: #08080a; border-right: 1px solid #1c1b18;
+        }
+        html.theme-onyx .sidebar .brand h1 { font-family: 'Cormorant Garamond', serif; font-weight: 500; font-size: 22px; color: #d4af7a; letter-spacing: 0.5px; }
+        html.theme-onyx .sidebar .brand .sub { color: #88837a; }
+        html.theme-onyx .sidebar a { color: #c8c4bb; opacity: 1; border-left-color: transparent; font-family: 'Inter', sans-serif; }
+        html.theme-onyx .sidebar a:hover { background: #141416; color: #f5f4f1; }
+        html.theme-onyx .sidebar a.active { background: #141416; border-left-color: #d4af7a; color: #d4af7a; }
+        html.theme-onyx .sidebar .group-label { color: #88837a; }
+        html.theme-onyx .header { background: #0a0a0b; box-shadow: none; border-bottom: 1px solid #1c1b18; }
+        html.theme-onyx .header h2 { font-family: 'Cormorant Garamond', serif; font-weight: 500; font-size: 24px; color: #d4af7a; }
+        html.theme-onyx .header .right { color: #88837a; }
+        html.theme-onyx .header .right .user { color: #f5f4f1; }
+        html.theme-onyx .toolbar { background: #141416; box-shadow: none; border: 1px solid #1c1b18; }
+        html.theme-onyx .toolbar label { color: #88837a; }
+        html.theme-onyx .toolbar input, html.theme-onyx .toolbar select {
+            background: #0a0a0b; color: #f5f4f1; border-color: #2a2820;
+        }
+        html.theme-onyx .btn-primary {
+            background: #d4af7a; color: #0a0a0b; box-shadow: none;
+        }
+        html.theme-onyx .btn-primary:hover { background: #e0bf90; transform: none; box-shadow: 0 0 0 1px #d4af7a; }
+        html.theme-onyx .btn-ghost { color: #c8c4bb; }
+        html.theme-onyx .btn-ghost:hover { background: #1c1b18; }
+        html.theme-onyx .chip { background: #1c1b18; color: #d4af7a; }
+        html.theme-onyx .kpi {
+            background: #141416 !important;
+            border: 1px solid #2a2820; box-shadow: none; color: #f5f4f1;
+        }
+        html.theme-onyx .kpi::after { display: none; }
+        html.theme-onyx .kpi .label { color: #88837a; font-family: 'Inter', sans-serif; }
+        html.theme-onyx .kpi .value { color: #f5f4f1; font-family: 'Cormorant Garamond', serif; font-weight: 500; font-size: 30px; letter-spacing: 0; }
+        html.theme-onyx .kpi .sub { color: #88837a; }
+        html.theme-onyx .card, html.theme-onyx .panel, html.theme-onyx .breadcrumb {
+            background: #141416; box-shadow: none; border: 1px solid #1c1b18;
+        }
+        html.theme-onyx .card h3, html.theme-onyx .panel-header h2 {
+            color: #d4af7a; font-family: 'Cormorant Garamond', serif; font-weight: 500; font-size: 18px;
+        }
+        html.theme-onyx .card .head .meta, html.theme-onyx .panel-header .meta { color: #88837a; }
+        html.theme-onyx .panel-header { border-bottom: 1px solid #1c1b18; }
+        html.theme-onyx .panel-header input.search { background: #0a0a0b; color: #f5f4f1; border-color: #2a2820; }
+        html.theme-onyx th { background: #1c1b18; color: #d4af7a; border-bottom: 1px solid #2a2820; }
+        html.theme-onyx th:hover { background: #25241f; }
+        html.theme-onyx td { color: #c8c4bb; border-bottom: 1px solid #1c1b18; }
+        html.theme-onyx tr:hover { background: #1c1b18; }
+        html.theme-onyx td.pos { color: #7b9c8e; }
+        html.theme-onyx td.neg { color: #c2864a; }
+        html.theme-onyx .breadcrumb a { color: #d4af7a; }
+        html.theme-onyx .breadcrumb .current { color: #f5f4f1; }
+        html.theme-onyx .breadcrumb .back-btn { background: #1c1b18; color: #d4af7a; }
+        html.theme-onyx .toggle { border-color: #2a2820; }
+        html.theme-onyx .toggle button { background: #141416; color: #c8c4bb; }
+        html.theme-onyx .toggle button.active { background: #d4af7a; color: #0a0a0b; }
+        html.theme-onyx .toggle button + button { border-left-color: #2a2820; }
+        html.theme-onyx .mini-select { background: #141416; color: #d4af7a; border-color: #2a2820; }
+        html.theme-onyx .badge-open { background: rgba(255,180,80,0.15); color: #e0bf90; }
+        html.theme-onyx .badge-paid { background: rgba(123,156,142,0.15); color: #7b9c8e; }
+        html.theme-onyx .badge-draft { background: #1c1b18; color: #88837a; }
+        html.theme-onyx .badge-other { background: rgba(212,175,122,0.15); color: #d4af7a; }
+        html.theme-onyx .hint { background: #141416; border-left-color: #d4af7a; color: #c8c4bb; }
+        html.theme-onyx .more-btn { background: transparent; color: #d4af7a; border-color: #2a2820; }
+        html.theme-onyx .more-btn:hover { background: #1c1b18; }
+        html.theme-onyx .modal-card { background: #141416; }
+        html.theme-onyx .modal-header { border-bottom-color: #1c1b18; }
+        html.theme-onyx .modal-header h2 { color: #d4af7a; font-family: 'Cormorant Garamond', serif; }
+        html.theme-onyx .signin-card { background: #141416; color: #f5f4f1; border: 1px solid #2a2820; box-shadow: 0 12px 40px rgba(0,0,0,0.6); }
+        html.theme-onyx .signin-card h2 { color: #d4af7a; font-family: 'Cormorant Garamond', serif; font-weight: 500; }
+        html.theme-onyx .signin-card p { color: #88837a; }
+        html.theme-onyx .signin-card .big-btn { background: #d4af7a; color: #0a0a0b; box-shadow: none; }
+        html.theme-onyx .theme-btn { color: #d4af7a; border-color: #2a2820; }
+
+        /* ================================================================
+           THEME 2 · LINEN  —  warm paper, hairline editorial
+           ================================================================ */
+        html.theme-linen body { background: #f4f1eb; color: #1a1a1a; font-family: 'Inter', sans-serif; }
+        html.theme-linen .sidebar {
+            background: #ede8de; color: #1a1a1a; border-right: 1px solid rgba(45,42,36,0.16);
+        }
+        html.theme-linen .sidebar .brand h1 { font-family: 'Fraunces', serif; font-weight: 500; font-size: 22px; color: #1a1a1a; }
+        html.theme-linen .sidebar .brand .sub { color: #6e6a60; }
+        html.theme-linen .sidebar a { color: #1a1a1a; opacity: 0.7; border-left-color: transparent; }
+        html.theme-linen .sidebar a:hover { background: rgba(45,42,36,0.06); opacity: 1; }
+        html.theme-linen .sidebar a.active { background: rgba(45,42,36,0.08); border-left-color: #5b6e3f; opacity: 1; color: #5b6e3f; }
+        html.theme-linen .sidebar .group-label { color: #6e6a60; }
+        html.theme-linen .header { background: #f4f1eb; box-shadow: none; border-bottom: 1px solid rgba(45,42,36,0.16); }
+        html.theme-linen .header h2 { font-family: 'Fraunces', serif; font-weight: 500; font-size: 26px; color: #1a1a1a; }
+        html.theme-linen .header .right { color: #6e6a60; }
+        html.theme-linen .header .right .user { color: #1a1a1a; }
+        html.theme-linen .toolbar { background: transparent; box-shadow: none; border-bottom: 1px solid rgba(45,42,36,0.16); border-radius: 0; padding-left: 0; padding-right: 0; }
+        html.theme-linen .toolbar label { color: #6e6a60; }
+        html.theme-linen .toolbar input, html.theme-linen .toolbar select { background: #f4f1eb; color: #1a1a1a; border-color: rgba(45,42,36,0.24); }
+        html.theme-linen .btn-primary { background: #5b6e3f; color: #f4f1eb; box-shadow: none; }
+        html.theme-linen .btn-primary:hover { background: #4a5b32; transform: none; box-shadow: none; }
+        html.theme-linen .chip { background: rgba(91,110,63,0.12); color: #5b6e3f; }
+        html.theme-linen .kpi {
+            background: transparent !important; border: none; box-shadow: none;
+            color: #1a1a1a; padding: 14px 0; border-bottom: 1px solid rgba(45,42,36,0.16);
+            border-radius: 0;
+        }
+        html.theme-linen .kpi::after { display: none; }
+        html.theme-linen .kpi .label { color: #6e6a60; font-family: 'Inter', sans-serif; }
+        html.theme-linen .kpi .value { color: #1a1a1a; font-family: 'Fraunces', serif; font-weight: 500; font-size: 34px; letter-spacing: -0.5px; }
+        html.theme-linen .kpi .sub { color: #6e6a60; opacity: 1; }
+        html.theme-linen .kpi-row { gap: 24px; }
+        html.theme-linen .card, html.theme-linen .panel, html.theme-linen .breadcrumb {
+            background: transparent; box-shadow: none; border: none;
+            border-top: 1px solid rgba(45,42,36,0.16); border-radius: 0; padding-top: 18px;
+        }
+        html.theme-linen .panel { padding-bottom: 18px; }
+        html.theme-linen .card h3, html.theme-linen .panel-header h2 {
+            color: #1a1a1a; font-family: 'Fraunces', serif; font-weight: 500; font-size: 20px;
+        }
+        html.theme-linen .card .head .meta, html.theme-linen .panel-header .meta { color: #6e6a60; }
+        html.theme-linen .panel-header { border-bottom: 1px solid rgba(45,42,36,0.16); padding-left: 0; padding-right: 0; }
+        html.theme-linen .panel-header input.search { background: #f4f1eb; color: #1a1a1a; border-color: rgba(45,42,36,0.24); }
+        html.theme-linen th { background: transparent; color: #6e6a60; border-bottom: 1px solid rgba(45,42,36,0.4); padding-top: 14px; padding-bottom: 10px; }
+        html.theme-linen th:hover { background: rgba(45,42,36,0.04); }
+        html.theme-linen td { color: #1a1a1a; border-bottom: 1px solid rgba(45,42,36,0.10); padding-top: 12px; padding-bottom: 12px; }
+        html.theme-linen tr:hover { background: rgba(45,42,36,0.04); }
+        html.theme-linen td.pos { color: #4a6b3d; }
+        html.theme-linen td.neg { color: #9b3a2a; }
+        html.theme-linen .breadcrumb a { color: #5b6e3f; }
+        html.theme-linen .breadcrumb .current { color: #1a1a1a; }
+        html.theme-linen .breadcrumb .back-btn { background: rgba(91,110,63,0.12); color: #5b6e3f; }
+        html.theme-linen .toggle { border-color: rgba(45,42,36,0.24); }
+        html.theme-linen .toggle button { background: transparent; color: #1a1a1a; }
+        html.theme-linen .toggle button.active { background: #5b6e3f; color: #f4f1eb; }
+        html.theme-linen .toggle button + button { border-left-color: rgba(45,42,36,0.24); }
+        html.theme-linen .mini-select { background: transparent; color: #1a1a1a; border-color: rgba(45,42,36,0.24); }
+        html.theme-linen .badge-open { background: rgba(160,74,46,0.12); color: #a04a2e; }
+        html.theme-linen .badge-paid { background: rgba(91,110,63,0.12); color: #4a6b3d; }
+        html.theme-linen .badge-draft { background: rgba(45,42,36,0.08); color: #6e6a60; }
+        html.theme-linen .badge-other { background: rgba(45,42,36,0.08); color: #6e6a60; }
+        html.theme-linen .hint { background: rgba(91,110,63,0.08); border-left-color: #5b6e3f; color: #1a1a1a; }
+        html.theme-linen .more-btn { background: transparent; color: #5b6e3f; border-color: rgba(45,42,36,0.24); }
+        html.theme-linen .modal-card { background: #f4f1eb; }
+        html.theme-linen .modal-header { border-bottom-color: rgba(45,42,36,0.16); }
+        html.theme-linen .modal-header h2 { color: #1a1a1a; font-family: 'Fraunces', serif; }
+        html.theme-linen .signin-overlay { background: rgba(244,241,235,0.96); }
+        html.theme-linen .signin-card { background: #f4f1eb; color: #1a1a1a; border: 1px solid rgba(45,42,36,0.24); }
+        html.theme-linen .signin-card h2 { color: #1a1a1a; font-family: 'Fraunces', serif; }
+        html.theme-linen .signin-card .big-btn { background: #5b6e3f; color: #f4f1eb; box-shadow: none; }
+        html.theme-linen .theme-btn { color: #5b6e3f; border-color: rgba(45,42,36,0.24); }
+
+        /* ================================================================
+           THEME 3 · AURORA  —  dark glass + holographic accents
+           ================================================================ */
+        html.theme-aurora body {
+            background: #08081b; color: #eaeaf2; font-family: 'Inter', sans-serif;
+            position: relative;
+        }
+        html.theme-aurora body::before {
+            content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+            background:
+                radial-gradient(48% 35% at 12% 18%, rgba(62,31,119,0.55), transparent 60%),
+                radial-gradient(45% 38% at 88% 82%, rgba(31,166,166,0.42), transparent 60%),
+                radial-gradient(50% 40% at 60% 45%, rgba(166,53,125,0.28), transparent 65%);
+            animation: aurora-drift 22s ease-in-out infinite alternate;
+        }
+        @keyframes aurora-drift {
+            0%   { transform: translate(0, 0) scale(1); }
+            50%  { transform: translate(-30px, 20px) scale(1.05); }
+            100% { transform: translate(20px, -10px) scale(0.98); }
+        }
+        html.theme-aurora .sidebar {
+            background: rgba(8,8,20,0.7); backdrop-filter: blur(20px);
+            border-right: 1px solid rgba(255,255,255,0.08);
+        }
+        html.theme-aurora .sidebar .brand h1 { color: #eaeaf2; font-weight: 700; }
+        html.theme-aurora .sidebar .brand .sub { color: #b8b6cc; }
+        html.theme-aurora .sidebar a { color: #c8c5da; opacity: 1; }
+        html.theme-aurora .sidebar a:hover { background: rgba(255,255,255,0.06); }
+        html.theme-aurora .sidebar a.active {
+            background: linear-gradient(90deg, rgba(181,123,255,0.18), transparent);
+            border-left-color: #b57bff; color: #eaeaf2;
+        }
+        html.theme-aurora .sidebar .group-label { color: #b8b6cc; }
+        html.theme-aurora .header {
+            background: rgba(8,8,20,0.6); backdrop-filter: blur(16px);
+            box-shadow: none; border-bottom: 1px solid rgba(255,255,255,0.06);
+        }
+        html.theme-aurora .header h2 {
+            font-weight: 700; font-size: 22px;
+            background: linear-gradient(135deg, #b57bff, #ff6b9d, #6be0ff);
+            -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        html.theme-aurora .header .right { color: #b8b6cc; }
+        html.theme-aurora .header .right .user { color: #eaeaf2; }
+        html.theme-aurora .toolbar {
+            background: rgba(20,20,35,0.55); backdrop-filter: blur(20px) saturate(140%);
+            box-shadow: none; border: 1px solid rgba(255,255,255,0.08);
+        }
+        html.theme-aurora .toolbar label { color: #b8b6cc; }
+        html.theme-aurora .toolbar input, html.theme-aurora .toolbar select {
+            background: rgba(8,8,20,0.6); color: #eaeaf2; border-color: rgba(255,255,255,0.12);
+        }
+        html.theme-aurora .btn-primary {
+            background: linear-gradient(135deg, #b57bff, #6be0ff); color: #08081b;
+            box-shadow: 0 0 24px rgba(181,123,255,0.4);
+        }
+        html.theme-aurora .btn-primary:hover { transform: translateY(-1px); }
+        html.theme-aurora .chip { background: rgba(181,123,255,0.18); color: #d4baff; }
+        html.theme-aurora .kpi {
+            background: rgba(20,20,35,0.55) !important; backdrop-filter: blur(20px) saturate(140%);
+            border: 1px solid rgba(255,255,255,0.10); box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+            color: #eaeaf2;
+        }
+        html.theme-aurora .kpi::after { background: rgba(181,123,255,0.08); }
+        html.theme-aurora .kpi .label { color: #b8b6cc; font-family: 'Inter', sans-serif; }
+        html.theme-aurora .kpi .value { color: #eaeaf2; font-family: 'JetBrains Mono', monospace; font-size: 24px; }
+        html.theme-aurora .kpi .sub { color: #b8b6cc; }
+        html.theme-aurora .card, html.theme-aurora .panel, html.theme-aurora .breadcrumb {
+            background: rgba(20,20,35,0.55); backdrop-filter: blur(20px) saturate(140%);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.08);
+        }
+        html.theme-aurora .card h3, html.theme-aurora .panel-header h2 {
+            color: #eaeaf2; font-weight: 700; font-size: 14px;
+        }
+        html.theme-aurora .card .head .meta, html.theme-aurora .panel-header .meta { color: #b8b6cc; }
+        html.theme-aurora .panel-header { border-bottom-color: rgba(255,255,255,0.06); }
+        html.theme-aurora .panel-header input.search { background: rgba(8,8,20,0.6); color: #eaeaf2; border-color: rgba(255,255,255,0.12); }
+        html.theme-aurora th { background: rgba(8,8,20,0.6); color: #d4baff; border-bottom: 1px solid rgba(255,255,255,0.12); }
+        html.theme-aurora th:hover { background: rgba(181,123,255,0.12); }
+        html.theme-aurora td { color: #eaeaf2; border-bottom: 1px solid rgba(255,255,255,0.04); }
+        html.theme-aurora tr:hover { background: rgba(181,123,255,0.06); }
+        html.theme-aurora td.pos { color: #3fe0a8; text-shadow: 0 0 8px rgba(63,224,168,0.3); }
+        html.theme-aurora td.neg { color: #ff4d6d; text-shadow: 0 0 8px rgba(255,77,109,0.3); }
+        html.theme-aurora .breadcrumb a { color: #d4baff; }
+        html.theme-aurora .breadcrumb .current { color: #eaeaf2; }
+        html.theme-aurora .breadcrumb .back-btn { background: rgba(181,123,255,0.18); color: #d4baff; }
+        html.theme-aurora .toggle { border-color: rgba(255,255,255,0.12); }
+        html.theme-aurora .toggle button { background: transparent; color: #c8c5da; }
+        html.theme-aurora .toggle button.active { background: linear-gradient(135deg, #b57bff, #6be0ff); color: #08081b; }
+        html.theme-aurora .toggle button + button { border-left-color: rgba(255,255,255,0.12); }
+        html.theme-aurora .mini-select { background: transparent; color: #d4baff; border-color: rgba(255,255,255,0.12); }
+        html.theme-aurora .badge-open { background: rgba(255,77,109,0.18); color: #ff8fa3; }
+        html.theme-aurora .badge-paid { background: rgba(63,224,168,0.18); color: #3fe0a8; }
+        html.theme-aurora .badge-draft { background: rgba(255,255,255,0.06); color: #b8b6cc; }
+        html.theme-aurora .badge-other { background: rgba(181,123,255,0.18); color: #d4baff; }
+        html.theme-aurora .hint { background: rgba(181,123,255,0.10); border-left-color: #b57bff; color: #eaeaf2; }
+        html.theme-aurora .more-btn { background: transparent; color: #d4baff; border-color: rgba(255,255,255,0.12); }
+        html.theme-aurora .more-btn:hover { background: rgba(181,123,255,0.12); }
+        html.theme-aurora .modal-card { background: rgba(20,20,35,0.92); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.08); }
+        html.theme-aurora .modal-header { border-bottom-color: rgba(255,255,255,0.08); }
+        html.theme-aurora .modal-header h2 { color: #eaeaf2; }
+        html.theme-aurora .signin-overlay { background: rgba(8,8,27,0.92); }
+        html.theme-aurora .signin-card { background: rgba(20,20,35,0.85); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.10); color: #eaeaf2; }
+        html.theme-aurora .signin-card h2 { background: linear-gradient(135deg, #b57bff, #6be0ff); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+        html.theme-aurora .signin-card p { color: #b8b6cc; }
+        html.theme-aurora .signin-card .big-btn { background: linear-gradient(135deg, #b57bff, #6be0ff); color: #08081b; box-shadow: 0 0 32px rgba(181,123,255,0.4); }
+        html.theme-aurora .theme-btn { color: #d4baff; border-color: rgba(255,255,255,0.12); }
+
+        /* ================================================================
+           THEME 4 · ATELIER  —  Swiss modernist, black/white/orange
+           ================================================================ */
+        html.theme-atelier body { background: #ffffff; color: #000; font-family: 'Inter', sans-serif; }
+        html.theme-atelier .sidebar { background: #000000; color: #fff; border-right: none; }
+        html.theme-atelier .sidebar .brand h1 { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 24px; letter-spacing: -0.5px; text-transform: uppercase; color: #fff; }
+        html.theme-atelier .sidebar .brand .sub { color: rgba(255,255,255,0.6); }
+        html.theme-atelier .sidebar a { color: #fff; opacity: 0.7; font-weight: 600; }
+        html.theme-atelier .sidebar a:hover { background: rgba(255,255,255,0.06); opacity: 1; }
+        html.theme-atelier .sidebar a.active { background: #ff4400; border-left-color: #ff4400; opacity: 1; }
+        html.theme-atelier .sidebar .group-label { color: rgba(255,255,255,0.5); }
+        html.theme-atelier .header { background: #fff; box-shadow: none; border-bottom: 2px solid #000; }
+        html.theme-atelier .header h2 { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 28px; letter-spacing: -1px; text-transform: uppercase; color: #000; }
+        html.theme-atelier .header .right { color: #000; }
+        html.theme-atelier .header .right .user { color: #000; }
+        html.theme-atelier .toolbar { background: #fff; box-shadow: none; border: 2px solid #000; border-radius: 0; }
+        html.theme-atelier .toolbar label { color: #000; font-weight: 700; }
+        html.theme-atelier .toolbar input, html.theme-atelier .toolbar select {
+            background: #fff; color: #000; border: 2px solid #000; border-radius: 0; font-weight: 600;
+        }
+        html.theme-atelier .btn-primary { background: #ff4400; color: #fff; border-radius: 0; box-shadow: none; font-weight: 700; text-transform: uppercase; }
+        html.theme-atelier .btn-primary:hover { background: #000; transform: none; box-shadow: none; }
+        html.theme-atelier .chip { background: #000; color: #fff; border-radius: 0; }
+        html.theme-atelier .kpi {
+            background: #fff !important; color: #000; border: 2px solid #000;
+            border-radius: 0; box-shadow: 4px 4px 0 #000;
+        }
+        html.theme-atelier .kpi::after { display: none; }
+        html.theme-atelier .kpi .label { color: #000; font-weight: 900; opacity: 1; }
+        html.theme-atelier .kpi .value { color: #000; font-family: 'Space Grotesk', sans-serif; font-weight: 900; font-size: 32px; letter-spacing: -1px; }
+        html.theme-atelier .kpi .sub { color: #000; opacity: 0.7; }
+        html.theme-atelier .kpi.k-rev { background: #ff4400 !important; color: #fff; }
+        html.theme-atelier .kpi.k-rev .label, html.theme-atelier .kpi.k-rev .value, html.theme-atelier .kpi.k-rev .sub { color: #fff; }
+        html.theme-atelier .card, html.theme-atelier .panel, html.theme-atelier .breadcrumb {
+            background: #fff; box-shadow: 4px 4px 0 #000; border: 2px solid #000; border-radius: 0;
+        }
+        html.theme-atelier .card h3, html.theme-atelier .panel-header h2 {
+            color: #000; font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 16px; text-transform: uppercase; letter-spacing: -0.3px;
+        }
+        html.theme-atelier .card .head .meta, html.theme-atelier .panel-header .meta { color: #000; opacity: 0.6; }
+        html.theme-atelier .panel-header { border-bottom: 2px solid #000; }
+        html.theme-atelier .panel-header input.search { background: #fff; color: #000; border: 2px solid #000; border-radius: 0; }
+        html.theme-atelier th { background: #000; color: #fff; border-bottom: 2px solid #000; font-weight: 900; }
+        html.theme-atelier th:hover { background: #ff4400; }
+        html.theme-atelier td { color: #000; border-bottom: 1px solid #000; }
+        html.theme-atelier tr:hover { background: #fff3ee; }
+        html.theme-atelier td.pos { color: #006600; font-weight: 700; }
+        html.theme-atelier td.neg { color: #cc0000; font-weight: 700; }
+        html.theme-atelier .breadcrumb a { color: #ff4400; font-weight: 700; text-transform: uppercase; }
+        html.theme-atelier .breadcrumb .current { color: #000; font-weight: 900; }
+        html.theme-atelier .breadcrumb .back-btn { background: #000; color: #fff; border-radius: 0; }
+        html.theme-atelier .toggle { border: 2px solid #000; border-radius: 0; }
+        html.theme-atelier .toggle button { background: #fff; color: #000; font-weight: 700; }
+        html.theme-atelier .toggle button.active { background: #000; color: #fff; }
+        html.theme-atelier .toggle button + button { border-left: 2px solid #000; }
+        html.theme-atelier .mini-select { background: #fff; color: #000; border: 2px solid #000; border-radius: 0; font-weight: 700; }
+        html.theme-atelier .badge { border-radius: 0; }
+        html.theme-atelier .badge-open { background: #ff4400; color: #fff; }
+        html.theme-atelier .badge-paid { background: #000; color: #fff; }
+        html.theme-atelier .badge-draft { background: #fff; color: #000; border: 1px solid #000; }
+        html.theme-atelier .badge-other { background: #ffe4d4; color: #ff4400; }
+        html.theme-atelier .hint { background: #fff; border: 2px solid #000; border-left-width: 6px; border-left-color: #ff4400; color: #000; border-radius: 0; }
+        html.theme-atelier .more-btn { background: #fff; color: #000; border: 2px solid #000; border-radius: 0; font-weight: 700; }
+        html.theme-atelier .more-btn:hover { background: #000; color: #fff; }
+        html.theme-atelier .modal-card { border: 2px solid #000; border-radius: 0; }
+        html.theme-atelier .modal-header { border-bottom: 2px solid #000; }
+        html.theme-atelier .modal-header h2 { color: #000; font-family: 'Space Grotesk', sans-serif; text-transform: uppercase; }
+        html.theme-atelier .signin-overlay { background: #fff; }
+        html.theme-atelier .signin-card { background: #fff; border: 2px solid #000; border-radius: 0; box-shadow: 8px 8px 0 #000; }
+        html.theme-atelier .signin-card h2 { color: #000; font-family: 'Space Grotesk', sans-serif; text-transform: uppercase; }
+        html.theme-atelier .signin-card .big-btn { background: #ff4400; color: #fff; border-radius: 0; box-shadow: none; text-transform: uppercase; }
+        html.theme-atelier .theme-btn { color: #000; border: 2px solid #000; border-radius: 0; font-weight: 700; }
+
+        /* ================================================================
+           THEME 5 · CONCIERGE  —  warm sand + emerald, embossed
+           ================================================================ */
+        html.theme-concierge body { background: #e8e1d5; color: #2c2a26; font-family: 'Inter', sans-serif; }
+        html.theme-concierge .sidebar {
+            background: #f3eee5; color: #2c2a26;
+            border-right: 1px solid rgba(44,42,38,0.14);
+            box-shadow: inset -1px 0 0 rgba(255,255,255,0.5);
+        }
+        html.theme-concierge .sidebar .brand h1 { font-family: 'Fraunces', serif; font-weight: 500; font-style: italic; font-size: 22px; color: #0e4d3f; }
+        html.theme-concierge .sidebar .brand .sub { color: #7a7368; }
+        html.theme-concierge .sidebar a { color: #2c2a26; opacity: 0.75; }
+        html.theme-concierge .sidebar a:hover { background: rgba(44,42,38,0.06); opacity: 1; }
+        html.theme-concierge .sidebar a.active { background: rgba(14,77,63,0.08); border-left-color: #9c7a3c; opacity: 1; color: #0e4d3f; font-weight: 700; }
+        html.theme-concierge .sidebar .group-label { color: #7a7368; }
+        html.theme-concierge .header { background: #f3eee5; box-shadow: 0 1px 0 rgba(44,42,38,0.10); border-bottom: 1px solid rgba(44,42,38,0.14); }
+        html.theme-concierge .header h2 { font-family: 'Fraunces', serif; font-weight: 500; font-style: italic; font-size: 24px; color: #0e4d3f; }
+        html.theme-concierge .header .right { color: #7a7368; }
+        html.theme-concierge .header .right .user { color: #2c2a26; }
+        html.theme-concierge .toolbar {
+            background: #f3eee5; box-shadow: inset 0 1px 0 rgba(255,255,255,0.6), 0 1px 2px rgba(44,42,38,0.08);
+            border: 1px solid rgba(44,42,38,0.10);
+        }
+        html.theme-concierge .toolbar label { color: #7a7368; }
+        html.theme-concierge .toolbar input, html.theme-concierge .toolbar select { background: #fff; color: #2c2a26; border-color: rgba(44,42,38,0.18); }
+        html.theme-concierge .btn-primary { background: #0e4d3f; color: #f3eee5; box-shadow: 0 4px 12px rgba(14,77,63,0.25); }
+        html.theme-concierge .btn-primary:hover { background: #0a3d31; transform: translateY(-1px); }
+        html.theme-concierge .chip { background: rgba(14,77,63,0.10); color: #0e4d3f; }
+        html.theme-concierge .kpi {
+            background: #f3eee5 !important; color: #2c2a26;
+            border: 1px solid rgba(44,42,38,0.10);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.7), 0 1px 3px rgba(44,42,38,0.06);
+        }
+        html.theme-concierge .kpi::after { background: rgba(14,77,63,0.06); }
+        html.theme-concierge .kpi .label { color: #7a7368; }
+        html.theme-concierge .kpi .value { color: #2c2a26; font-family: 'Fraunces', serif; font-weight: 500; font-size: 28px; }
+        html.theme-concierge .kpi .sub { color: #7a7368; }
+        html.theme-concierge .card, html.theme-concierge .panel, html.theme-concierge .breadcrumb {
+            background: #f3eee5; box-shadow: inset 0 1px 0 rgba(255,255,255,0.7), 0 1px 3px rgba(44,42,38,0.06);
+            border: 1px solid rgba(44,42,38,0.10);
+        }
+        html.theme-concierge .card h3, html.theme-concierge .panel-header h2 {
+            color: #0e4d3f; font-family: 'Fraunces', serif; font-weight: 500; font-style: italic; font-size: 18px;
+        }
+        html.theme-concierge .card .head .meta, html.theme-concierge .panel-header .meta { color: #7a7368; }
+        html.theme-concierge .panel-header { border-bottom: 1px solid rgba(44,42,38,0.10); }
+        html.theme-concierge .panel-header input.search { background: #fff; color: #2c2a26; border-color: rgba(44,42,38,0.18); }
+        html.theme-concierge th { background: rgba(14,77,63,0.08); color: #0e4d3f; border-bottom: 1px solid rgba(14,77,63,0.18); font-family: 'Inter', sans-serif; }
+        html.theme-concierge th:hover { background: rgba(14,77,63,0.14); }
+        html.theme-concierge td { color: #2c2a26; border-bottom: 1px solid rgba(44,42,38,0.06); }
+        html.theme-concierge tr:hover { background: rgba(156,122,60,0.06); border-left: 2px solid #9c7a3c; }
+        html.theme-concierge td.pos { color: #2e7d32; }
+        html.theme-concierge td.neg { color: #9b3a2a; }
+        html.theme-concierge .breadcrumb a { color: #0e4d3f; }
+        html.theme-concierge .breadcrumb .current { color: #2c2a26; }
+        html.theme-concierge .breadcrumb .back-btn { background: rgba(14,77,63,0.10); color: #0e4d3f; }
+        html.theme-concierge .toggle { border-color: rgba(44,42,38,0.18); }
+        html.theme-concierge .toggle button { background: #f3eee5; color: #2c2a26; }
+        html.theme-concierge .toggle button.active { background: #0e4d3f; color: #f3eee5; }
+        html.theme-concierge .toggle button + button { border-left-color: rgba(44,42,38,0.18); }
+        html.theme-concierge .mini-select { background: #f3eee5; color: #0e4d3f; border-color: rgba(44,42,38,0.18); }
+        html.theme-concierge .badge-open { background: rgba(156,122,60,0.18); color: #6e5526; }
+        html.theme-concierge .badge-paid { background: rgba(14,77,63,0.12); color: #0e4d3f; }
+        html.theme-concierge .badge-draft { background: rgba(44,42,38,0.08); color: #7a7368; }
+        html.theme-concierge .badge-other { background: rgba(92,31,43,0.12); color: #5c1f2b; }
+        html.theme-concierge .hint { background: rgba(156,122,60,0.10); border-left-color: #9c7a3c; color: #2c2a26; }
+        html.theme-concierge .more-btn { background: #f3eee5; color: #0e4d3f; border-color: rgba(44,42,38,0.18); }
+        html.theme-concierge .more-btn:hover { background: rgba(14,77,63,0.08); }
+        html.theme-concierge .modal-card { background: #f3eee5; }
+        html.theme-concierge .modal-header { border-bottom-color: rgba(44,42,38,0.10); }
+        html.theme-concierge .modal-header h2 { color: #0e4d3f; font-family: 'Fraunces', serif; font-style: italic; }
+        html.theme-concierge .signin-overlay { background: rgba(232,225,213,0.96); }
+        html.theme-concierge .signin-card { background: #f3eee5; color: #2c2a26; border: 1px solid rgba(44,42,38,0.18); box-shadow: 0 12px 40px rgba(44,42,38,0.2); }
+        html.theme-concierge .signin-card h2 { color: #0e4d3f; font-family: 'Fraunces', serif; font-style: italic; }
+        html.theme-concierge .signin-card .big-btn { background: #0e4d3f; color: #f3eee5; box-shadow: 0 4px 14px rgba(14,77,63,0.3); }
+        html.theme-concierge .theme-btn { color: #0e4d3f; border-color: rgba(44,42,38,0.18); }
     </style>
 </head>
 <body>
@@ -351,10 +906,13 @@
 
         <div class="header">
             <h2 id="headerTitle">Overview</h2>
-            <div class="right">
-                <div class="user" id="userBadge">not signed in</div>
-                <div id="periodBadge"></div>
-                <div id="costQualityBadge" style="margin-top:2px;"></div>
+            <div class="right" style="display:flex; align-items:center; gap:14px;">
+                <div>
+                    <div class="user" id="userBadge">not signed in</div>
+                    <div id="periodBadge"></div>
+                    <div id="costQualityBadge" style="margin-top:2px;"></div>
+                </div>
+                <button class="theme-btn" id="themeBtn" title="Change interface theme">Theme</button>
             </div>
         </div>
 
@@ -1760,6 +2318,66 @@
         <p>Sign in with your VicAir Microsoft account to load sales data from Wiise.</p>
         <button class="big-btn" id="signInBtn">Sign in with Microsoft</button>
     </div>
+</div>
+
+<!-- THEME PICKER OVERLAY — shows on first load and when "Theme" button clicked -->
+<div class="theme-picker" id="themePicker" style="display:none;">
+    <button class="change-banner" id="themePickerClose" style="display:none;">Close</button>
+    <h1>Choose your interface</h1>
+    <div class="lead">Five interchangeable visual systems. Pick the one that fits the moment — you can switch any time via the Theme button in the header. Your choice persists across sessions on this device.</div>
+    <div class="grid">
+        <div class="opt onyx" data-theme="onyx">
+            <div class="tag">01 · Dark Editorial</div>
+            <div class="name">Onyx</div>
+            <div class="tagline">Champagne on warm black. Private board room at 9pm. Bottega Veneta, Patek Philippe.</div>
+            <div class="preview">
+                <div class="kpi-mini"><span class="lbl">Total Sales</span><span class="val">$2.74M</span></div>
+                <div class="kpi-mini"><span class="lbl">Win Rate</span><span class="val">68%</span></div>
+                <div class="bar"></div>
+            </div>
+        </div>
+        <div class="opt linen" data-theme="linen">
+            <div class="tag">02 · Quiet Luxury</div>
+            <div class="name">Linen</div>
+            <div class="tagline">Warm paper, hairline rules, olive accent. Hermès catalogue, Aesop, museum wall text.</div>
+            <div class="preview">
+                <div class="kpi-mini"><span class="lbl">Total Sales</span><span class="val">$2.74M</span></div>
+                <div class="kpi-mini"><span class="lbl">Win Rate</span><span class="val">68%</span></div>
+                <div class="bar"></div>
+            </div>
+        </div>
+        <div class="opt aurora" data-theme="aurora">
+            <div class="tag">03 · Tech Glass</div>
+            <div class="name">Aurora</div>
+            <div class="tagline">Iridescent gradients, frosted glass, monospace numerics. Linear, Vercel, Arc.</div>
+            <div class="preview">
+                <div class="kpi-mini"><span class="lbl">Total Sales</span><span class="val">$2.74M</span></div>
+                <div class="kpi-mini"><span class="lbl">Win Rate</span><span class="val">68%</span></div>
+                <div class="bar"></div>
+            </div>
+        </div>
+        <div class="opt atelier" data-theme="atelier">
+            <div class="tag">04 · Brutalist</div>
+            <div class="name">Atelier</div>
+            <div class="tagline">High contrast, screaming orange accent, oversized type. Vitra, MoMA, manifesto.</div>
+            <div class="preview">
+                <div class="kpi-mini"><span class="lbl">Total Sales</span><span class="val">$2.74M</span></div>
+                <div class="kpi-mini"><span class="lbl">Win Rate</span><span class="val">68%</span></div>
+                <div class="bar"></div>
+            </div>
+        </div>
+        <div class="opt concierge" data-theme="concierge">
+            <div class="tag">05 · Hospitality</div>
+            <div class="name">Concierge</div>
+            <div class="tagline">Sand + emerald, brass on hover, embossed feel. Aman Hotels, Soho House.</div>
+            <div class="preview">
+                <div class="kpi-mini"><span class="lbl">Total Sales</span><span class="val">$2.74M</span></div>
+                <div class="kpi-mini"><span class="lbl">Win Rate</span><span class="val">68%</span></div>
+                <div class="bar"></div>
+            </div>
+        </div>
+    </div>
+    <div class="footer">Click any tile to apply. Use the Theme button in the header to switch later.</div>
 </div>
 
 <div class="progress" id="bcProgress"><span id="bcProgressText"></span></div>
@@ -7869,6 +8487,79 @@ function wireEvents() {
 // ============================================================
 applyQuickRange("365");
 wireEvents();
+
+// ============================================================
+// THEME PICKER  —  five interchangeable visual templates
+// ============================================================
+const THEME_NAMES = ["onyx", "linen", "aurora", "atelier", "concierge"];
+const DARK_THEMES = new Set(["onyx", "aurora"]);
+
+function currentTheme() {
+    for (const t of THEME_NAMES) if (document.documentElement.classList.contains("theme-" + t)) return t;
+    return null;
+}
+
+function applyChartDefaultsForTheme(theme) {
+    if (typeof Chart === "undefined") return;
+    const isDark = DARK_THEMES.has(theme);
+    Chart.defaults.color = isDark ? "rgba(245,244,241,0.78)" : "rgba(26,26,26,0.78)";
+    Chart.defaults.borderColor = isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)";
+    // Use the theme's display font for chart labels — feels coherent.
+    const family = theme === "onyx"      ? "'Inter', sans-serif"
+                 : theme === "linen"     ? "'Inter', sans-serif"
+                 : theme === "aurora"    ? "'Inter', sans-serif"
+                 : theme === "atelier"   ? "'Space Grotesk', sans-serif"
+                 : theme === "concierge" ? "'Inter', sans-serif"
+                 :                          "'Segoe UI', sans-serif";
+    Chart.defaults.font.family = family;
+}
+
+function applyTheme(theme) {
+    if (!THEME_NAMES.includes(theme)) return;
+    // Strip any prior theme class
+    for (const t of THEME_NAMES) document.documentElement.classList.remove("theme-" + t);
+    document.documentElement.classList.add("theme-" + theme);
+    document.documentElement.dataset.themePicked = "1";
+    try { localStorage.setItem("bcSalesTheme", theme); } catch (e) { /* storage blocked */ }
+    applyChartDefaultsForTheme(theme);
+    // If we already have data loaded, re-render the active tab so charts pick
+    // up the new defaults (text colour / font family).
+    try {
+        if (state && state.invoices && state.invoices.length) renderCurrentTab();
+    } catch (e) { /* state not ready yet — first render will pick up new defaults */ }
+}
+
+function showThemePicker(closeable) {
+    const el = document.getElementById("themePicker");
+    if (!el) return;
+    el.style.display = "flex";
+    const closeBtn = document.getElementById("themePickerClose");
+    if (closeBtn) closeBtn.style.display = closeable ? "block" : "none";
+}
+function hideThemePicker() {
+    const el = document.getElementById("themePicker");
+    if (el) el.style.display = "none";
+}
+
+document.querySelectorAll("#themePicker .opt").forEach(opt => {
+    opt.addEventListener("click", () => {
+        const t = opt.dataset.theme;
+        applyTheme(t);
+        hideThemePicker();
+    });
+});
+const themeBtn = document.getElementById("themeBtn");
+if (themeBtn) themeBtn.addEventListener("click", () => showThemePicker(true));
+const themeCloseBtn = document.getElementById("themePickerClose");
+if (themeCloseBtn) themeCloseBtn.addEventListener("click", hideThemePicker);
+
+// Boot: if no theme was applied synchronously in <head>, show picker;
+// otherwise propagate the choice to Chart.js defaults so first chart render
+// uses the right text colour / font.
+const picked = currentTheme();
+if (picked) applyChartDefaultsForTheme(picked);
+else showThemePicker(false);
+
 (async () => {
     try {
         initMsal();
