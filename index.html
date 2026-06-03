@@ -770,6 +770,32 @@
                     <div class="kpi k-gp"><div class="label">Gross Profit</div><div class="value" id="brKpiGp">—</div></div>
                     <div class="kpi k-gpp"><div class="label">Gross Profit Margin</div><div class="value" id="brKpiGpp">—</div></div>
                 </div>
+
+                <div class="chart-grid">
+                    <div class="card span-8">
+                        <div class="head">
+                            <h3>Sales by month · stacked by branch</h3>
+                            <div class="meta">click a bar segment to filter to that branch</div>
+                        </div>
+                        <div class="chart-wrap" style="min-height:340px;"><canvas id="brTrendChart"></canvas></div>
+                    </div>
+                    <div class="card span-4">
+                        <div class="head">
+                            <h3>Top branches by sales</h3>
+                            <div class="meta">click → filter</div>
+                        </div>
+                        <div class="chart-wrap" style="min-height:340px;"><canvas id="brTopChart"></canvas></div>
+                    </div>
+                    <div class="card span-6">
+                        <div class="head"><h3>GP $ vs GP % by branch</h3></div>
+                        <div class="chart-wrap" style="min-height:300px;"><canvas id="brGpChart"></canvas></div>
+                    </div>
+                    <div class="card span-6">
+                        <div class="head"><h3>Invoices · Qty · Customers by branch</h3></div>
+                        <div class="chart-wrap" style="min-height:300px;"><canvas id="brVolChart"></canvas></div>
+                    </div>
+                </div>
+
                 <div class="panel">
                     <div class="panel-header"><h2>Sales by branch · fiscal year × month</h2><div class="meta" id="brMeta"></div></div>
                     <div class="table-scroll">
@@ -816,6 +842,32 @@
                     <div class="kpi k-gp"><div class="label">Gross Profit</div><div class="value" id="spKpiGp">—</div></div>
                     <div class="kpi k-gpp"><div class="label">Gross Profit Margin</div><div class="value" id="spKpiGpp">—</div></div>
                 </div>
+
+                <div class="chart-grid">
+                    <div class="card span-8">
+                        <div class="head">
+                            <h3>Sales by month · stacked by salesperson</h3>
+                            <div class="meta">click a bar segment to filter to that salesperson</div>
+                        </div>
+                        <div class="chart-wrap" style="min-height:340px;"><canvas id="spTrendChart"></canvas></div>
+                    </div>
+                    <div class="card span-4">
+                        <div class="head">
+                            <h3>Top salespeople by sales</h3>
+                            <div class="meta">click → filter</div>
+                        </div>
+                        <div class="chart-wrap" style="min-height:340px;"><canvas id="spTopChart"></canvas></div>
+                    </div>
+                    <div class="card span-6">
+                        <div class="head"><h3>GP $ vs GP % by salesperson</h3></div>
+                        <div class="chart-wrap" style="min-height:300px;"><canvas id="spGpChart"></canvas></div>
+                    </div>
+                    <div class="card span-6">
+                        <div class="head"><h3>Invoices · Qty · Customers by salesperson</h3></div>
+                        <div class="chart-wrap" style="min-height:300px;"><canvas id="spVolChart"></canvas></div>
+                    </div>
+                </div>
+
                 <div class="panel">
                     <div class="panel-header"><h2>Sales by salesperson · fiscal year × month</h2><div class="meta" id="spMeta"></div></div>
                     <div class="table-scroll">
@@ -3613,6 +3665,149 @@ function sortAndRenderCustomerTable() {
 // ============================================================
 // BRANCH TAB
 // ============================================================
+// Branch and Salesperson tabs share an identical aggregation shape (rows
+// keyed by fy|monthKey|entity) — render the same four charts on both,
+// just bound to different field names + filter keys.
+function renderEntityCharts(rows, opts) {
+    const { entityField, prefix, filterKey, filterEl, paletteBase } = opts;
+    const ENTITY_PALETTE = ["#3949ab", "#00897b", "#f9a825", "#e53935", "#8e24aa", "#039be5", "#6d4c41", "#43a047", "#fb8c00", "#5e35b1", "#00acc1", "#c0ca33", "#d81b60", "#1e88e5", "#7cb342", "#fdd835", "#ff7043", "#3f51b5", "#26a69a", "#9e9e9e"];
+
+    // Roll up per-entity (across all months)
+    const byEntity = new Map();
+    for (const r of rows) {
+        const k = r[entityField] || "(unassigned)";
+        const cur = byEntity.get(k) || { name: k, sales: 0, gp: 0, cost: 0, qty: 0, invoiceCount: 0, customerCount: 0, customerSet: new Set() };
+        cur.sales += r.sales; cur.gp += r.gp; cur.cost += r.cost || 0;
+        cur.qty += r.qty; cur.invoiceCount += r.invoiceCount || 0;
+        if (r.customerCount) cur.customerCount += r.customerCount;
+        if (r.customers) for (const c of r.customers) cur.customerSet.add(c);
+        byEntity.set(k, cur);
+    }
+    const entitySorted = [...byEntity.values()]
+        .map(e => ({ ...e, gpPct: e.sales ? e.gp / e.sales : 0, customerCount: e.customerSet.size || e.customerCount }))
+        .sort((a, b) => b.sales - a.sales);
+    const entityIndex = new Map(entitySorted.map((e, i) => [e.name, i]));
+
+    // ----- 1. Stacked monthly trend -----
+    destroyChart(prefix + "Trend");
+    const monthMap = new Map(); // monthKey -> {monthKey, fy, perEntity:{name: sales}}
+    for (const r of rows) {
+        const mk = r.monthKey;
+        const cur = monthMap.get(mk) || { monthKey: mk, fy: r.fy, perEntity: {} };
+        cur.perEntity[r[entityField] || "(unassigned)"] = (cur.perEntity[r[entityField] || "(unassigned)"] || 0) + r.sales;
+        monthMap.set(mk, cur);
+    }
+    const months = [...monthMap.values()].sort((a, b) => a.monthKey < b.monthKey ? -1 : 1);
+    const topEntitiesForStack = entitySorted.slice(0, 10).map(e => e.name);
+    const trendCanvas = document.getElementById(prefix + "TrendChart");
+    if (trendCanvas) {
+        const datasets = topEntitiesForStack.map((name, i) => ({
+            label: name, stack: "s",
+            data: months.map(m => m.perEntity[name] || 0),
+            backgroundColor: ENTITY_PALETTE[i % ENTITY_PALETTE.length],
+            borderRadius: 2,
+        }));
+        // "Other" bucket for everything beyond top 10
+        const othersSum = months.map(m => {
+            let s = 0;
+            for (const [name, val] of Object.entries(m.perEntity))
+                if (!topEntitiesForStack.includes(name)) s += val;
+            return s;
+        });
+        if (othersSum.some(v => v > 0)) datasets.push({ label: "Other", stack: "s", data: othersSum, backgroundColor: "#bdbdbd", borderRadius: 2 });
+        state.charts[prefix + "Trend"] = new Chart(trendCanvas.getContext("2d"), {
+            type: "bar",
+            data: { labels: months.map(m => monthLabelFromKey(m.monthKey)), datasets },
+            options: chartBase({
+                plugins: { legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } },
+                           tooltip: { callbacks: { label: c => c.dataset.label + ": " + fmtMoneyFull(c.parsed.y) } } },
+                scales: { x: { stacked: true }, y: { stacked: true, ticks: { callback: v => fmtMoney(v) } } },
+                onClick: (_, els) => {
+                    if (!els.length) return;
+                    const name = datasets[els[0].datasetIndex].label;
+                    if (name === "Other") return;
+                    state.filters[filterKey] = (state.filters[filterKey] === name) ? "" : name;
+                    if (filterEl) { const el = document.getElementById(filterEl); if (el) el.value = state.filters[filterKey]; }
+                    rebuildFiltered(); renderCurrentTab();
+                },
+            })
+        });
+    }
+
+    // ----- 2. Top entities by sales -----
+    destroyChart(prefix + "Top");
+    const top = entitySorted.slice(0, 12);
+    const topCanvas = document.getElementById(prefix + "TopChart");
+    if (topCanvas) {
+        state.charts[prefix + "Top"] = new Chart(topCanvas.getContext("2d"), {
+            type: "bar",
+            data: { labels: top.map(e => truncate(e.name, 22)),
+                    datasets: [{ data: top.map(e => e.sales),
+                                 backgroundColor: top.map((_, i) => barShade(paletteBase || "#3949ab", i / 12)),
+                                 borderRadius: 4 }] },
+            options: chartBase({
+                indexAxis: "y",
+                plugins: { legend: { display: false },
+                           tooltip: { callbacks: { label: c => fmtMoneyFull(c.parsed.x) + " · GP " + fmtPct(top[c.dataIndex].gpPct) + " · " + fmtInt(top[c.dataIndex].invoiceCount) + " inv" } } },
+                scales: { x: { ticks: { callback: v => fmtMoney(v) } } },
+                onClick: (_, els) => {
+                    if (!els.length) return;
+                    const name = top[els[0].index].name;
+                    state.filters[filterKey] = (state.filters[filterKey] === name) ? "" : name;
+                    if (filterEl) { const el = document.getElementById(filterEl); if (el) el.value = state.filters[filterKey]; }
+                    rebuildFiltered(); renderCurrentTab();
+                },
+            })
+        });
+    }
+
+    // ----- 3. GP $ vs GP % combo -----
+    destroyChart(prefix + "Gp");
+    const topGp = [...entitySorted].sort((a, b) => b.gp - a.gp).slice(0, 12);
+    const gpCanvas = document.getElementById(prefix + "GpChart");
+    if (gpCanvas) {
+        state.charts[prefix + "Gp"] = new Chart(gpCanvas.getContext("2d"), {
+            data: { labels: topGp.map(e => truncate(e.name, 18)),
+                    datasets: [
+                        { type: "bar", label: "GP $", data: topGp.map(e => e.gp), backgroundColor: topGp.map(e => e.gp >= 0 ? "#43a047" : "#c62828"), borderRadius: 3, yAxisID: "y" },
+                        { type: "line", label: "GP %", data: topGp.map(e => e.gpPct * 100), borderColor: "#f9a825", backgroundColor: "rgba(249,168,37,0.15)", tension: 0.2, pointRadius: 3, yAxisID: "y1" },
+                    ] },
+            options: chartBase({
+                plugins: { legend: { position: "top" },
+                           tooltip: { callbacks: { label: c => c.dataset.type === "line" ? "GP %: " + c.parsed.y.toFixed(1) + "%" : "GP $: " + fmtMoneyFull(c.parsed.y) } } },
+                scales: {
+                    y:  { position: "left",  ticks: { callback: v => fmtMoney(v) } },
+                    y1: { position: "right", grid: { drawOnChartArea: false }, ticks: { callback: v => v + "%" } },
+                },
+            })
+        });
+    }
+
+    // ----- 4. Volume: Invoices + Qty + Customers -----
+    destroyChart(prefix + "Vol");
+    const topVol = entitySorted.slice(0, 12);
+    const volCanvas = document.getElementById(prefix + "VolChart");
+    if (volCanvas) {
+        state.charts[prefix + "Vol"] = new Chart(volCanvas.getContext("2d"), {
+            type: "bar",
+            data: { labels: topVol.map(e => truncate(e.name, 18)),
+                    datasets: [
+                        { label: "Invoices", data: topVol.map(e => e.invoiceCount), backgroundColor: "#3949ab", borderRadius: 3, yAxisID: "y" },
+                        { label: "Customers", data: topVol.map(e => e.customerCount), backgroundColor: "#00897b", borderRadius: 3, yAxisID: "y" },
+                        { label: "Qty", data: topVol.map(e => e.qty), backgroundColor: "transparent", borderColor: "#f9a825", borderWidth: 2, type: "line", tension: 0.2, pointRadius: 3, yAxisID: "y1" },
+                    ] },
+            options: chartBase({
+                plugins: { legend: { position: "top" },
+                           tooltip: { callbacks: { label: c => c.dataset.label + ": " + fmtInt(c.parsed.y) } } },
+                scales: {
+                    y:  { position: "left",  ticks: { callback: v => fmtInt(v) } },
+                    y1: { position: "right", grid: { drawOnChartArea: false }, ticks: { callback: v => fmtInt(v) } },
+                },
+            })
+        });
+    }
+}
+
 function renderBranch() {
     renderFilterChips();
     const rows = aggregateBranchMonthly(state.filtered);
@@ -3623,6 +3818,8 @@ function renderBranch() {
     document.getElementById("brKpiQty").textContent   = fmtInt(totQty);
     document.getElementById("brKpiGp").textContent    = fmtMoneyFull(totGp);
     document.getElementById("brKpiGpp").textContent   = fmtPct(totSales ? totGp / totSales : 0);
+
+    renderEntityCharts(rows, { entityField: "branch", prefix: "br", filterKey: "location", filterEl: "locationFilter", paletteBase: "#3949ab" });
 
     const sorted = sortRowsBy([...rows], state.sortBranchTable);
     paintSortHeaders("#branchTable", state.sortBranchTable);
@@ -3663,6 +3860,8 @@ function renderSalesperson() {
     document.getElementById("spKpiQty").textContent   = fmtInt(totQty);
     document.getElementById("spKpiGp").textContent    = fmtMoneyFull(totGp);
     document.getElementById("spKpiGpp").textContent   = fmtPct(totSales ? totGp / totSales : 0);
+
+    renderEntityCharts(rows, { entityField: "salesperson", prefix: "sp", filterKey: "salesperson", filterEl: "salespersonFilter", paletteBase: "#00897b" });
 
     const sorted = sortRowsBy([...rows], state.sortSalespersonTable);
     paintSortHeaders("#salespersonTable", state.sortSalespersonTable);
@@ -4964,10 +5163,10 @@ function renderReturns() {
     document.getElementById("rKpiQty").textContent    = fmtInt(totalQty);
     document.getElementById("rKpiGp").textContent     = fmtMoneyFull(-totalGpImpact);
 
-    // Return rate by customer (top 15 by credit)
+    // Return rate by customer (top 15 by credit) — click drills into customer
     destroyChart("rCust");
-    const custRows = [...byCust.values()].filter(r => r.credit > 0).map(r => ({
-        ...r, rate: r.sales ? r.credit / r.sales : 0
+    const custRows = [...byCust.entries()].filter(([_, r]) => r.credit > 0).map(([k, r]) => ({
+        ...r, customerNumber: k, rate: r.sales ? r.credit / r.sales : 0
     })).sort((a, b) => b.credit - a.credit).slice(0, 15);
     const ctxCu = document.getElementById("rCustChart").getContext("2d");
     state.charts.rCust = new Chart(ctxCu, {
@@ -4978,11 +5177,22 @@ function renderReturns() {
             indexAxis: "y",
             plugins: { legend: { display: false },
                        tooltip: { callbacks: { label: c => fmtMoneyFull(c.parsed.x) + " · " + fmtPct(custRows[c.dataIndex].rate) + " return rate" } } },
-            scales: { x: { ticks: { callback: v => fmtMoney(v) } } }
+            scales: { x: { ticks: { callback: v => fmtMoney(v) } } },
+            onClick: (_, els) => {
+                if (!els.length) return;
+                const r = custRows[els[0].index];
+                if (state.byCustomer && state.byCustomer.get(r.customerNumber)) showCustomer(r.customerNumber);
+                else {
+                    state.filters.customer = (state.filters.customer === r.customerNumber) ? "" : r.customerNumber;
+                    state.filters.customerName = state.filters.customer ? r.customer : "";
+                    document.getElementById("customerFilter").value = state.filters.customer;
+                    rebuildFiltered(); renderCurrentTab();
+                }
+            }
         })
     });
 
-    // Credit by item
+    // Credit by item (top 15) — click filters tab by item
     destroyChart("rItem");
     const itemRows = [...byItem.values()].filter(r => r.credit > 0).sort((a, b) => b.credit - a.credit).slice(0, 15);
     const ctxIt = document.getElementById("rItemChart").getContext("2d");
@@ -4994,7 +5204,15 @@ function renderReturns() {
             indexAxis: "y",
             plugins: { legend: { display: false },
                        tooltip: { callbacks: { label: c => fmtMoneyFull(c.parsed.x) + " · qty " + fmtInt(itemRows[c.dataIndex].qty) } } },
-            scales: { x: { ticks: { callback: v => fmtMoney(v) } } }
+            scales: { x: { ticks: { callback: v => fmtMoney(v) } } },
+            onClick: (_, els) => {
+                if (!els.length) return;
+                const r = itemRows[els[0].index];
+                state.filters.item = (state.filters.item === r.number) ? "" : r.number;
+                state.filters.itemDesc = state.filters.item ? (r.description || "") : "";
+                const box = document.getElementById("itemFilterBox"); if (box) box.value = state.filters.item;
+                rebuildFiltered(); renderCurrentTab();
+            }
         })
     });
 
