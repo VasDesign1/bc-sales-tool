@@ -437,15 +437,22 @@
                         <div class="chart-wrap" style="min-height:260px;"><canvas id="customerChart"></canvas></div>
                     </div>
                     <div class="card span-12">
-                        <div class="head"><h3>What this customer buys (top 15 items)</h3><div class="meta">click a bar to drill into item × customer</div></div>
+                        <div class="head">
+                            <h3>What this customer buys (top 15 items)</h3>
+                            <div style="display:flex; gap:10px; align-items:center;">
+                                <div class="meta">click a bar to drill into item × customer</div>
+                                <button class="more-btn" id="customerItemsShowMore">Show more…</button>
+                            </div>
+                        </div>
                         <div class="chart-wrap" style="min-height:340px;"><canvas id="customerItemsChart"></canvas></div>
                     </div>
                 </div>
-                <div class="panel">
+                <div class="panel" id="customerItemsPanel" style="display:none;">
                     <div class="panel-header">
-                        <h2>Items this customer buys</h2>
+                        <h2>All items this customer buys</h2>
                         <input type="text" class="search" id="customerItemSearch" placeholder="Search item or description…">
                         <div class="meta" id="customerItemMeta"></div>
+                        <button class="more-btn" id="customerItemsHide" style="margin-left:auto;">Hide</button>
                     </div>
                     <div class="table-scroll">
                         <table id="customerItemTable">
@@ -768,14 +775,14 @@
                     <div class="table-scroll">
                         <table id="branchTable">
                             <thead><tr>
-                                <th>Fiscal Year</th>
-                                <th>Month</th>
-                                <th>Branch</th>
-                                <th class="num">Sales $</th>
-                                <th class="num">GP $</th>
-                                <th class="num">GP %</th>
-                                <th class="num">Qty</th>
-                                <th class="num">Invoices</th>
+                                <th data-sort="fy">Fiscal Year</th>
+                                <th data-sort="monthKey">Month</th>
+                                <th data-sort="branch">Branch</th>
+                                <th class="num" data-sort="sales">Sales $</th>
+                                <th class="num" data-sort="gp">GP $</th>
+                                <th class="num" data-sort="gpPct">GP %</th>
+                                <th class="num" data-sort="qty">Qty</th>
+                                <th class="num" data-sort="invoiceCount">Invoices</th>
                             </tr></thead>
                             <tbody></tbody>
                         </table>
@@ -814,14 +821,14 @@
                     <div class="table-scroll">
                         <table id="salespersonTable">
                             <thead><tr>
-                                <th>Fiscal Year</th>
-                                <th>Month</th>
-                                <th>Salesperson</th>
-                                <th class="num">Sales $</th>
-                                <th class="num">GP $</th>
-                                <th class="num">GP %</th>
-                                <th class="num">Qty</th>
-                                <th class="num">Customers</th>
+                                <th data-sort="fy">Fiscal Year</th>
+                                <th data-sort="monthKey">Month</th>
+                                <th data-sort="salesperson">Salesperson</th>
+                                <th class="num" data-sort="sales">Sales $</th>
+                                <th class="num" data-sort="gp">GP $</th>
+                                <th class="num" data-sort="gpPct">GP %</th>
+                                <th class="num" data-sort="qty">Qty</th>
+                                <th class="num" data-sort="customerCount">Customers</th>
                             </tr></thead>
                             <tbody></tbody>
                         </table>
@@ -921,16 +928,16 @@
                     <div class="table-scroll">
                         <table id="eomTable">
                             <thead><tr>
-                                <th>Customer</th>
-                                <th>Salesperson</th>
-                                <th>Branch</th>
-                                <th>Item Category</th>
-                                <th>Item No</th>
-                                <th class="num">Sales $</th>
-                                <th class="num">GP $</th>
-                                <th class="num">GP %</th>
-                                <th>Month</th>
-                                <th class="num">FY</th>
+                                <th data-sort="customer">Customer</th>
+                                <th data-sort="salesperson">Salesperson</th>
+                                <th data-sort="branch">Branch</th>
+                                <th data-sort="itemCategory">Item Category</th>
+                                <th data-sort="itemNumber">Item No</th>
+                                <th class="num" data-sort="sales">Sales $</th>
+                                <th class="num" data-sort="gp">GP $</th>
+                                <th class="num" data-sort="gpPct">GP %</th>
+                                <th data-sort="month">Month</th>
+                                <th class="num" data-sort="fy">FY</th>
                             </tr></thead>
                             <tbody></tbody>
                         </table>
@@ -1190,13 +1197,13 @@
                     <div class="table-scroll">
                         <table id="returnsTable">
                             <thead><tr>
-                                <th>Customer</th>
-                                <th>Salesperson</th>
-                                <th>CR No</th>
-                                <th>Posting Date</th>
-                                <th class="num">Qty</th>
-                                <th class="num">Credit Amount</th>
-                                <th class="num">GP Impact</th>
+                                <th data-sort="customer">Customer</th>
+                                <th data-sort="salesperson">Salesperson</th>
+                                <th data-sort="number">CR No</th>
+                                <th data-sort="postingDate">Posting Date</th>
+                                <th class="num" data-sort="qty">Qty</th>
+                                <th class="num" data-sort="amount">Credit Amount</th>
+                                <th class="num" data-sort="gpImpact">GP Impact</th>
                             </tr></thead>
                             <tbody></tbody>
                         </table>
@@ -2228,6 +2235,10 @@ const state = {
     sortSales: { key: "salesAmount", dir: "desc" },
     sortItems: { key: "revenue", dir: "desc" },
     sortCustomerItems: { key: "revenue", dir: "desc" },
+    sortBranchTable: { key: "sales", dir: "desc" },
+    sortSalespersonTable: { key: "sales", dir: "desc" },
+    sortEom: { key: "sales", dir: "desc" },
+    sortReturns: { key: "postingDate", dir: "desc" },
     byItemCategoryFilter: "",
     treeSort: { key: "sales", dir: "desc" },
     custFilter: "", itemFilter: "", eomFilter: "", customerItemFilter: "",
@@ -2868,6 +2879,42 @@ function ringDataLabels(opts) {
     };
 }
 function chartBase(opts) { return Object.assign({ responsive: true, maintainAspectRatio: false, animation: { duration: 400 } }, opts); }
+
+// Generic table sorter — used by every flat-table renderer so columns
+// honour the active sortState ({key, dir}). Numeric values compare
+// numerically; everything else falls back to a locale-aware string sort.
+function sortRowsBy(rows, sortState) {
+    const { key, dir } = sortState || { key: "", dir: "desc" };
+    if (!key) return rows;
+    const m = dir === "asc" ? 1 : -1;
+    return rows.sort((a, b) => {
+        let av = a[key], bv = b[key];
+        if (av == null) av = (typeof bv === "number") ? 0 : "";
+        if (bv == null) bv = (typeof av === "number") ? 0 : "";
+        if (typeof av === "number" && typeof bv === "number") return (av - bv) * m;
+        return String(av).localeCompare(String(bv)) * m;
+    });
+}
+// Wires <th data-sort="x"> elements to a sort state + re-render callback.
+// Numeric columns default desc on first click; text columns default asc.
+function attachSortHandlers(tableSelector, sortState, rerender, textKeys) {
+    textKeys = textKeys || new Set();
+    document.querySelectorAll(tableSelector + " th[data-sort]").forEach(th => {
+        th.style.cursor = "pointer";
+        th.addEventListener("click", () => {
+            const key = th.dataset.sort;
+            if (sortState.key === key) sortState.dir = sortState.dir === "asc" ? "desc" : "asc";
+            else { sortState.key = key; sortState.dir = textKeys.has(key) ? "asc" : "desc"; }
+            rerender();
+        });
+    });
+}
+function paintSortHeaders(tableSelector, sortState) {
+    document.querySelectorAll(tableSelector + " th[data-sort]").forEach(th => {
+        th.classList.remove("sorted-asc", "sorted-desc");
+        if (th.dataset.sort === sortState.key) th.classList.add(sortState.dir === "asc" ? "sorted-asc" : "sorted-desc");
+    });
+}
 function barShade(hex, t) {
     const c = hex.replace("#", "");
     const r = parseInt(c.slice(0, 2), 16), g = parseInt(c.slice(2, 4), 16), b = parseInt(c.slice(4, 6), 16);
@@ -3537,11 +3584,8 @@ function renderBranch() {
     document.getElementById("brKpiGp").textContent    = fmtMoneyFull(totGp);
     document.getElementById("brKpiGpp").textContent   = fmtPct(totSales ? totGp / totSales : 0);
 
-    const sorted = [...rows].sort((a, b) => {
-        if (a.fy !== b.fy) return b.fy - a.fy;
-        if (a.monthKey !== b.monthKey) return b.monthKey < a.monthKey ? -1 : 1;
-        return b.sales - a.sales;
-    });
+    const sorted = sortRowsBy([...rows], state.sortBranchTable);
+    paintSortHeaders("#branchTable", state.sortBranchTable);
     const tbody = document.querySelector("#branchTable tbody");
     tbody.innerHTML = sorted.map(r => `
         <tr>
@@ -3580,11 +3624,8 @@ function renderSalesperson() {
     document.getElementById("spKpiGp").textContent    = fmtMoneyFull(totGp);
     document.getElementById("spKpiGpp").textContent   = fmtPct(totSales ? totGp / totSales : 0);
 
-    const sorted = [...rows].sort((a, b) => {
-        if (a.fy !== b.fy) return b.fy - a.fy;
-        if (a.monthKey !== b.monthKey) return b.monthKey < a.monthKey ? -1 : 1;
-        return b.sales - a.sales;
-    });
+    const sorted = sortRowsBy([...rows], state.sortSalespersonTable);
+    paintSortHeaders("#salespersonTable", state.sortSalespersonTable);
     const tbody = document.querySelector("#salespersonTable tbody");
     tbody.innerHTML = sorted.map(r => `
         <tr>
@@ -3806,7 +3847,8 @@ function renderEOM() {
     document.getElementById("eomKpiGp").textContent    = fmtMoneyFull(totGp);
     document.getElementById("eomKpiGpp").textContent   = fmtPct(totSales ? totGp / totSales : 0);
 
-    rows.sort((a, b) => a.postingDate < b.postingDate ? 1 : -1);
+    sortRowsBy(rows, state.sortEom);
+    paintSortHeaders("#eomTable", state.sortEom);
     const tbody = document.querySelector("#eomTable tbody");
     tbody.innerHTML = rows.slice(0, 2000).map(r => `
         <tr>
@@ -4895,7 +4937,8 @@ function renderReturns() {
     });
 
     // Detail table
-    rows.sort((a, b) => a.postingDate < b.postingDate ? 1 : -1);
+    sortRowsBy(rows, state.sortReturns);
+    paintSortHeaders("#returnsTable", state.sortReturns);
     const tbody = document.querySelector("#returnsTable tbody");
     tbody.innerHTML = rows.slice(0, 2000).map(r => `
         <tr>
@@ -5698,9 +5741,11 @@ function showCustomer(custNumber) {
     document.getElementById("cdGpp").textContent      = fmtPct(g.gpPct);
     document.getElementById("cdInvoices").textContent = fmtInt(g.invoiceCount);
 
+    // Items table is collapsed by default — user opens with "Show more…"
+    const itemsPanel = document.getElementById("customerItemsPanel");
+    if (itemsPanel) itemsPanel.style.display = "none";
     renderCustomerTrendChart();
     renderCustomerItemsChart();
-    renderCustomerItemsTable();
     renderCustomerInvoiceTable();
     renderCustomerDrillTree();
     document.getElementById("cdInvCount").textContent = g.invoices.length + " invoices";
@@ -5813,6 +5858,8 @@ function buildCustomerItemRows(g) {
 
 function renderCustomerItemsTable() {
     const g = state.currentCustomer; if (!g) return;
+    const panel = document.getElementById("customerItemsPanel");
+    if (panel && panel.style.display === "none") return; // hidden — skip work
     let rows = buildCustomerItemRows(g);
     if (state.customerItemFilter) {
         const q = state.customerItemFilter.toLowerCase();
@@ -7103,6 +7150,19 @@ function wireEvents() {
         e.preventDefault(); state.byItemCategoryFilter = ""; renderByItem();
     });
 
+    // Customer drill: toggle the full items table
+    document.getElementById("customerItemsShowMore").addEventListener("click", () => {
+        const panel = document.getElementById("customerItemsPanel");
+        if (!panel) return;
+        panel.style.display = "block";
+        renderCustomerItemsTable();
+        panel.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    document.getElementById("customerItemsHide").addEventListener("click", () => {
+        const panel = document.getElementById("customerItemsPanel");
+        if (panel) panel.style.display = "none";
+    });
+
     // Customer items table: sort + search + row click → item × customer drill
     document.querySelectorAll("#customerItemTable th").forEach(th => {
         th.addEventListener("click", () => {
@@ -7124,6 +7184,13 @@ function wireEvents() {
 
     // EOM search
     document.getElementById("eomSearch").addEventListener("input", e => { state.eomFilter = e.target.value; renderEOM(); });
+
+    // Sortable column headers on Branch / Salesperson / EOM / Returns tables
+    const textKeys = new Set(["fy", "monthKey", "branch", "salesperson", "customer", "itemCategory", "itemNumber", "month", "number", "postingDate"]);
+    attachSortHandlers("#branchTable",      state.sortBranchTable,      renderBranch,      textKeys);
+    attachSortHandlers("#salespersonTable", state.sortSalespersonTable, renderSalesperson, textKeys);
+    attachSortHandlers("#eomTable",         state.sortEom,              renderEOM,         textKeys);
+    attachSortHandlers("#returnsTable",     state.sortReturns,          renderReturns,     textKeys);
 
     // Customer invoice click
     document.querySelector("#customerInvoiceTable tbody").addEventListener("click", e => {
