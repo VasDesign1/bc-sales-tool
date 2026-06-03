@@ -2114,7 +2114,47 @@ async function fetchBlanketSalesOrders(fromISO, toISO) {
                 const linesUrl = BC_ODATA_URL + "/Company('" + coName + "')/" + linesInfo.entity + "?" + lineParams.join("&");
                 const lineRows = await bcFetchAll(linesUrl, "Blanket order lines (" + linesInfo.entity + ")");
                 console.log("[Blanket SO lines] " + linesInfo.entity + " → " + lineRows.length + " line rows");
-                if (lineRows.length) console.log("[Blanket SO lines] sample line keys:", Object.keys(lineRows[0]).join(", "));
+                if (lineRows.length) {
+                    console.log("[Blanket SO lines] sample line keys:", Object.keys(lineRows[0]).join(", "));
+                    console.log("[Blanket SO lines] sample line row:", lineRows[0]);
+                    state.blanketOrdersLinesSampleKeys = Object.keys(lineRows[0]);
+                    state.blanketOrdersLinesSample = lineRows[0];
+                }
+
+                // ----- Sample-row fallback: item-No / description discovery
+                // sometimes picks a field that's null for every line. Re-pick
+                // by scanning the first 50 rows for a column whose values
+                // actually look like item codes / descriptions. -----
+                const sample = lineRows.slice(0, 50);
+                const fieldHasValues = (f) => sample.some(r => r[f] != null && String(r[f]).trim() !== "");
+                if (lineRows.length && (!linesInfo.fItemNo || !fieldHasValues(linesInfo.fItemNo))) {
+                    // Type='Item' lines should populate No or No_. Look for any
+                    // string field with values on most rows whose name contains
+                    // "no" / "item" / "number" but isn't a document/line counter.
+                    const allKeys = Object.keys(sample[0] || {});
+                    const itemCandidates = allKeys.filter(k => {
+                        if (/document|line.?no|version|system/i.test(k)) return false;
+                        if (!/no$|^no|item|number|code/i.test(k)) return false;
+                        if (linesInfo.fDocNo && k === linesInfo.fDocNo) return false;
+                        if (linesInfo.fLineNo && k === linesInfo.fLineNo) return false;
+                        const nonEmpty = sample.filter(r => r[k] != null && String(r[k]).trim() !== "").length;
+                        return nonEmpty >= sample.length * 0.3;
+                    });
+                    if (itemCandidates.length) {
+                        const before = linesInfo.fItemNo;
+                        linesInfo.fItemNo = itemCandidates[0];
+                        console.log("[Blanket SO lines] fItemNo fallback: '" + (before || "—") + "' → '" + linesInfo.fItemNo + "' (candidates: " + itemCandidates.join(", ") + ")");
+                    }
+                }
+                if (lineRows.length && (!linesInfo.fDesc || !fieldHasValues(linesInfo.fDesc))) {
+                    const allKeys = Object.keys(sample[0] || {});
+                    const descCandidate = allKeys.find(k => /desc/i.test(k) && fieldHasValues(k));
+                    if (descCandidate) {
+                        const before = linesInfo.fDesc;
+                        linesInfo.fDesc = descCandidate;
+                        console.log("[Blanket SO lines] fDesc fallback: '" + (before || "—") + "' → '" + descCandidate + "'");
+                    }
+                }
                 // Group by document number
                 const byDoc = new Map();
                 for (const lr of lineRows) {
@@ -4476,35 +4516,57 @@ function filteredBlanketOrders() {
 
 function renderBlanketOrders() {
     renderFilterChips();
-    // Diagnostic banner — also shows the discovered-entity status when
-    // headers loaded but lines didn't, so we can tell whether the lines
-    // entity was picked, missed, or had a different field-name shape.
+    // Diagnostic banner — always shows the picked entity + field map +
+    // line attachment ratio when blanket orders loaded, so we can tell
+    // whether discovery picked the right entity/field for items, etc.
     const diag = document.getElementById("boExtrasDiagnostic");
     if (diag) {
         const headers = state.blanketOrders || [];
         const linesAttached = headers.reduce((s, bo) => s + ((bo.blanketSalesOrderLines && bo.blanketSalesOrderLines.length) ? 1 : 0), 0);
+        const itemsCovered = headers.reduce((s, bo) => s + ((bo.blanketSalesOrderLines || []).filter(ln => (ln.lineObjectNumber || ln.itemId)).length), 0);
+        const totalLines = headers.reduce((s, bo) => s + ((bo.blanketSalesOrderLines || []).length), 0);
+        const linesInfo = state.blanketOrdersLinesFieldMap;
+        const headerInfo = state.blanketOrdersFieldMap;
+        const sampleKeys = state.blanketOrdersLinesSampleKeys;
+        const fieldLine = (label, info, fields) => {
+            if (!info) return "<em>not picked</em>";
+            const parts = fields.map(([k, prop]) => k + "=" + escapeHtml(info[prop] || "—"));
+            return label + ": <code>" + escapeHtml(info.entity) + "</code> · " + parts.join(" · ");
+        };
+        const showInfoBlock = () =>
+            "<br><span style='font-family:monospace; font-size:11px;'>" +
+                fieldLine("Header entity", headerInfo, [["No", "fNo"], ["CustNo", "fCustNo"], ["Amount", "fAmount"], ["Campaign", "fCampaign"], ["DocDate", "fDocDate"]]) +
+            "</span>" +
+            "<br><span style='font-family:monospace; font-size:11px;'>" +
+                fieldLine("Lines entity", linesInfo, [["DocNo", "fDocNo"], ["LineNo", "fLineNo"], ["ItemNo", "fItemNo"], ["Desc", "fDesc"], ["Qty", "fQty"], ["Amount", "fAmount"], ["Type", "fType"], ["Location", "fLocation"]]) +
+            "</span>" +
+            (sampleKeys ? "<br><span style='font-family:monospace; font-size:11px; color:#555;'>Sample line keys: " + escapeHtml(sampleKeys.join(", ")) + "</span>" : "");
         if (!headers.length) {
             diag.style.display = "block";
             diag.innerHTML = "<strong>No blanket sales orders loaded.</strong> " +
-                "BC's v2.0 REST API doesn't expose <code>blanketSalesOrders</code> as a documented endpoint, and the OData v4 fallback also didn't return data. " +
                 (state.blanketOrdersDiagnostic ? "<br><span style='font-family:monospace; font-size:11px;'>" + escapeHtml(state.blanketOrdersDiagnostic) + "</span>" : "") +
-                "<br>Most likely cause: <em>Blanket Sales Order</em> (page 9305) isn't published as an OData Web Service in your BC tenant. Ask your BC admin to publish it (Web Services → New → Page, Object ID 9305, Service Name <code>BlanketSalesOrder</code>, ☑ Published), then Reload sales.";
-        } else if (linesAttached === 0) {
-            const linesInfo = state.blanketOrdersLinesFieldMap;
+                "<br>Ask BC admin to publish page 9305 (BlanketSalesOrder) as a Web Service.";
+        } else if (linesAttached === 0 || itemsCovered === 0) {
             diag.style.display = "block";
-            diag.innerHTML = "<strong>Headers loaded but no line rows attached.</strong> " +
-                fmtInt(headers.length) + " blanket orders found, 0 lines attached. " +
-                "Per-item / per-line aggregations (Top items, Order Quantity, etc.) will be empty. " +
-                (state.blanketOrdersDiagnostic ? "<br><span style='font-family:monospace; font-size:11px;'>" + escapeHtml(state.blanketOrdersDiagnostic) + "</span>" : "") +
-                (linesInfo ? "<br><span style='font-family:monospace; font-size:11px;'>Lines entity picked: " + escapeHtml(linesInfo.entity) + " · DocNo=" + escapeHtml(linesInfo.fDocNo || "—") + " · Qty=" + escapeHtml(linesInfo.fQty || "—") + " · Amount=" + escapeHtml(linesInfo.fAmount || "—") + " · ItemNo=" + escapeHtml(linesInfo.fItemNo || "—") + "</span>" : "<br><span style='font-family:monospace; font-size:11px;'>No lines entity matched in $metadata.</span>") +
-                "<br>Open F12 → Console and copy the <code>[Blanket SO lines]</code> log lines so we can fix the discovery.";
-        } else if (linesAttached < headers.length) {
+            diag.innerHTML = "<strong>" + (linesAttached === 0
+                    ? "Headers loaded but no line rows attached."
+                    : "Lines attached (" + fmtInt(totalLines) + " rows) but no item numbers — per-item charts will be empty.") + "</strong> " +
+                fmtInt(headers.length) + " orders · " + fmtInt(linesAttached) + " with lines · " + fmtInt(itemsCovered) + " of " + fmtInt(totalLines) + " line rows have an Item No." +
+                showInfoBlock() +
+                "<br>Open F12 → Console and share the <code>[Blanket SO lines] sample line row</code> object so I can pick the correct Item No field.";
+        } else if (linesAttached < headers.length || itemsCovered < totalLines) {
             diag.style.display = "block";
-            diag.innerHTML = "<strong>Partial lines coverage.</strong> " +
-                fmtInt(linesAttached) + " of " + fmtInt(headers.length) + " orders have lines attached. " +
-                (state.blanketOrdersDiagnostic ? "<br><span style='font-family:monospace; font-size:11px;'>" + escapeHtml(state.blanketOrdersDiagnostic) + "</span>" : "");
+            diag.innerHTML = "<strong>Partial coverage.</strong> " +
+                fmtInt(linesAttached) + " of " + fmtInt(headers.length) + " orders have lines · " +
+                fmtInt(itemsCovered) + " of " + fmtInt(totalLines) + " line rows have an Item No." +
+                showInfoBlock();
         } else {
-            diag.style.display = "none";
+            diag.style.display = "block";
+            diag.style.borderLeftColor = "#43a047";
+            diag.style.background = "#e8f5e9";
+            diag.innerHTML = "<strong>OData source healthy.</strong> " +
+                fmtInt(headers.length) + " orders · " + fmtInt(totalLines) + " line rows, all attached, all have Item No." +
+                showInfoBlock();
         }
     }
 
