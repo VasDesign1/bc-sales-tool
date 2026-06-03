@@ -1911,14 +1911,17 @@ async function bcDiscoverSalesLinesEntity(headerEntity) {
     const allSets = Object.keys(md.entitySets);
     const DOC_NO   = [/^document.?no$/i, /documentNumber/i];
     const LINE_NO  = [/^line.?no$/i, /lineNumber/i];
-    const ITEM_NO  = [/^no$/i, /^item.?no$/i, /itemNumber/i, /lineObjectNumber/i];
+    // v2-style salesDocumentLines uses just "number" for the item/account
+    // number. OData/NAV-style uses "No" or "Item_No_". Match all three;
+    // do NOT match anything starting with sellTo/billTo/customer/etc.
+    const ITEM_NO  = [/^number$/i, /^no$/i, /^no_$/i, /^item.?no_?$/i, /^itemNumber$/i, /^lineObjectNumber$/i];
     const QTY      = [/^quantity$/i, /^qty$/i];
     const AMOUNT   = [/^amount$/i, /^line.?amount$/i, /amountExcludingTax/i, /^amount.*excl/i];
     const UPRICE   = [/^unit.?price$/i, /unitPrice/i];
     const DESC     = [/^description$/i];
     const LOCATION = [/^location.?code$/i, /locationCode/i, /^location$/i];
     const TYPE     = [/^type$/i, /^line.?type$/i, /lineType/i];
-    const DISC_ALLOC = [/^inv.*discount.?allocation/i, /invoiceDiscountAllocation/i, /^line.?discount.?amount/i];
+    const DISC_ALLOC = [/^inv.*discount.?allocation$/i, /^invoiceDiscountAllocation$/i, /^invDiscount.?Amount$/i, /^invoice.?discount.?amount$/i];
     // Score candidates by name closeness to header + presence of line indicators
     const base = headerEntity.toLowerCase();
     const candidates = allSets.filter(n => {
@@ -2179,23 +2182,25 @@ async function fetchBlanketSalesOrders(fromISO, toISO) {
                 // actually look like item codes / descriptions. -----
                 const sample = lineRows.slice(0, 50);
                 const fieldHasValues = (f) => sample.some(r => r[f] != null && String(r[f]).trim() !== "");
-                if (lineRows.length && (!linesInfo.fItemNo || !fieldHasValues(linesInfo.fItemNo))) {
-                    // Type='Item' lines should populate No or No_. Look for any
-                    // string field with values on most rows whose name contains
-                    // "no" / "item" / "number" but isn't a document/line counter.
+                // If discovery picked a wrong fItemNo (e.g. sellToCustomerNumber)
+                // OR didn't pick one, re-pick from the actual line keys. Prefer
+                // exact "number" / "No" matches first (BC v2 / NAV conventions),
+                // then fall back to a value-based scan. Exclude any customer /
+                // shipping / billing field so we don't get the customer number.
+                const exclude = /^(?:sellTo|billTo|payTo|shipTo|customer|vendor|bill|ship|salesperson|location|currency|invoice|shipping|bin|variant|posting|gen|vat|tax|prepayment|prepmt|return|reserved|original|special|appl|item.?reference|item.?category|nonstock|whse|deferral|attached|attach|job|work|shortcut|dimension|deprec|fa|ic|exit|area|entry|response|requested|promised|planned)/i;
+                const looksLikeItemNo = (k) =>
+                    /^(?:number|no|no_|item.?no_?|itemNumber|lineObjectNumber)$/i.test(k) && !exclude.test(k);
+                if (lineRows.length && (!linesInfo.fItemNo || !looksLikeItemNo(linesInfo.fItemNo) || !fieldHasValues(linesInfo.fItemNo))) {
                     const allKeys = Object.keys(sample[0] || {});
-                    const itemCandidates = allKeys.filter(k => {
-                        if (/document|line.?no|version|system/i.test(k)) return false;
-                        if (!/no$|^no|item|number|code/i.test(k)) return false;
-                        if (linesInfo.fDocNo && k === linesInfo.fDocNo) return false;
-                        if (linesInfo.fLineNo && k === linesInfo.fLineNo) return false;
-                        const nonEmpty = sample.filter(r => r[k] != null && String(r[k]).trim() !== "").length;
-                        return nonEmpty >= sample.length * 0.3;
-                    });
-                    if (itemCandidates.length) {
+                    // First priority: exact name match
+                    let pick = allKeys.find(k => looksLikeItemNo(k) && fieldHasValues(k));
+                    // Second priority: contains "item" + "no/number" but not excluded
+                    if (!pick) pick = allKeys.find(k =>
+                        /item.*(?:no|number)/i.test(k) && !exclude.test(k) && fieldHasValues(k));
+                    if (pick) {
                         const before = linesInfo.fItemNo;
-                        linesInfo.fItemNo = itemCandidates[0];
-                        console.log("[Blanket SO lines] fItemNo fallback: '" + (before || "—") + "' → '" + linesInfo.fItemNo + "' (candidates: " + itemCandidates.join(", ") + ")");
+                        linesInfo.fItemNo = pick;
+                        console.log("[Blanket SO lines] fItemNo fallback: '" + (before || "—") + "' → '" + pick + "'");
                     }
                 }
                 if (lineRows.length && (!linesInfo.fDesc || !fieldHasValues(linesInfo.fDesc))) {
