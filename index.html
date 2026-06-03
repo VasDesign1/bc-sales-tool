@@ -3330,8 +3330,13 @@ function buildCostMaps(iles) {
     const fCostNI = pick(s, ["costAmountNonInvtbl", "Cost_Amount_Non_Invtbl", "cost_amount_non_invtbl"]) || "costAmountNonInvtbl";
     const fQty    = pick(s, ["quantity", "Quantity"]) || "quantity";
     const fDate   = pick(s, ["postingDate", "posting_Date", "Posting_Date"]) || "postingDate";
-    state.costStats.fields = { fItem, fCost, fCostNI, fQty, fDate };
+    // ILE document number field varies: v2 REST = documentNumber, OData v4
+    // = Document_No, older NAV = Document_No_. Pick whichever the tenant
+    // returns; without it the per-doc cost lookup builds an empty map.
+    const fDoc    = pick(s, ["documentNumber", "Document_No", "Document_No_", "documentNo", "document_Number"]);
+    state.costStats.fields = { fItem, fCost, fCostNI, fQty, fDate, fDoc };
     console.log("[ILE] using fields:", state.costStats.fields);
+    console.log("[ILE] sample row keys:", Object.keys(s).slice(0, 30).join(", "));
 
     const byItem = new Map();
     const byItemMonth = new Map();
@@ -3352,7 +3357,7 @@ function buildCostMaps(iles) {
         byItem.set(itemNo, cur);
         // (a) exact per-(documentNumber, item) cost — used by the Ship+Invoice
         // workflow where ILE.documentNumber == the invoice / credit-memo No.
-        const docNo = e.documentNumber || "";
+        const docNo = (fDoc ? e[fDoc] : e.documentNumber) || "";
         if (docNo) {
             const dk = docNo + "|" + itemNo;
             const curD = state.costByItemDocKey.get(dk) || { qty: 0, cost: 0 };
