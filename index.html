@@ -3445,6 +3445,16 @@ function costFromLine(line, sign, postingDate, customerNumber) {
     if (uc === 0) uc = state.itemAvgCost.get(itemNo) || 0;
     return uc * qty * sign;
 }
+// Power BI's "Adjusted Cost (LCY)" measure sums BOTH cost components
+// from Value Entries: Cost Amount (Actual) + Cost Amount (Non-Invtbl).
+// All headline aggregations and KPI / table cost columns use this
+// combined helper so the headline number matches PBI. The drill-down
+// trees keep the two parts separate via costFromLine + costNonInvFromLine
+// because they expose distinct "Adj Cost" and "Cost Non-Inv" columns.
+function totalCostFromLine(line, sign, postingDate, customerNumber) {
+    return costFromLine(line, sign, postingDate, customerNumber) +
+           costNonInvFromLine(line, sign, postingDate, customerNumber);
+}
 function costNonInvFromLine(line, sign, postingDate, customerNumber) {
     if (!isItemLine(line)) return 0;
     sign = (sign == null) ? 1 : sign;
@@ -3466,7 +3476,7 @@ function costNonInvFromLine(line, sign, postingDate, customerNumber) {
     return uc * qty * sign;
 }
 function invoiceCost(inv) {
-    return (inv.salesInvoiceLines || []).reduce((s, ln) => s + costFromLine(ln, 1, inv.postingDate, inv.customerNumber), 0);
+    return (inv.salesInvoiceLines || []).reduce((s, ln) => s + totalCostFromLine(ln, 1, inv.postingDate, inv.customerNumber), 0);
 }
 function invoiceGP(inv) {
     return num(inv.totalAmountExcludingTax) - invoiceCost(inv);
@@ -3639,7 +3649,7 @@ function aggregateByItem(invoices) {
             }
             if (ln.description) g.description = ln.description;
             g.revenue += lineNetAmount(ln);
-            g.cost    += costFromLine(ln, 1, inv.postingDate, inv.customerNumber);
+            g.cost    += totalCostFromLine(ln, 1, inv.postingDate, inv.customerNumber);
             g.qty     += num(ln.quantity);
             g.lineCount += 1;
         }
@@ -3662,7 +3672,7 @@ function aggregateByLocation(invoices) {
             let g = map.get(code);
             if (!g) { g = { code, revenue: 0, cost: 0, qty: 0, lineCount: 0 }; map.set(code, g); }
             g.revenue += lineNetAmount(ln);
-            g.cost    += costFromLine(ln, 1, inv.postingDate, inv.customerNumber);
+            g.cost    += totalCostFromLine(ln, 1, inv.postingDate, inv.customerNumber);
             g.qty     += num(ln.quantity);
             g.lineCount += 1;
         }
@@ -3704,7 +3714,7 @@ function aggregateBranchMonthly(invoices) {
             let g = lineGroups.get(k);
             if (!g) { g = { fy, monthKey: mk, branch: code, sales: 0, cost: 0, qty: 0 }; lineGroups.set(k, g); }
             g.sales += lineNetAmount(ln);
-            g.cost  += costFromLine(ln, 1, inv.postingDate, inv.customerNumber);
+            g.cost  += totalCostFromLine(ln, 1, inv.postingDate, inv.customerNumber);
             g.qty   += num(ln.quantity);
         }
         for (const [k, g] of lineGroups) {
@@ -3743,7 +3753,7 @@ function buildEOMRows(invoices) {
             if (!lineMatchesFilters(ln)) continue;
             const itemNo = ln.lineObjectNumber || ln.itemId || "";
             const sales = lineNetAmount(ln);
-            const cost  = costFromLine(ln, 1, inv.postingDate, inv.customerNumber);
+            const cost  = totalCostFromLine(ln, 1, inv.postingDate, inv.customerNumber);
             rows.push({
                 customer:    inv.customerName || inv.customerNumber || "(unknown)",
                 salesperson: inv.salesperson || "(unassigned)",
@@ -3908,7 +3918,7 @@ function getAdjustments() {
             if (!lineMatchesFilters(ln)) continue;
             cmAmount += lineNetAmount(ln);
             cmQty    += num(ln.quantity);
-            cmCost   += costFromLine(ln, 1, cm.postingDate, cm.customerNumber);
+            cmCost   += totalCostFromLine(ln, 1, cm.postingDate, cm.customerNumber);
         }
         if (!cmAmount && cm.totalAmountExcludingTax != null) cmAmount = num(cm.totalAmountExcludingTax);
         credit += cmAmount; qty += cmQty; cost += cmCost;
@@ -6360,7 +6370,7 @@ function renderReturns() {
             const a = lineNetAmount(ln);
             const q = num(ln.quantity);
             const itemNo = ln.lineObjectNumber || ln.itemId || "";
-            const c = costFromLine(ln, 1, cm.postingDate, cm.customerNumber);
+            const c = totalCostFromLine(ln, 1, cm.postingDate, cm.customerNumber);
             cmAmount += a; cmQty += q; cmCost += c;
             const ent = byItem.get(itemNo) || { number: itemNo, description: ln.description || "", credit: 0, qty: 0 };
             ent.credit += a; ent.qty += q;
@@ -6507,7 +6517,7 @@ function renderRunRateTab(opts) {
                     if (state.filters.item && (ln.lineObjectNumber || ln.itemId || "") !== state.filters.item) continue;
                     const cur = map.get(ent) || { sales: 0, cost: 0 };
                     cur.sales += lineNetAmount(ln);
-                    cur.cost  += costFromLine(ln, 1, inv.postingDate, inv.customerNumber);
+                    cur.cost  += totalCostFromLine(ln, 1, inv.postingDate, inv.customerNumber);
                     map.set(ent, cur);
                 }
             }
@@ -7175,7 +7185,7 @@ function buildDecompositionTree(levels) {
             if (!lineMatchesFilters(ln)) continue;
             const s = lineNetAmount(ln);
             const q = num(ln.quantity);
-            const c = costFromLine(ln, 1, inv.postingDate, inv.customerNumber);
+            const c = totalCostFromLine(ln, 1, inv.postingDate, inv.customerNumber);
             let map = root;
             const path = [];
             for (let d = 0; d < dims.length; d++) {
@@ -7344,7 +7354,7 @@ function buildCustomerItemRows(g) {
             r.revenue += lineNetAmount(ln);
             r.qty += num(ln.quantity);
             r.lineCount++;
-            r.cost += costFromLine(ln, 1, inv.postingDate, inv.customerNumber);
+            r.cost += totalCostFromLine(ln, 1, inv.postingDate, inv.customerNumber);
             if (!seenThisInv.has(key)) { r.invoiceIds.add(inv.id); seenThisInv.add(key); }
             if (inv.postingDate && (!r.lastDate || inv.postingDate > r.lastDate)) r.lastDate = inv.postingDate;
         }
@@ -8038,7 +8048,7 @@ function aggregateByCategory(invoices) {
             const cat = state.itemCategory.get(itemNo) || "(no category)";
             const cur = map.get(cat) || { cat, sales: 0, cost: 0, qty: 0 };
             cur.sales += lineNetAmount(ln);
-            cur.cost  += costFromLine(ln, 1, inv.postingDate, inv.customerNumber);
+            cur.cost  += totalCostFromLine(ln, 1, inv.postingDate, inv.customerNumber);
             cur.qty   += num(ln.quantity);
             map.set(cat, cur);
         }
