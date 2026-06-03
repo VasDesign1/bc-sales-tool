@@ -98,21 +98,30 @@
             box-sizing: border-box;
         }
 
+        /* Use the SAME inline-SVG arrow on every dropdown-style field —
+           native select arrows are rendered by the browser and look
+           subtly different across UA / OS, so we hide them and paint
+           our own. Result: selects and the Item combo have a pixel-
+           identical chevron. Date inputs keep their native calendar
+           picker icon. */
+        .toolbar select,
+        .toolbar .combo input {
+            -webkit-appearance: none; appearance: none;
+            background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M0 0l5 6 5-6z' fill='%23666'/></svg>");
+            background-repeat: no-repeat;
+            background-position: right 10px center;
+            padding-right: 26px;
+        }
+
         /* Custom combo box for Item — native datalist had two problems:
            positioning was browser-controlled (sometimes opened off to the
            side), and the dropdown arrow disappears when the list is empty
            (i.e. before sales are loaded). This combo always shows the
-           arrow, and the popup is anchored directly below the input. */
+           arrow (above SVG rule), and the popup is anchored directly
+           below the input. */
         .toolbar .combo { position: relative; width: 160px; }
-        .toolbar .combo input { width: 100%; padding-right: 26px; }
-        .toolbar .combo-arrow {
-            position: absolute; right: 9px; top: 50%; transform: translateY(-50%);
-            width: 0; height: 0; pointer-events: none;
-            border-left: 5px solid transparent;
-            border-right: 5px solid transparent;
-            border-top: 6px solid currentColor;
-            color: #2c2f4a;
-        }
+        .toolbar .combo input { width: 100%; }
+        .toolbar .combo-arrow { display: none; }
         .toolbar .combo-popup {
             display: none; position: absolute; top: calc(100% + 4px); left: 0;
             background: white; border: 1px solid #d6d8eb; border-radius: 8px;
@@ -576,6 +585,10 @@
         html.theme-onyx .panel-header .more-btn:hover { background: #1c1b18; }
         html.theme-onyx .row-action-btn { background: #1c1b18; color: #d4af7a; border: 1px solid #2a2820; }
         html.theme-onyx .row-action-btn:hover { background: #d4af7a; color: #0a0a0b; }
+        html.theme-onyx .toolbar select,
+        html.theme-onyx .toolbar .combo input {
+            background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M0 0l5 6 5-6z' fill='%2388837a'/></svg>");
+        }
         html.theme-onyx .toolbar .combo-arrow { color: #88837a; }
         html.theme-onyx .toolbar .combo-popup { background: #141416; border-color: #2a2820; box-shadow: 0 8px 24px rgba(0,0,0,0.6); }
         html.theme-onyx .toolbar .combo-popup .opt { border-bottom-color: #1c1b18; }
@@ -662,6 +675,10 @@
         html.theme-linen .panel-header .more-btn:hover { background: rgba(91,110,63,0.10); }
         html.theme-linen .row-action-btn { background: rgba(91,110,63,0.10); color: #5b6e3f; }
         html.theme-linen .row-action-btn:hover { background: #5b6e3f; color: #f4f1eb; }
+        html.theme-linen .toolbar select,
+        html.theme-linen .toolbar .combo input {
+            background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M0 0l5 6 5-6z' fill='%236e6a60'/></svg>");
+        }
         html.theme-linen .toolbar .combo-arrow { color: #6e6a60; }
         html.theme-linen .toolbar .combo-popup { background: #f4f1eb; border-color: rgba(45,42,36,0.24); box-shadow: 0 8px 24px rgba(45,42,36,0.18); }
         html.theme-linen .toolbar .combo-popup .opt { border-bottom-color: rgba(45,42,36,0.10); }
@@ -781,6 +798,10 @@
         html.theme-aurora .panel-header .more-btn:hover { background: rgba(181,123,255,0.12); }
         html.theme-aurora .row-action-btn { background: rgba(181,123,255,0.18); color: #d4baff; border: 1px solid rgba(255,255,255,0.12); }
         html.theme-aurora .row-action-btn:hover { background: linear-gradient(135deg, #b57bff, #6be0ff); color: #08081b; }
+        html.theme-aurora .toolbar select,
+        html.theme-aurora .toolbar .combo input {
+            background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M0 0l5 6 5-6z' fill='%23b8b6cc'/></svg>");
+        }
         html.theme-aurora .toolbar .combo-arrow { color: #b8b6cc; }
         html.theme-aurora .toolbar .combo-popup { background: rgba(20,20,35,0.92); backdrop-filter: blur(20px); border-color: rgba(255,255,255,0.10); box-shadow: 0 12px 32px rgba(0,0,0,0.5); color: #eaeaf2; }
         html.theme-aurora .toolbar .combo-popup .opt { border-bottom-color: rgba(255,255,255,0.06); }
@@ -867,6 +888,10 @@
         html.theme-atelier .panel-header .more-btn:hover { background: #000; color: #fff; }
         html.theme-atelier .row-action-btn { background: #fff; color: #000; border: 2px solid #000; border-radius: 0; font-weight: 700; text-transform: uppercase; padding: 3px 10px; }
         html.theme-atelier .row-action-btn:hover { background: #ff4400; color: #fff; }
+        html.theme-atelier .toolbar select,
+        html.theme-atelier .toolbar .combo input {
+            background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M0 0l5 6 5-6z' fill='%23000000'/></svg>");
+        }
         html.theme-atelier .toolbar .combo-arrow { color: #000; font-weight: 900; }
         html.theme-atelier .toolbar .combo-popup { background: #fff; border: 2px solid #000; border-radius: 0; box-shadow: 4px 4px 0 #000; color: #000; }
         html.theme-atelier .toolbar .combo-popup .opt { border-bottom: 1px solid #000; }
@@ -957,6 +982,10 @@
         html.theme-concierge .panel-header .more-btn:hover { background: rgba(14,77,63,0.08); }
         html.theme-concierge .row-action-btn { background: rgba(14,77,63,0.10); color: #0e4d3f; }
         html.theme-concierge .row-action-btn:hover { background: #0e4d3f; color: #f3eee5; }
+        html.theme-concierge .toolbar select,
+        html.theme-concierge .toolbar .combo input {
+            background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M0 0l5 6 5-6z' fill='%237a7368'/></svg>");
+        }
         html.theme-concierge .toolbar .combo-arrow { color: #7a7368; }
         html.theme-concierge .toolbar .combo-popup { background: #f3eee5; border-color: rgba(44,42,38,0.18); box-shadow: 0 8px 24px rgba(44,42,38,0.18); }
         html.theme-concierge .toolbar .combo-popup .opt { border-bottom-color: rgba(44,42,38,0.10); }
