@@ -3617,11 +3617,12 @@ function aggregateBranchMonthly(invoices) {
         }
         for (const [k, g] of lineGroups) {
             let cur = map.get(k);
-            if (!cur) { cur = { fy: g.fy, monthKey: g.monthKey, branch: g.branch, sales: 0, cost: 0, qty: 0, invoiceCount: 0 }; map.set(k, cur); }
+            if (!cur) { cur = { fy: g.fy, monthKey: g.monthKey, branch: g.branch, sales: 0, cost: 0, qty: 0, invoiceCount: 0, customers: new Set() }; map.set(k, cur); }
             cur.sales += g.sales; cur.cost += g.cost; cur.qty += g.qty; cur.invoiceCount += 1;
+            if (inv.customerNumber) cur.customers.add(inv.customerNumber);
         }
     }
-    return [...map.values()].map(g => ({ ...g, gp: g.sales - g.cost, gpPct: g.sales ? (g.sales - g.cost) / g.sales : 0 }));
+    return [...map.values()].map(g => ({ ...g, customerCount: g.customers.size, gp: g.sales - g.cost, gpPct: g.sales ? (g.sales - g.cost) / g.sales : 0 }));
 }
 
 function aggregateSalespersonMonthly(invoices) {
@@ -3634,8 +3635,9 @@ function aggregateSalespersonMonthly(invoices) {
         const s = invoiceSalesAmount(inv);
         const cShare = invoiceCost(inv) * (num(inv.totalAmountExcludingTax) ? (s / num(inv.totalAmountExcludingTax)) : 1);
         let g = map.get(k);
-        if (!g) { g = { fy, monthKey: mk, salesperson: sp, sales: 0, cost: 0, qty: 0, customers: new Set() }; map.set(k, g); }
+        if (!g) { g = { fy, monthKey: mk, salesperson: sp, sales: 0, cost: 0, qty: 0, customers: new Set(), invoiceCount: 0 }; map.set(k, g); }
         g.sales += s; g.cost += cShare; g.qty += invoiceQty(inv);
+        g.invoiceCount += 1;
         if (inv.customerNumber) g.customers.add(inv.customerNumber);
     }
     return [...map.values()].map(g => ({ ...g, customerCount: g.customers.size, gp: g.sales - g.cost, gpPct: g.sales ? (g.sales - g.cost) / g.sales : 0 }));
