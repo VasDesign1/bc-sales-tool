@@ -4154,6 +4154,13 @@ function chartBase(opts) { return Object.assign({ responsive: true, maintainAspe
 // shows a sales-KPI row. Credit revenue and the implied cost are
 // subtracted from gross totals to give "net of returns" figures.
 function getAdjustments() {
+    // Value Entry mode: Sales Credit Memo rows are already netted into
+    // the VE sales/cost totals (PBI does the same). Returning zero here
+    // makes the Adjusted-* tiles mirror the headline, which is the
+    // correct accounting view when the headline IS already adjusted.
+    if (state.salesMode === "valueentry" && state.valueEntries && state.valueEntries.length) {
+        return { credit: 0, qty: 0, cost: 0, gpImpact: 0, mode: "ve" };
+    }
     const inRange = getDateRangePredicate();
     let credit = 0, qty = 0, cost = 0;
     for (const cm of (state.creditMemos || [])) {
@@ -4241,10 +4248,11 @@ function paintAdjustedKpis(prefix, grossSales, grossGp) {
     if (el("AdjCost"))  el("AdjCost").textContent  = fmtMoneyFull(adjCost);
     if (el("AdjGp"))    el("AdjGp").textContent    = fmtMoneyFull(adjGp);
     if (el("AdjGpp"))   el("AdjGpp").textContent   = fmtPct(adjGpp);
-    if (el("AdjSalesSub")) el("AdjSalesSub").textContent = adj.credit ? "−" + fmtMoneyFull(adj.credit) + " returns" : "no returns";
-    if (el("AdjCostSub"))  el("AdjCostSub").textContent  = adj.cost   ? "−" + fmtMoneyFull(adj.cost)   + " return cost" : "no returns";
-    if (el("AdjGpSub"))    el("AdjGpSub").textContent    = adj.gpImpact ? "−" + fmtMoneyFull(adj.gpImpact) + " return GP" : "no returns";
-    if (el("AdjGppSub"))   el("AdjGppSub").textContent   = "after credit memos";
+    const veMode = adj.mode === "ve";
+    if (el("AdjSalesSub")) el("AdjSalesSub").textContent = veMode ? "VE already nets returns" : (adj.credit ? "−" + fmtMoneyFull(adj.credit) + " returns" : "no returns");
+    if (el("AdjCostSub"))  el("AdjCostSub").textContent  = veMode ? "VE already nets returns" : (adj.cost   ? "−" + fmtMoneyFull(adj.cost)   + " return cost" : "no returns");
+    if (el("AdjGpSub"))    el("AdjGpSub").textContent    = veMode ? "VE already nets returns" : (adj.gpImpact ? "−" + fmtMoneyFull(adj.gpImpact) + " return GP" : "no returns");
+    if (el("AdjGppSub"))   el("AdjGppSub").textContent   = veMode ? "PBI-aligned (VE source)" : "after credit memos";
 }
 
 // Convert a hex colour to rgba(r,g,b,alpha) for fill backgrounds.
