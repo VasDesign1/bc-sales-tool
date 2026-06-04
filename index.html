@@ -1389,6 +1389,12 @@
                     <div class="kpi k-avg"><div class="label">Adjusted Profit Margin</div><div class="value" id="kpiAdjGpp">—</div><div class="sub" id="kpiAdjGppSub">after credit memos</div></div>
                 </div>
 
+                <div class="kpi-row" style="grid-template-columns: repeat(3, 1fr);" title="Pipeline state from BC. Counts current-state — independent of toolbar date range — so you always see what's actually open right now.">
+                    <div class="kpi k-rev"><div class="label">Outstanding Sales Orders</div><div class="value" id="kpiPipeOpenAmt">—</div><div class="sub" id="kpiPipeOpenSub">orders not fully shipped</div></div>
+                    <div class="kpi k-gp"><div class="label">Shipped Not Invoiced</div><div class="value" id="kpiPipeSniAmt">—</div><div class="sub" id="kpiPipeSniSub">delivered, awaiting invoice</div></div>
+                    <div class="kpi k-cust"><div class="label">Outstanding Invoices</div><div class="value" id="kpiPipeOiAmt">—</div><div class="sub" id="kpiPipeOiSub">invoiced, unpaid (in range)</div></div>
+                </div>
+
                 <div class="chart-grid">
                     <div class="card span-12">
                         <div class="head">
@@ -3026,6 +3032,15 @@ async function fetchSalesCreditMemos(fromISO, toISO) {
     try { return await bcFetchAll(url, "Sales credit memos"); }
     catch (e) { console.warn("Credit memos fetch failed:", e.message); return []; }
 }
+// Fetches OPEN sales orders (no date filter). Pipeline KPIs need
+// current-state visibility — orders that haven't shipped or invoiced
+// yet — which is independent of the toolbar date range.
+async function fetchSalesOrders() {
+    const compId = await bcGetCompanyId();
+    const url = BC_API_URL + "/companies(" + compId + ")/salesOrders?$expand=salesOrderLines&$top=5000";
+    try { return await bcFetchAll(url, "Sales orders"); }
+    catch (e) { console.warn("Sales orders fetch failed:", e.message); return []; }
+}
 async function fetchSalesShipments(fromISO, toISO) {
     const compId = await bcGetCompanyId();
     const filter = "postingDate ge " + fromISO + " and postingDate le " + toISO;
@@ -3303,6 +3318,7 @@ const state = {
     filters: { location: "", salesperson: "", customer: "", customerName: "", item: "", itemDesc: "", status: "" },
     snapshotAsOf: null,
     valueEntries: [],
+    salesOrders: [],
     charts: {},
     tab: "overview",
     drill: null, // null | "customer" | "invoice" | "item"
@@ -4788,6 +4804,48 @@ function renderFilterChips() {
     });
 }
 
+// Compute three sales-pipeline metrics and stamp them into the
+// Outstanding / Shipped-Not-Invoiced / Outstanding-Invoices KPI tiles.
+//   - Outstanding Sales Orders: orders with any line where qty > qtyShipped.
+//     Amount = Σ (qty − qtyShipped) × unitPrice over those lines.
+//   - Shipped Not Invoiced:    orders with any line where qtyShipped > qtyInvoiced.
+//     Amount = Σ (qtyShipped − qtyInvoiced) × unitPrice over those lines.
+//   - Outstanding Invoices:    invoices in state.filtered where status != "Paid".
+//     Amount = Σ totalAmountExcludingTax.
+// Sales-order metrics are CURRENT-STATE (no date filter) so the
+// pipeline view reflects what's actually open now, not historical
+// snapshots. Outstanding Invoices uses the toolbar's loaded set.
+function paintPipelineKpis() {
+    let openCount = 0, openAmt = 0, sniCount = 0, sniAmt = 0;
+    for (const so of (state.salesOrders || [])) {
+        let openLines = 0, sniLines = 0, soOpen = 0, soSni = 0;
+        for (const ln of (so.salesOrderLines || [])) {
+            const q   = num(ln.quantity);
+            const qsh = num(ln.quantityShipped);
+            const qin = num(ln.quantityInvoiced);
+            const up  = num(ln.unitPrice);
+            const openQ = q - qsh; if (openQ > 0) { openLines++; soOpen += openQ * up; }
+            const sniQ  = qsh - qin; if (sniQ > 0) { sniLines++; soSni += sniQ * up; }
+        }
+        if (openLines) { openCount++; openAmt += soOpen; }
+        if (sniLines)  { sniCount++; sniAmt  += soSni; }
+    }
+    let oiCount = 0, oiAmt = 0;
+    for (const inv of (state.filtered || [])) {
+        const st = (inv.status || "").toString().toLowerCase();
+        if (st === "paid") continue;
+        oiCount++;
+        oiAmt += num(inv.totalAmountExcludingTax);
+    }
+    const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+    set("kpiPipeOpenAmt", fmtMoneyFull(openAmt));
+    set("kpiPipeOpenSub", openCount + " orders · not fully shipped");
+    set("kpiPipeSniAmt",  fmtMoneyFull(sniAmt));
+    set("kpiPipeSniSub",  sniCount + " orders · awaiting invoice");
+    set("kpiPipeOiAmt",   fmtMoneyFull(oiAmt));
+    set("kpiPipeOiSub",   oiCount + " invoices · unpaid in range");
+}
+
 // ============================================================
 // OVERVIEW TAB
 // ============================================================
@@ -4821,6 +4879,7 @@ function renderOverview() {
     document.getElementById("kpiGpp").textContent      = fmtPct(totalRev ? totalGp / totalRev : 0);
     document.getElementById("kpiQty").textContent      = fmtInt(totalQty);
     paintAdjustedKpis("kpi", totalRev, totalGp);
+    paintPipelineKpis();
 
     renderFilterChips();
     renderTrendChart();
@@ -8877,7 +8936,7 @@ async function handleLoad() {
     const btn = document.getElementById("loadBtn");
     btn.disabled = true; btn.textContent = "Loading…";
     try {
-        const [locs, items, customers, invoices, iles, creditMemos, shipments, returnReceipts, quotes, quoteExtras, blanketOrders, valueEntries] = await Promise.all([
+        const [locs, items, customers, invoices, iles, creditMemos, shipments, returnReceipts, quotes, quoteExtras, blanketOrders, valueEntries, salesOrders] = await Promise.all([
             fetchLocations(),
             fetchItems(),
             fetchCustomers(),
@@ -8890,7 +8949,15 @@ async function handleLoad() {
             fetchSalesQuoteExtras(from, to),
             fetchBlanketSalesOrders(from, to),
             fetchValueEntries(from, to),
+            fetchSalesOrders(),
         ]);
+        state.salesOrders = salesOrders || [];
+        if (state.salesOrders.length) {
+            console.log("[Sales Orders] loaded " + state.salesOrders.length + " orders, sample fields:", Object.keys(state.salesOrders[0]).join(", "));
+            if (state.salesOrders[0].salesOrderLines && state.salesOrders[0].salesOrderLines.length) {
+                console.log("[Sales Orders] sample line fields:", Object.keys(state.salesOrders[0].salesOrderLines[0]).join(", "));
+            }
+        }
         state.valueEntries = valueEntries || [];
         // Build per-(docNumber|itemNo) cost map from VE rows so direct-
         // invoice items (no shipment / no ILE entry) still get accurate
