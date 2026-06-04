@@ -8910,6 +8910,28 @@ async function handleLoad() {
             console.log("[Value Entry] Posting_Date filter  · Sales=" + fmtMoneyFull(p1) + " · Cost=" + fmtMoneyFull(Math.abs(p2)));
             console.log("[Value Entry] Document_Date filter · Sales=" + fmtMoneyFull(d1) + " · Cost=" + fmtMoneyFull(Math.abs(d2)));
             console.log("[Value Entry] rows where posting / document date land on different sides of the window: " + dateMismatch);
+            // Top-20 Sales Invoice VE rows by |Sales_Amount_Actual|.
+            // If any row has sales >> cost (e.g. prepayment, charge, or
+            // a duplicated post), it will pop here.
+            const salesInvoiceRows = (state.valueEntries || []).filter(v =>
+                isSalesValueEntry(v) && /^sales invoice$/i.test(v.documentType || "")
+            ).sort((a, b) => Math.abs(b.salesAmount) - Math.abs(a.salesAmount));
+            const top20 = salesInvoiceRows.slice(0, 20);
+            const top20Str = top20.map(v =>
+                "  docNo=" + (v.documentNumber || "—") +
+                " item=" + (v.itemNumber || "—") +
+                " sales=" + fmtMoneyFull(v.salesAmount) +
+                " cost=" + fmtMoneyFull(v.costAmount) +
+                " qty=" + v.invoicedQty +
+                " src=" + (v.sourceNumber || "—")
+            ).join("\n");
+            console.log("[Value Entry] top 20 Sales Invoice VE rows by |sales|:\n" + top20Str);
+            // Also: count rows where sales > 0 but cost is 0 (suspicious — these
+            // shouldn't exist for normal item sales; they would be prepayments,
+            // charges, freight-only lines, etc).
+            const salesNoCost = salesInvoiceRows.filter(v => v.salesAmount > 0 && Math.abs(v.costAmount) < 0.005);
+            const salesNoCostTotal = salesNoCost.reduce((s, v) => s + v.salesAmount, 0);
+            console.log("[Value Entry] Sales Invoice rows with sales>0 AND cost≈0: " + salesNoCost.length + " rows totalling " + fmtMoneyFull(salesNoCostTotal));
         }
         state.blanketOrders = blanketOrders || [];
         if (state.blanketOrders.length) {
