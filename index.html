@@ -4179,15 +4179,19 @@ function getAdjustments() {
     const adjCost = veCostInUse ? 0 : cost;
     return { credit, qty, cost: adjCost, gpImpact: credit - adjCost, mode: veCostInUse ? "ve-cost" : "document" };
 }
-// Test whether a VE row belongs to a sales financial document.
-// PBI's "Sales (LCY)" + "Adjusted Cost (LCY)" measures use Document Type
-// in {Sales Invoice, Sales Credit Memo} — i.e. the financial side only,
-// NOT Sales Shipment / Sales Return Receipt (which post cost flows but
-// no revenue, leading to double-count if both sides land in the same
-// period).
+// Test whether a VE row belongs to a sales transaction.
+// We filter by Item_Ledger_Entry_Type === "Sale" rather than Document_Type.
+// Reasoning: PBI's Adjusted Cost (LCY) measure walks ALL VE rows tied to a
+// Sale ILE — including Sales Shipment rows (cost lands on shipment date in
+// Ship-first/Invoice-later workflow), credit memo returns, and post-hoc
+// rows from the "Adjust Cost - Item Entries" batch job (which often have
+// blank/non-invoice documentType). Filtering on Document_Type misses all
+// three classes and explains the residual day-by-day drift vs PBI.
+// Sales is unaffected because revenue still comes from Document mode
+// (invoice lines), not from VE.
 function isSalesValueEntry(v) {
-    const dt = (v.documentType || "").toString();
-    return /^sales (invoice|credit memo)$/i.test(dt);
+    const et = (v.entryType || "").toString();
+    return /^sale$/i.test(et);
 }
 
 // Sum Sales / Cost (Actual + Non-Invtbl) directly from Value Entries
