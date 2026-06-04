@@ -3275,6 +3275,13 @@ const state = {
     costByItemDocKey: new Map(),
     costNonInvByDocKey: new Map(),
     costNonInvByItemDocKey: new Map(),
+    // Value Entry per-(documentNumber|itemNo) cost. Authoritative for
+    // direct-invoice items (no shipment, no Item Ledger Entry history) —
+    // covers items that otherwise fall through every ILE-based tier and
+    // show as 100% GP. Populated after fetchValueEntries(). Keyed by
+    // VE.Document_No + "|" + VE.Item_No.
+    veCostByDocItem: new Map(),
+    veCostNonInvByDocItem: new Map(),
     byCustomer: new Map(), byItem: new Map(), byLocation: new Map(), bySalesperson: new Map(),
     currentCustomer: null, currentInvoice: null, currentItem: null,
     dashboardBucket: "month", customerBucket: "month", ciBucket: "month",
@@ -3641,6 +3648,16 @@ function costFromLine(line, sign, postingDate, customerNumber, documentNumber) {
     sign = (sign == null) ? 1 : sign;
     const itemNo = line.lineObjectNumber || line.itemId || "";
     const qty = Math.abs(num(line.quantity));
+    // Tier 0a: Value Entry per-(invoice|item) — authoritative for direct-
+    // invoice items where BC posts cost on the invoice VE row itself
+    // (no preceding shipment, no ILE bridge). Skip when VE cost is zero
+    // (Ship+Invoice flows post cost on the shipment side, not invoice).
+    if (documentNumber && itemNo && state.veCostByDocItem) {
+        const v = state.veCostByDocItem.get(documentNumber + "|" + itemNo);
+        if (v && v.qty !== 0 && Math.abs(v.cost) > 0) {
+            return (Math.abs(v.cost) / Math.abs(v.qty)) * qty * sign;
+        }
+    }
     // Tier 0: exact per-document cost (Ship+Invoice workflow — ILE doc
     // number matches the invoice / credit-memo number). Gives PBI-exact
     // line cost when present.
@@ -3695,6 +3712,15 @@ function costNonInvFromLine(line, sign, postingDate, customerNumber, documentNum
     sign = (sign == null) ? 1 : sign;
     const itemNo = line.lineObjectNumber || line.itemId || "";
     const qty = Math.abs(num(line.quantity));
+    // Tier 0a: Value Entry per-(invoice|item) non-invtbl cost (same
+    // reasoning as costFromLine's tier 0a — catches direct-invoice items
+    // missing from ILE bridge).
+    if (documentNumber && itemNo && state.veCostNonInvByDocItem) {
+        const v = state.veCostNonInvByDocItem.get(documentNumber + "|" + itemNo);
+        if (v && v.qty !== 0 && Math.abs(v.cost) > 0) {
+            return (Math.abs(v.cost) / Math.abs(v.qty)) * qty * sign;
+        }
+    }
     // Tier 0: exact per-document non-invtbl cost (Ship+Invoice workflow).
     if (documentNumber && itemNo) {
         const d = state.costNonInvByItemDocKey && state.costNonInvByItemDocKey.get(documentNumber + "|" + itemNo);
@@ -8866,6 +8892,25 @@ async function handleLoad() {
             fetchValueEntries(from, to),
         ]);
         state.valueEntries = valueEntries || [];
+        // Build per-(docNumber|itemNo) cost map from VE rows so direct-
+        // invoice items (no shipment / no ILE entry) still get accurate
+        // cost. Sum signed values; consumers take abs at lookup time.
+        state.veCostByDocItem = new Map();
+        state.veCostNonInvByDocItem = new Map();
+        for (const v of state.valueEntries) {
+            if (!isSalesValueEntry(v)) continue;
+            if (!v.documentNumber || !v.itemNumber) continue;
+            const k = v.documentNumber + "|" + v.itemNumber;
+            const c = state.veCostByDocItem.get(k) || { cost: 0, qty: 0 };
+            c.cost += v.costAmount; c.qty += v.invoicedQty;
+            state.veCostByDocItem.set(k, c);
+            const cn = state.veCostNonInvByDocItem.get(k) || { cost: 0, qty: 0 };
+            cn.cost += v.costAmountNonInv; cn.qty += v.invoicedQty;
+            state.veCostNonInvByDocItem.set(k, cn);
+        }
+        if (state.veCostByDocItem.size) {
+            console.log("[Value Entry] built veCostByDocItem map · " + state.veCostByDocItem.size + " (doc, item) keys");
+        }
         if (state.valueEntries.length) {
             // Quick sanity sum, ONLY over sales-related VE rows — same
             // filter the in-tool getValueEntryTotals() applies. Should
