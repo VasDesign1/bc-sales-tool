@@ -1150,10 +1150,22 @@
                     <div class="card span-12">
                         <div class="head">
                             <h3>Sales over time</h3>
-                            <div class="toggle" id="custBucketToggle">
-                                <button data-bucket="day">Day</button>
-                                <button data-bucket="week">Week</button>
-                                <button data-bucket="month" class="active">Month</button>
+                            <div style="display:flex; gap:10px; align-items:center;">
+                                <select id="cdChartType" class="mini-select" title="Chart type">
+                                    <option value="line">Line</option>
+                                    <option value="smoothline">Smooth line</option>
+                                    <option value="area">Area</option>
+                                    <option value="smootharea">Smooth area</option>
+                                    <option value="stepped">Stepped</option>
+                                    <option value="column">Column</option>
+                                    <option value="bar">Bar (horizontal)</option>
+                                    <option value="combo">Combo (bars + line)</option>
+                                </select>
+                                <div class="toggle" id="custBucketToggle">
+                                    <button data-bucket="day">Day</button>
+                                    <button data-bucket="week">Week</button>
+                                    <button data-bucket="month" class="active">Month</button>
+                                </div>
                             </div>
                         </div>
                         <div class="chart-wrap" style="min-height:260px;"><canvas id="customerChart"></canvas></div>
@@ -1299,6 +1311,16 @@
                         <div class="head">
                             <h3>Sales over time</h3>
                             <div style="display:flex; gap:10px; align-items:center;">
+                                <select id="idChartType" class="mini-select" title="Chart type">
+                                    <option value="line">Line</option>
+                                    <option value="smoothline">Smooth line</option>
+                                    <option value="area">Area</option>
+                                    <option value="smootharea">Smooth area</option>
+                                    <option value="stepped">Stepped</option>
+                                    <option value="column">Column</option>
+                                    <option value="bar">Bar (horizontal)</option>
+                                    <option value="combo">Combo (bars + line)</option>
+                                </select>
                                 <select id="idMetric" class="mini-select">
                                     <option value="revenue">Revenue</option>
                                     <option value="qty">Quantity</option>
@@ -1792,20 +1814,55 @@
 
                 <div class="chart-grid" id="cxiChartGrid" style="display:none;">
                     <div class="card span-6">
-                        <div class="head"><h3>Buyer coverage by salesperson</h3><div class="meta">stacked bar · click to filter salesperson</div></div>
+                        <div class="head">
+                            <h3>Buyer coverage by salesperson</h3>
+                            <select id="cxiSpChartType" class="mini-select">
+                                <option value="stackH" selected>Stacked bars (horizontal)</option>
+                                <option value="stackV">Stacked columns (vertical)</option>
+                                <option value="stackHPct">100% stacked horizontal</option>
+                            </select>
+                        </div>
                         <div class="chart-wrap" style="min-height:300px;"><canvas id="cxiSalespersonChart"></canvas></div>
                     </div>
                     <div class="card span-6">
-                        <div class="head"><h3 id="cxiTopItemsTitle">Top items in scope</h3><div class="meta">click bar → drill into item</div></div>
+                        <div class="head">
+                            <h3>Monthly sales captured</h3>
+                            <select id="cxiTrendChartType" class="mini-select">
+                                <option value="line" selected>Line</option>
+                                <option value="smoothline">Smooth line</option>
+                                <option value="area">Area</option>
+                                <option value="smootharea">Smooth area</option>
+                                <option value="stepped">Stepped</option>
+                                <option value="column">Column</option>
+                                <option value="bar">Bar (horizontal)</option>
+                                <option value="combo">Combo (bars + line)</option>
+                            </select>
+                        </div>
+                        <div class="chart-wrap" style="min-height:300px;"><canvas id="cxiTrendChart"></canvas></div>
+                    </div>
+                    <div class="card span-6">
+                        <div class="head">
+                            <h3 id="cxiTopItemsTitle">Top items in scope</h3>
+                            <select id="cxiTopItemsChartType" class="mini-select">
+                                <option value="barH" selected>Bar (horizontal)</option>
+                                <option value="columnV">Column (vertical)</option>
+                                <option value="doughnut">Doughnut</option>
+                                <option value="pie">Pie</option>
+                            </select>
+                        </div>
                         <div class="chart-wrap" style="min-height:300px;"><canvas id="cxiTopItemsChart"></canvas></div>
                     </div>
                     <div class="card span-6">
-                        <div class="head"><h3 id="cxiTopCustomersTitle">Top customers in scope</h3><div class="meta">click bar → drill into customer</div></div>
+                        <div class="head">
+                            <h3 id="cxiTopCustomersTitle">Top customers in scope</h3>
+                            <select id="cxiTopCustomersChartType" class="mini-select">
+                                <option value="barH" selected>Bar (horizontal)</option>
+                                <option value="columnV">Column (vertical)</option>
+                                <option value="doughnut">Doughnut</option>
+                                <option value="pie">Pie</option>
+                            </select>
+                        </div>
                         <div class="chart-wrap" style="min-height:300px;"><canvas id="cxiTopCustomersChart"></canvas></div>
-                    </div>
-                    <div class="card span-6">
-                        <div class="head"><h3>Monthly sales captured</h3><div class="meta">selected scope · click point to filter month</div></div>
-                        <div class="chart-wrap" style="min-height:300px;"><canvas id="cxiTrendChart"></canvas></div>
                     </div>
                 </div>
 
@@ -3407,6 +3464,7 @@ const state = {
         view: "customer", customer: "", item: "", salesperson: "", status: "all", search: "",
         sortCust: { key: "sales", dir: "desc" }, // By Customer view (rows = items)
         sortItem: { key: "sales", dir: "desc" }, // By Item view (rows = customers)
+        chartTypes: { sp: "stackH", topItems: "barH", topCustomers: "barH", trend: "line" },
     },
     charts: {},
     tab: "overview",
@@ -4627,7 +4685,7 @@ const TOPN_DEFS = {
         })),
         columns: ["Customer No", "Name", "Invoices", "Sales", "GP $", "GP %", "Qty", ""],
         sortKey: "sales",
-        action: { label: "Drill in", run: r => showCustomer(r.key) },
+        action: { label: "Drill in", run: r => { closeTopNModal(); showCustomer(r.key); } },
     },
     items: {
         title: "Top items",
@@ -4637,7 +4695,7 @@ const TOPN_DEFS = {
         })),
         columns: ["Item No", "Description", "Sales", "GP $", "GP %", "Qty", ""],
         sortKey: "sales",
-        action: { label: "Drill in", run: r => showItemDetail({ key: r.key, number: r.num, description: r.name }) },
+        action: { label: "Drill in", run: r => { closeTopNModal(); showItemDetail({ key: r.key, number: r.num, description: r.name }); } },
     },
     branches: {
         title: "Top branches",
@@ -5688,6 +5746,10 @@ function renderCustomerItem() {
     setVal("cxiSalesperson", state.cxi.salesperson);
     setVal("cxiStatus",      state.cxi.status);
     setVal("cxiSearch",      state.cxi.search);
+    setVal("cxiSpChartType",            state.cxi.chartTypes.sp);
+    setVal("cxiTopItemsChartType",      state.cxi.chartTypes.topItems);
+    setVal("cxiTopCustomersChartType",  state.cxi.chartTypes.topCustomers);
+    setVal("cxiTrendChartType",         state.cxi.chartTypes.trend);
     document.getElementById("cxiCustField").style.display = (state.cxi.view === "customer") ? "" : "none";
     document.getElementById("cxiItemField").style.display = (state.cxi.view === "item") ? "" : "none";
 
@@ -5933,7 +5995,8 @@ function renderCxiCustomerCharts(stocked, itemMeta, buys, spForCust) {
         topItems.map(r => truncate(r.it + " — " + r.desc, 32)),
         topItems.map(r => r.sales), "#00897b",
         i => "qty " + fmtInt(topItems[i].qty),
-        i => { state.cxi.view = "item"; state.cxi.item = topItems[i].it; renderCustomerItem(); });
+        i => { state.cxi.view = "item"; state.cxi.item = topItems[i].it; renderCustomerItem(); },
+        state.cxi.chartTypes.topItems);
 
     // Chart B — Buyer coverage by salesperson (across all stocked items
     // and the salesperson's customers; orientation: stacked horizontal)
@@ -5945,7 +6008,8 @@ function renderCxiCustomerCharts(stocked, itemMeta, buys, spForCust) {
             const sp = spStats.labels[i];
             state.cxi.salesperson = (state.cxi.salesperson === sp) ? "" : sp;
             renderCustomerItem();
-        });
+        },
+        state.cxi.chartTypes.sp);
 
     // Chart C — Opportunity items (NOT bought by this customer, ranked
     // by how popular they are among the salesperson's OTHER customers).
@@ -5972,10 +6036,11 @@ function renderCxiCustomerCharts(stocked, itemMeta, buys, spForCust) {
         opportunity.map(r => truncate(r.it + " — " + r.desc, 32)),
         opportunity.map(r => r.sales), "#c62828",
         i => "peers spent " + fmtMoneyFull(opportunity[i].sales),
-        i => { state.cxi.view = "item"; state.cxi.item = opportunity[i].it; renderCustomerItem(); });
+        i => { state.cxi.view = "item"; state.cxi.item = opportunity[i].it; renderCustomerItem(); },
+        state.cxi.chartTypes.topCustomers);
 
     // Chart D — Monthly trend for this customer
-    drawCxiTrend("cxiTrendChart", lines);
+    drawCxiTrend("cxiTrendChart", lines, state.cxi.chartTypes.trend);
 }
 
 function renderCxiItemCharts(stocked, itemMeta, buys, spForCust) {
@@ -6015,7 +6080,8 @@ function renderCxiItemCharts(stocked, itemMeta, buys, spForCust) {
         topBuyers.map(r => truncate(r.name, 32)),
         topBuyers.map(r => r.sales), "#00897b",
         i => "qty " + fmtInt(topBuyers[i].qty),
-        i => { state.cxi.view = "customer"; state.cxi.customer = topBuyers[i].c; renderCustomerItem(); });
+        i => { state.cxi.view = "customer"; state.cxi.customer = topBuyers[i].c; renderCustomerItem(); },
+        state.cxi.chartTypes.topItems);
 
     // Chart B — Buyer coverage for this item, by salesperson
     const spStats = buildCxiSpStatsForItem(it, buys, spForCust);
@@ -6026,7 +6092,8 @@ function renderCxiItemCharts(stocked, itemMeta, buys, spForCust) {
             const sp = spStats.labels[i];
             state.cxi.salesperson = (state.cxi.salesperson === sp) ? "" : sp;
             renderCustomerItem();
-        });
+        },
+        state.cxi.chartTypes.sp);
 
     // Chart C — Top NON-buying customers (ranked by their overall sales
     // in scope, so the biggest fish first). These are the opportunity
@@ -6050,10 +6117,11 @@ function renderCxiItemCharts(stocked, itemMeta, buys, spForCust) {
         nonBuyers.map(r => truncate(r.name, 32)),
         nonBuyers.map(r => r.sales), "#c62828",
         i => "total spend " + fmtMoneyFull(nonBuyers[i].sales),
-        i => { state.cxi.view = "customer"; state.cxi.customer = nonBuyers[i].c; renderCustomerItem(); });
+        i => { state.cxi.view = "customer"; state.cxi.customer = nonBuyers[i].c; renderCustomerItem(); },
+        state.cxi.chartTypes.topCustomers);
 
     // Chart D — Monthly trend for this item
-    drawCxiTrend("cxiTrendChart", lines);
+    drawCxiTrend("cxiTrendChart", lines, state.cxi.chartTypes.trend);
 }
 
 // Aggregate buyers / non-buyers per salesperson across the whole stocked
@@ -6103,53 +6171,82 @@ function buildCxiSpStatsForItem(item, buys, spForCust) {
     };
 }
 
-// Themed horizontal bar — pulls Chart.defaults colour so it follows the
-// active theme. onClick receives the bar index.
-function drawCxiBar(canvasId, titleId, title, labels, values, color, tooltipExtra, onClick) {
+// Themed single-series chart. chartType: "barH" | "columnV" | "doughnut" | "pie".
+// onClick receives the slice / bar index.
+function drawCxiBar(canvasId, titleId, title, labels, values, color, tooltipExtra, onClick, chartType) {
     destroyChart(canvasId);
     if (titleId) document.getElementById(titleId).textContent = title;
     const canvas = document.getElementById(canvasId);
     if (!canvas) return;
+    chartType = chartType || "barH";
     const ctx = canvas.getContext("2d");
-    state.charts[canvasId] = new Chart(ctx, {
-        type: "bar",
+    const colors = values.map((_, i) => barShade(color, i / Math.max(values.length, 1)));
+    const isPieish = chartType === "doughnut" || chartType === "pie";
+    const cfg = {
+        type: isPieish ? chartType : "bar",
         data: { labels, datasets: [{ data: values,
-                 backgroundColor: values.map((_, i) => barShade(color, i / Math.max(values.length, 1))),
-                 borderRadius: 4 }] },
+                 backgroundColor: colors,
+                 borderRadius: isPieish ? 0 : 4,
+                 borderWidth: isPieish ? 1 : 0 }] },
         options: chartBase({
-            indexAxis: "y",
-            plugins: { legend: { display: false },
-                       tooltip: { callbacks: { label: c =>
-                           fmtMoneyFull(c.parsed.x) + (tooltipExtra ? " · " + tooltipExtra(c.dataIndex) : "") } } },
-            scales: { x: { ticks: { callback: v => fmtMoney(v) } } },
+            indexAxis: chartType === "barH" ? "y" : "x",
+            plugins: { legend: { display: isPieish, position: "right" },
+                       tooltip: { callbacks: { label: c => {
+                           const v = isPieish ? c.parsed : (chartType === "barH" ? c.parsed.x : c.parsed.y);
+                           return labels[c.dataIndex] + ": " + fmtMoneyFull(v) +
+                               (tooltipExtra ? " · " + tooltipExtra(c.dataIndex) : "");
+                       } } } },
             onClick: (_, els) => { if (els.length && onClick) onClick(els[0].index); }
         })
-    });
+    };
+    if (!isPieish) {
+        cfg.options.scales = chartType === "barH"
+            ? { x: { ticks: { callback: v => fmtMoney(v) } } }
+            : { y: { ticks: { callback: v => fmtMoney(v) } } };
+    }
+    state.charts[canvasId] = new Chart(ctx, cfg);
 }
 
-function drawCxiStackedBar(canvasId, labels, buyersArr, nonbuyersArr, tooltipFn, onClick) {
+// Stacked bar / column. chartType: "stackH" | "stackV" | "stackHPct".
+function drawCxiStackedBar(canvasId, labels, buyersArr, nonbuyersArr, tooltipFn, onClick, chartType) {
     destroyChart(canvasId);
     const canvas = document.getElementById(canvasId);
     if (!canvas) return;
+    chartType = chartType || "stackH";
+    const isPct = chartType === "stackHPct";
+    let bData = buyersArr.slice(), nData = nonbuyersArr.slice();
+    if (isPct) {
+        for (let i = 0; i < bData.length; i++) {
+            const t = bData[i] + nData[i];
+            if (t > 0) { bData[i] = (bData[i] / t) * 100; nData[i] = (nData[i] / t) * 100; }
+        }
+    }
     const ctx = canvas.getContext("2d");
     state.charts[canvasId] = new Chart(ctx, {
         type: "bar",
         data: { labels, datasets: [
-            { label: "Buyers",     data: buyersArr,    backgroundColor: "#2e7d32", borderRadius: 4 },
-            { label: "Non-buyers", data: nonbuyersArr, backgroundColor: "#c62828", borderRadius: 4 },
+            { label: "Buyers",     data: bData, backgroundColor: "#2e7d32", borderRadius: 4 },
+            { label: "Non-buyers", data: nData, backgroundColor: "#c62828", borderRadius: 4 },
         ] },
         options: chartBase({
-            indexAxis: "y",
+            indexAxis: (chartType === "stackV") ? "x" : "y",
             plugins: { legend: { position: "top" },
-                       tooltip: { callbacks: { label: c => tooltipFn(c.dataIndex, c.dataset.label) } } },
-            scales: { x: { stacked: true, ticks: { callback: v => fmtInt(v) } },
-                      y: { stacked: true } },
+                       tooltip: { callbacks: { label: c => {
+                           const raw = c.dataset.label === "Buyers" ? buyersArr[c.dataIndex] : nonbuyersArr[c.dataIndex];
+                           return c.dataset.label + ": " + fmtInt(raw) + (isPct ? " (" + c.parsed[chartType === "stackV" ? "y" : "x"].toFixed(1) + "%)" : "");
+                       } } } },
+            scales: (chartType === "stackV")
+                ? { x: { stacked: true }, y: { stacked: true, ticks: { callback: v => isPct ? v + "%" : fmtInt(v) }, max: isPct ? 100 : undefined } }
+                : { x: { stacked: true, ticks: { callback: v => isPct ? v + "%" : fmtInt(v) }, max: isPct ? 100 : undefined }, y: { stacked: true } },
             onClick: (_, els) => { if (els.length && onClick) onClick(els[0].index); }
         })
     });
 }
 
-function drawCxiTrend(canvasId, lines) {
+// Monthly trend — delegates to the shared buildTrendChartConfig so the
+// type select gets the same line/area/column/combo variants as the
+// Overview's Revenue over time chart.
+function drawCxiTrend(canvasId, lines, chartType) {
     destroyChart(canvasId);
     const canvas = document.getElementById(canvasId);
     if (!canvas) return;
@@ -6160,18 +6257,13 @@ function drawCxiTrend(canvasId, lines) {
     }
     const labels = [...monthly.keys()].sort();
     const values = labels.map(m => monthly.get(m));
-    const ctx = canvas.getContext("2d");
-    state.charts[canvasId] = new Chart(ctx, {
-        type: "line",
-        data: { labels, datasets: [{ data: values, label: "Sales", borderColor: "#3f51b5",
-                 backgroundColor: "rgba(63,81,181,0.12)", fill: true, tension: 0.3,
-                 pointRadius: 4, pointHoverRadius: 6 }] },
-        options: chartBase({
-            plugins: { legend: { display: false },
-                       tooltip: { callbacks: { label: c => fmtMoneyFull(c.parsed.y) } } },
-            scales: { y: { ticks: { callback: v => fmtMoney(v) } } }
-        })
+    const cfg = buildTrendChartConfig(chartType || "line", {
+        labels, primary: values, primaryLabel: "Sales", color: "#3f51b5",
+        yTickFmt: v => fmtMoney(v),
+        tooltipLabel: c => fmtMoneyFull(c.parsed.y != null ? c.parsed.y : c.parsed.x),
     });
+    const ctx = canvas.getContext("2d");
+    state.charts[canvasId] = new Chart(ctx, cfg);
 }
 
 function renderByItem() {
@@ -8366,6 +8458,13 @@ function showCustomer(custNumber) {
     const g = state.byCustomer.get(custNumber);
     if (!g) return;
     state.currentCustomer = g;
+    // Inherit Overview's chart type the first time the drill is opened
+    // (matches user expectation: "if a graph type is already selected
+    // from Revenue over time, keep the same as default"). User can then
+    // override locally without touching the Overview chart.
+    if (state.cdChartType == null) state.cdChartType = state.trendChartType || "line";
+    const cdCt = document.getElementById("cdChartType");
+    if (cdCt) cdCt.value = state.cdChartType;
     document.getElementById("cdTitle").textContent = (g.customerNumber ? g.customerNumber + " — " : "") + g.customerName;
     document.getElementById("cdRevenue").textContent  = fmtMoneyFull(g.revenue);
     document.getElementById("cdGp").textContent       = fmtMoneyFull(g.gp);
@@ -8387,17 +8486,20 @@ function renderCustomerTrendChart() {
     destroyChart("customer");
     const g = state.currentCustomer; if (!g) return;
     const buckets = bucketInvoices(g.invoices, state.customerBucket);
-    const ctx = document.getElementById("customerChart").getContext("2d");
-    state.charts.customer = new Chart(ctx, {
-        type: "bar",
-        data: { labels: buckets.map(b => b.key),
-                datasets: [{ label: "Revenue", data: buckets.map(b => b.revenue), backgroundColor: "#3f51b5", borderRadius: 4 }] },
-        options: chartBase({
-            plugins: { legend: { display: false },
-                       tooltip: { callbacks: { label: c => fmtMoneyFull(c.parsed.y) + " (" + buckets[c.dataIndex].count + " inv)" } } },
-            scales: { y: { ticks: { callback: v => fmtMoney(v) } } }
-        })
+    const ct = state.cdChartType || state.trendChartType || "line";
+    const cfg = buildTrendChartConfig(ct, {
+        labels: buckets.map(b => b.key),
+        primary: buckets.map(b => b.revenue),
+        primaryLabel: "Revenue",
+        color: "#3f51b5",
+        yTickFmt: v => fmtMoney(v),
+        tooltipLabel: c => {
+            const v = c.parsed.y != null ? c.parsed.y : c.parsed.x;
+            return fmtMoneyFull(v) + " (" + buckets[c.dataIndex].count + " inv)";
+        },
     });
+    const ctx = document.getElementById("customerChart").getContext("2d");
+    state.charts.customer = new Chart(ctx, cfg);
 }
 
 function renderCustomerItemsChart() {
@@ -8628,6 +8730,12 @@ function showItemDetail(item) {
     state.currentItemDetail = item;
     state.idBucket = state.idBucket || "month";
     state.idMetric = state.idMetric || "revenue";
+    // Inherit the chart type currently chosen on Overview's Revenue
+    // over time so the drill opens with a familiar shape. User can
+    // override locally via the dropdown without affecting overview.
+    if (state.idChartType == null) state.idChartType = state.trendChartType || "line";
+    const idCt = document.getElementById("idChartType");
+    if (idCt) idCt.value = state.idChartType;
     const rows = itemHistoryAcrossCustomers(item.key);
     const totalQty = rows.reduce((s, r) => s + r.qty, 0);
     const totalRev = rows.reduce((s, r) => s + r.amountExcludingTax, 0);
@@ -8660,19 +8768,20 @@ function renderIdChart() {
     }
     const buckets = [...map.values()].sort((a, b) => a.key < b.key ? -1 : 1);
     const metric = state.idMetric;
-    const ctx = document.getElementById("idChart").getContext("2d");
-    state.charts.id = new Chart(ctx, {
-        type: "bar",
-        data: { labels: buckets.map(b => b.key),
-                datasets: [{ label: metric === "qty" ? "Quantity" : "Revenue",
-                             data: buckets.map(b => metric === "qty" ? b.qty : b.revenue),
-                             backgroundColor: "#00897b", borderRadius: 4 }] },
-        options: chartBase({
-            plugins: { legend: { display: false },
-                       tooltip: { callbacks: { label: c => (metric === "qty" ? fmtInt(c.parsed.y) + " units" : fmtMoneyFull(c.parsed.y)) } } },
-            scales: { y: { ticks: { callback: v => metric === "qty" ? fmtInt(v) : fmtMoney(v) } } }
-        })
+    const ct = state.idChartType || state.trendChartType || "line";
+    const labels = buckets.map(b => b.key);
+    const values = buckets.map(b => metric === "qty" ? b.qty : b.revenue);
+    const fmt = v => metric === "qty" ? fmtInt(v) : fmtMoney(v);
+    const tipFmt = v => metric === "qty" ? fmtInt(v) + " units" : fmtMoneyFull(v);
+    const cfg = buildTrendChartConfig(ct, {
+        labels, primary: values,
+        primaryLabel: metric === "qty" ? "Quantity" : "Revenue",
+        color: "#00897b",
+        yTickFmt: fmt,
+        tooltipLabel: c => tipFmt(c.parsed.y != null ? c.parsed.y : c.parsed.x),
     });
+    const ctx = document.getElementById("idChart").getContext("2d");
+    state.charts.id = new Chart(ctx, cfg);
 }
 
 function renderIdCustomerChart() {
@@ -10060,6 +10169,18 @@ function wireEvents() {
     document.getElementById("cxiSearch").addEventListener("input", e => {
         state.cxi.search = e.target.value; renderCustomerItem();
     });
+    document.getElementById("cxiSpChartType").addEventListener("change", e => {
+        state.cxi.chartTypes.sp = e.target.value; renderCustomerItem();
+    });
+    document.getElementById("cxiTopItemsChartType").addEventListener("change", e => {
+        state.cxi.chartTypes.topItems = e.target.value; renderCustomerItem();
+    });
+    document.getElementById("cxiTopCustomersChartType").addEventListener("change", e => {
+        state.cxi.chartTypes.topCustomers = e.target.value; renderCustomerItem();
+    });
+    document.getElementById("cxiTrendChartType").addEventListener("change", e => {
+        state.cxi.chartTypes.trend = e.target.value; renderCustomerItem();
+    });
 
     // Customer drill: toggle the full items table
     document.getElementById("customerItemsShowMore").addEventListener("click", () => {
@@ -10144,6 +10265,7 @@ function wireEvents() {
         });
     });
     document.getElementById("idMetric").addEventListener("change", e => { state.idMetric = e.target.value; renderIdChart(); });
+    document.getElementById("idChartType").addEventListener("change", e => { state.idChartType = e.target.value; renderIdChart(); });
     document.getElementById("idBack").addEventListener("click", closeDrill);
     document.querySelector("#idInvoiceTable tbody").addEventListener("click", e => {
         const tr = e.target.closest("tr.clickable"); if (!tr) return;
@@ -10166,6 +10288,9 @@ function wireEvents() {
             document.querySelectorAll("#custBucketToggle button").forEach(b => b.classList.remove("active"));
             btn.classList.add("active"); state.customerBucket = btn.dataset.bucket; renderCustomerTrendChart();
         });
+    });
+    document.getElementById("cdChartType").addEventListener("change", e => {
+        state.cdChartType = e.target.value; renderCustomerTrendChart();
     });
     document.querySelectorAll("#ciBucketToggle button").forEach(btn => {
         btn.addEventListener("click", () => {
