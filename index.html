@@ -4176,26 +4176,39 @@ function getAdjustments() {
     }
     return { credit, qty, cost, gpImpact: credit - cost };
 }
-// Sum Sales / Cost (Actual + Non-Invtbl) directly from Value Entries,
-// honouring the current toolbar filters. This is what PBI's "Adjusted
-// Sales" + "Adjusted Cost" measures read, so when salesMode === "valueentry"
-// the headline KPIs use this and match PBI to the cent (assuming both
-// tools have ingested the same posting period).
+// Test whether a VE row belongs to a sales transaction. PBI's measures
+// filter on Item Ledger Entry Type = "Sale" (Source side) AND/OR
+// Document Type ∈ {Sales Invoice, Sales Credit Memo, Sales Shipment,
+// Sales Return Receipt}. We accept any of those.
+function isSalesValueEntry(v) {
+    const et = (v.entryType || "").toString();
+    if (/^sale$/i.test(et)) return true;                            // Item Ledger Entry Type = "Sale"
+    const dt = (v.documentType || "").toString();
+    if (/^sales (invoice|credit memo|shipment|return receipt)$/i.test(dt)) return true;
+    return false;
+}
+
+// Sum Sales / Cost (Actual + Non-Invtbl) directly from Value Entries
+// for sales-related rows only, honouring the current toolbar filters.
+// This is what PBI's "Adjusted Sales" + "Adjusted Cost" measures read,
+// so when salesMode === "valueentry" the headline KPIs match PBI.
 //
 // Filter handling:
 //   * Date — getDateRangePredicate over postingDate
-//   * Customer — sourceNumber === filter when sourceType ∈ {Customer, ""}
+//   * Customer — sourceNumber === filter
 //   * Item — itemNumber === filter
-//   * Salesperson / Location — not present on VE rows directly; would need
-//     a join via documentNumber → invoice. For v1 they're ignored when
-//     salesMode is valueentry (a hint banner explains).
+//   * Salesperson / Location — not present on VE rows directly; would
+//     need a join via documentNumber → invoice. v1 ignores them in VE
+//     mode; the toggle handler logs a warning when active.
 function getValueEntryTotals() {
     const inRange = getDateRangePredicate();
     let sales = 0, cost = 0, costNI = 0, qty = 0, rows = 0;
+    let salesInvoiceSign = 0, salesCmSign = 0;   // diagnostic: sales-invoice cost is negative in BC
     const fCust = state.filters.customer || "";
     const fItem = state.filters.item || "";
     for (const v of (state.valueEntries || [])) {
         if (!inRange(v.postingDate)) continue;
+        if (!isSalesValueEntry(v)) continue;
         if (fCust && v.sourceNumber !== fCust) continue;
         if (fItem && v.itemNumber !== fItem) continue;
         sales  += v.salesAmount;
@@ -4204,7 +4217,10 @@ function getValueEntryTotals() {
         qty    += v.invoicedQty;
         rows++;
     }
-    return { sales: Math.abs(sales), cost: Math.abs(cost) + Math.abs(costNI),
+    // Cost amounts on sales VE rows are negative (inventory decreasing).
+    // Take magnitude for display + math; sales is naturally positive on
+    // an invoice, negative on a credit memo, so leave sign as-is.
+    return { sales: sales, cost: Math.abs(cost) + Math.abs(costNI),
              costActual: Math.abs(cost), costNonInv: Math.abs(costNI),
              qty: Math.abs(qty), rows };
 }
@@ -8819,17 +8835,25 @@ async function handleLoad() {
         ]);
         state.valueEntries = valueEntries || [];
         if (state.valueEntries.length) {
-            // Quick sanity sum so the user can compare to PBI before flipping
-            // the mode toggle. Numbers honour the loaded date range only —
-            // toolbar filters aren't applied yet at this point.
-            let sSales = 0, sCost = 0, sCostNI = 0, sQty = 0;
+            // Quick sanity sum, ONLY over sales-related VE rows — same
+            // filter the in-tool getValueEntryTotals() applies. Should
+            // match PBI's "Adjusted Sales" + "Adjusted Cost" for the
+            // period before any toolbar filters narrow it further.
+            let sSales = 0, sCost = 0, sCostNI = 0, sQty = 0, salesRows = 0;
+            const byType = new Map();
             for (const v of state.valueEntries) {
+                const k = (v.entryType || "(blank)") + " / " + (v.documentType || "(blank)");
+                byType.set(k, (byType.get(k) || 0) + 1);
+                if (!isSalesValueEntry(v)) continue;
                 sSales  += v.salesAmount;
                 sCost   += v.costAmount;
                 sCostNI += v.costAmountNonInv;
                 sQty    += v.invoicedQty;
+                salesRows++;
             }
-            console.log("[Value Entry] loaded " + state.valueEntries.length + " rows for the period · Sales=" + fmtMoneyFull(Math.abs(sSales)) + " · Cost(Actual)=" + fmtMoneyFull(Math.abs(sCost)) + " · Cost(NonInv)=" + fmtMoneyFull(Math.abs(sCostNI)) + " · Qty=" + fmtInt(Math.abs(sQty)));
+            console.log("[Value Entry] loaded " + state.valueEntries.length + " rows, " + salesRows + " sales-related");
+            console.log("[Value Entry] sales-only totals · Sales=" + fmtMoneyFull(sSales) + " · Cost(Actual)=" + fmtMoneyFull(Math.abs(sCost)) + " · Cost(NonInv)=" + fmtMoneyFull(Math.abs(sCostNI)) + " · Qty=" + fmtInt(Math.abs(sQty)));
+            console.log("[Value Entry] entry-type breakdown:", Object.fromEntries(byType));
         }
         state.blanketOrders = blanketOrders || [];
         if (state.blanketOrders.length) {
