@@ -3440,7 +3440,10 @@ const state = {
     veCostNonInvByDocItem: new Map(),
     byCustomer: new Map(), byItem: new Map(), byLocation: new Map(), bySalesperson: new Map(),
     currentCustomer: null, currentInvoice: null, currentItem: null,
-    dashboardBucket: "month", customerBucket: "month", ciBucket: "month",
+    // Single shared bucket so a Day / Week / Month pick on any drill (or
+    // Overview's Revenue-over-time) carries over to the next drill. User
+    // can override anywhere; the change propagates back to the others.
+    bucket: "month",
     ciMetric: "revenue", trendSplit: "",
     trendChartType: "line", dowChartType: "bar", statusMetric: "count",
     currentItemDetail: null,
@@ -4311,6 +4314,15 @@ function avgDaysBetween(dates) {
 // CHART HELPERS
 // ============================================================
 function destroyChart(key) { if (state.charts[key]) { state.charts[key].destroy(); state.charts[key] = null; } }
+
+// Paint the Day / Week / Month active class on a toggle to match the
+// current shared bucket — called from every drill open + the Overview
+// trend render so the four toggles stay in lockstep.
+function paintBucketToggle(toggleId) {
+    document.querySelectorAll("#" + toggleId + " button").forEach(b => {
+        b.classList.toggle("active", b.dataset.bucket === state.bucket);
+    });
+}
 // Datalabels plugin is NOT globally registered — each doughnut chart
 // opts in by adding `plugins: [ChartDataLabels]` at the chart-config
 // level. That way bar/line/pareto charts stay clean.
@@ -5063,6 +5075,7 @@ function renderOverview() {
 
 function renderTrendChart() {
     destroyChart("trend");
+    paintBucketToggle("trendToggle");
     const ctx = document.getElementById("trendChart").getContext("2d");
     const ct = state.trendChartType || "line";
     if (state.trendSplit) {
@@ -5070,7 +5083,7 @@ function renderTrendChart() {
         // chart-type vocabulary as the non-split path. column / bar stay
         // stacked; lines/areas swap to type=line; "combo" falls back to
         // stacked column (combo doesn't really apply to multi-series).
-        const raw = bucketInvoicesSplitBy(state.filtered, state.dashboardBucket, state.trendSplit);
+        const raw = bucketInvoicesSplitBy(state.filtered, state.bucket, state.trendSplit);
         const labels = raw.labels;
         const seriesColors = raw.datasets.map(d => d.backgroundColor || d.borderColor || "#3f51b5");
         let chartType, datasets, scales;
@@ -5114,7 +5127,7 @@ function renderTrendChart() {
             // a secondary right axis. Total count comes from the un-split
             // bucketer which already aggregates per period.
             chartType = "bar";
-            const countBuckets = bucketInvoices(state.filtered, state.dashboardBucket);
+            const countBuckets = bucketInvoices(state.filtered, state.bucket);
             const counts = countBuckets.map(b => b.count);
             datasets = raw.datasets.map((d, i) => ({
                 type: "bar", label: d.label, stack: "s", data: d.data,
@@ -5158,7 +5171,7 @@ function renderTrendChart() {
         });
         return;
     }
-    const buckets = bucketInvoices(state.filtered, state.dashboardBucket);
+    const buckets = bucketInvoices(state.filtered, state.bucket);
     const cfg = buildTrendChartConfig(ct, {
         labels: buckets.map(b => b.key),
         primary: buckets.map(b => b.revenue),
@@ -8465,6 +8478,7 @@ function showCustomer(custNumber) {
     if (state.cdChartType == null) state.cdChartType = state.trendChartType || "line";
     const cdCt = document.getElementById("cdChartType");
     if (cdCt) cdCt.value = state.cdChartType;
+    paintBucketToggle("custBucketToggle");
     document.getElementById("cdTitle").textContent = (g.customerNumber ? g.customerNumber + " — " : "") + g.customerName;
     document.getElementById("cdRevenue").textContent  = fmtMoneyFull(g.revenue);
     document.getElementById("cdGp").textContent       = fmtMoneyFull(g.gp);
@@ -8485,7 +8499,7 @@ function showCustomer(custNumber) {
 function renderCustomerTrendChart() {
     destroyChart("customer");
     const g = state.currentCustomer; if (!g) return;
-    const buckets = bucketInvoices(g.invoices, state.customerBucket);
+    const buckets = bucketInvoices(g.invoices, state.bucket);
     const ct = state.cdChartType || state.trendChartType || "line";
     const cfg = buildTrendChartConfig(ct, {
         labels: buckets.map(b => b.key),
@@ -8653,6 +8667,7 @@ function showItem(item) {
     renderCiChart();
     renderCiTable();
     document.getElementById("ciInvCount").textContent = rows.length + " line" + (rows.length === 1 ? "" : "s");
+    paintBucketToggle("ciBucketToggle");
     openDrill("item");
 }
 
@@ -8661,7 +8676,7 @@ function renderCiChart() {
     const rows = state.charts._ciRows || [];
     const map = new Map();
     for (const r of rows) {
-        const k = bucketKey(r.postingDate, state.ciBucket);
+        const k = bucketKey(r.postingDate, state.bucket);
         const cur = map.get(k) || { key: k, revenue: 0, qty: 0, count: 0 };
         cur.revenue += r.amountExcludingTax; cur.qty += r.qty; cur.count += 1;
         map.set(k, cur);
@@ -8728,7 +8743,6 @@ function itemHistoryAcrossCustomers(itemKey) {
 
 function showItemDetail(item) {
     state.currentItemDetail = item;
-    state.idBucket = state.idBucket || "month";
     state.idMetric = state.idMetric || "revenue";
     // Inherit the chart type currently chosen on Overview's Revenue
     // over time so the drill opens with a familiar shape. User can
@@ -8736,6 +8750,7 @@ function showItemDetail(item) {
     if (state.idChartType == null) state.idChartType = state.trendChartType || "line";
     const idCt = document.getElementById("idChartType");
     if (idCt) idCt.value = state.idChartType;
+    paintBucketToggle("idBucketToggle");
     const rows = itemHistoryAcrossCustomers(item.key);
     const totalQty = rows.reduce((s, r) => s + r.qty, 0);
     const totalRev = rows.reduce((s, r) => s + r.amountExcludingTax, 0);
@@ -8761,7 +8776,7 @@ function renderIdChart() {
     const rows = state.charts._idRows || [];
     const map = new Map();
     for (const r of rows) {
-        const k = bucketKey(r.postingDate, state.idBucket);
+        const k = bucketKey(r.postingDate, state.bucket);
         const cur = map.get(k) || { key: k, revenue: 0, qty: 0, count: 0 };
         cur.revenue += r.amountExcludingTax; cur.qty += r.qty; cur.count += 1;
         map.set(k, cur);
@@ -10234,12 +10249,17 @@ function wireEvents() {
         showInvoice(tr.dataset.inv);
     });
 
-    // Trend chart controls
+    // Trend chart controls — single shared bucket so the choice carries
+    // over to Customer / Item / Customer×Item drills. setBucket() also
+    // repaints the other toggles in case the user navigates between
+    // drills without closing them first.
+    const setBucket = (newBucket, rerender) => {
+        state.bucket = newBucket;
+        ["trendToggle", "idBucketToggle", "custBucketToggle", "ciBucketToggle"].forEach(paintBucketToggle);
+        rerender();
+    };
     document.querySelectorAll("#trendToggle button").forEach(btn => {
-        btn.addEventListener("click", () => {
-            document.querySelectorAll("#trendToggle button").forEach(b => b.classList.remove("active"));
-            btn.classList.add("active"); state.dashboardBucket = btn.dataset.bucket; renderTrendChart();
-        });
+        btn.addEventListener("click", () => setBucket(btn.dataset.bucket, renderTrendChart));
     });
     document.getElementById("trendSplit").addEventListener("change", e => { state.trendSplit = e.target.value; renderTrendChart(); });
     document.getElementById("trendChartType").addEventListener("change", e => { state.trendChartType = e.target.value; renderTrendChart(); });
@@ -10259,10 +10279,7 @@ function wireEvents() {
     });
     // Item Detail drill controls
     document.querySelectorAll("#idBucketToggle button").forEach(btn => {
-        btn.addEventListener("click", () => {
-            document.querySelectorAll("#idBucketToggle button").forEach(b => b.classList.remove("active"));
-            btn.classList.add("active"); state.idBucket = btn.dataset.bucket; renderIdChart();
-        });
+        btn.addEventListener("click", () => setBucket(btn.dataset.bucket, renderIdChart));
     });
     document.getElementById("idMetric").addEventListener("change", e => { state.idMetric = e.target.value; renderIdChart(); });
     document.getElementById("idChartType").addEventListener("change", e => { state.idChartType = e.target.value; renderIdChart(); });
@@ -10284,19 +10301,13 @@ function wireEvents() {
         }
     });
     document.querySelectorAll("#custBucketToggle button").forEach(btn => {
-        btn.addEventListener("click", () => {
-            document.querySelectorAll("#custBucketToggle button").forEach(b => b.classList.remove("active"));
-            btn.classList.add("active"); state.customerBucket = btn.dataset.bucket; renderCustomerTrendChart();
-        });
+        btn.addEventListener("click", () => setBucket(btn.dataset.bucket, renderCustomerTrendChart));
     });
     document.getElementById("cdChartType").addEventListener("change", e => {
         state.cdChartType = e.target.value; renderCustomerTrendChart();
     });
     document.querySelectorAll("#ciBucketToggle button").forEach(btn => {
-        btn.addEventListener("click", () => {
-            document.querySelectorAll("#ciBucketToggle button").forEach(b => b.classList.remove("active"));
-            btn.classList.add("active"); state.ciBucket = btn.dataset.bucket; renderCiChart();
-        });
+        btn.addEventListener("click", () => setBucket(btn.dataset.bucket, renderCiChart));
     });
     document.getElementById("ciMetric").addEventListener("change", e => { state.ciMetric = e.target.value; renderCiChart(); });
 
