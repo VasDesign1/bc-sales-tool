@@ -4211,11 +4211,13 @@ function isSalesValueEntry(v) {
 //     mode; the toggle handler logs a warning when active.
 function getValueEntryTotals() {
     const inRange = getDateRangePredicate();
-    // Default to Document_Date filter — PBI's sales measures filter on
-    // Document_Date, not Posting_Date. Posting_Date can be a day later
-    // than Document_Date when invoices are posted on a different day.
-    // state.veDateField overrides ("postingDate" or "documentDate").
-    const dateField = state.veDateField || "documentDate";
+    // Default to Posting_Date — confirmed on 05/05/2026 single-day test:
+    // PBI Sales matched our Posting_Date sum to within \$46 (data
+    // freshness), while Document_Date sum was \$1,293 lower because it
+    // excluded 6 back-dated invoices that BC posted on 05/05 but
+    // assigned an earlier Document_Date. state.veDateField overrides
+    // ("postingDate" or "documentDate").
+    const dateField = state.veDateField || "postingDate";
     let sales = 0, cost = 0, costNI = 0, qty = 0, rows = 0;
     const fCust = state.filters.customer || "";
     const fItem = state.filters.item || "";
