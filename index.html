@@ -4246,17 +4246,18 @@ function getValueEntryTotals() {
         // exactly the gap we observed between VE Sales_Amount_Actual and
         // Document mode's invoice-line-net total.
         let invoiceDiscount = 0;
+        let invsCount = 0, linesCount = 0;
         for (const inv of (state.invoices || [])) {
             if (!inRange(inv.postingDate)) continue;
             if (fCust && inv.customerNumber !== fCust) continue;
+            invsCount++;
             for (const ln of (inv.salesInvoiceLines || [])) {
+                linesCount++;
                 invoiceDiscount += num(ln.invoiceDiscountAllocation);
             }
         }
-        if (invoiceDiscount > 0) {
-            console.log("[VE mode] subtracting $" + invoiceDiscount.toFixed(2) +
-                " in invoice-level discount allocations summed from invoice lines");
-        }
+        console.log("[VE mode] discount subtract — looped " + invsCount + " invoices / " +
+            linesCount + " lines, sum of invoiceDiscountAllocation = $" + invoiceDiscount.toFixed(2));
         sales -= invoiceDiscount;
     }
     // Cost amounts on sales VE rows are negative (inventory decreasing).
