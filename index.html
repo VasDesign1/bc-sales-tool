@@ -1881,6 +1881,12 @@
                     <div class="card span-6">
                         <div class="head">
                             <h3>Top 10 customers</h3>
+                            <select id="topCustomersChartType" class="mini-select" title="Chart type">
+                                <option value="barH" selected>Bar (horizontal)</option>
+                                <option value="columnV">Column (vertical)</option>
+                                <option value="doughnut">Doughnut</option>
+                                <option value="pie">Pie</option>
+                            </select>
                             <button class="more-btn" data-topn="customers">Show more…</button>
                         </div>
                         <div class="chart-wrap" style="min-height:340px;"><canvas id="topCustomersChart"></canvas></div>
@@ -1888,6 +1894,12 @@
                     <div class="card span-6">
                         <div class="head">
                             <h3>Top 10 items</h3>
+                            <select id="topItemsChartType" class="mini-select" title="Chart type">
+                                <option value="barH" selected>Bar (horizontal)</option>
+                                <option value="columnV">Column (vertical)</option>
+                                <option value="doughnut">Doughnut</option>
+                                <option value="pie">Pie</option>
+                            </select>
                             <button class="more-btn" data-topn="items">Show more…</button>
                         </div>
                         <div class="chart-wrap" style="min-height:340px;"><canvas id="topItemsChart"></canvas></div>
@@ -1895,6 +1907,12 @@
                     <div class="card span-6">
                         <div class="head">
                             <h3>Sales by branch</h3>
+                            <select id="locationChartType" class="mini-select" title="Chart type">
+                                <option value="barH" selected>Bar (horizontal)</option>
+                                <option value="columnV">Column (vertical)</option>
+                                <option value="doughnut">Doughnut</option>
+                                <option value="pie">Pie</option>
+                            </select>
                             <button class="more-btn" data-topn="branches">Show more…</button>
                         </div>
                         <div class="chart-wrap" style="min-height:300px;"><canvas id="locationChart"></canvas></div>
@@ -1902,6 +1920,12 @@
                     <div class="card span-6">
                         <div class="head">
                             <h3>Sales by salesperson</h3>
+                            <select id="salespersonChartType" class="mini-select" title="Chart type">
+                                <option value="barH" selected>Bar (horizontal)</option>
+                                <option value="columnV">Column (vertical)</option>
+                                <option value="doughnut">Doughnut</option>
+                                <option value="pie">Pie</option>
+                            </select>
                             <button class="more-btn" data-topn="salespeople">Show more…</button>
                         </div>
                         <div class="chart-wrap" style="min-height:300px;"><canvas id="salespersonChart"></canvas></div>
@@ -1909,6 +1933,12 @@
                     <div class="card span-4">
                         <div class="head">
                             <h3>Invoice status</h3>
+                            <select id="statusChartType" class="mini-select" title="Chart type">
+                                <option value="doughnut" selected>Doughnut</option>
+                                <option value="pie">Pie</option>
+                                <option value="barH">Bar (horizontal)</option>
+                                <option value="columnV">Column (vertical)</option>
+                            </select>
                             <div class="toggle" id="statusMetricToggle">
                                 <button data-metric="count" class="active">Count</button>
                                 <button data-metric="amount">$ Amount</button>
@@ -3927,6 +3957,9 @@ const state = {
     bucket: "month",
     ciMetric: "revenue", trendSplit: "",
     trendChartType: "line", dowChartType: "bar", statusMetric: "count",
+    topCustomersChartType: "barH", topItemsChartType: "barH",
+    locationChartType: "barH",     salespersonChartType: "barH",
+    statusChartType: "doughnut",
     currentItemDetail: null,
     sort: { key: "revenue", dir: "desc" },
     sortBranch: { key: "salesAmount", dir: "desc" },
@@ -5670,96 +5703,102 @@ function renderTrendChart() {
     state.charts.trend = new Chart(ctx, cfg);
 }
 
+// Single-series chart config respecting a chartType selector.
+// chartType: "barH" | "columnV" | "doughnut" | "pie".
+// opts: { labels, values, colors, tooltipLabel(i, value), onClick(i) }
+// tooltipLabel receives (i, valueAtIndex) and should return the row.
+// Used by the four Overview top-N / by-X charts so they all gain
+// the same chart-type vocabulary without duplicating boilerplate.
+function buildOverviewSingleSeriesConfig(chartType, opts) {
+    const isPie = chartType === "doughnut" || chartType === "pie";
+    const cfg = {
+        type: isPie ? chartType : "bar",
+        data: { labels: opts.labels, datasets: [{
+            data: opts.values,
+            backgroundColor: opts.colors,
+            borderRadius: isPie ? 0 : 4,
+            borderWidth: isPie ? 1 : 0,
+        }] },
+        options: chartBase({
+            indexAxis: chartType === "barH" ? "y" : "x",
+            plugins: {
+                legend: { display: isPie, position: "right", labels: { boxWidth: 12, font: { size: 11 } } },
+                tooltip: { callbacks: { label: c => {
+                    const v = isPie ? c.parsed : (chartType === "barH" ? c.parsed.x : c.parsed.y);
+                    return opts.tooltipLabel(c.dataIndex, v);
+                } } }
+            },
+            onClick: (_, els) => { if (els.length && opts.onClick) opts.onClick(els[0].index); }
+        })
+    };
+    if (!isPie) {
+        cfg.options.scales = chartType === "barH"
+            ? { x: { ticks: { callback: v => fmtMoney(v) } } }
+            : { y: { ticks: { callback: v => fmtMoney(v) } } };
+    }
+    return cfg;
+}
+
 function renderTopCustomersChart() {
     destroyChart("topCustomers");
     const top = [...state.byCustomer.values()].sort((a, b) => b.revenue - a.revenue).slice(0, 10);
     const ctx = document.getElementById("topCustomersChart").getContext("2d");
-    state.charts.topCustomers = new Chart(ctx, {
-        type: "bar",
-        data: { labels: top.map(g => truncate(g.customerName || g.customerNumber, 28)),
-                datasets: [{ data: top.map(g => g.revenue),
-                             backgroundColor: top.map((_, i) => barShade("#3f51b5", i / 10)),
-                             borderRadius: 4 }] },
-        options: chartBase({
-            indexAxis: "y",
-            plugins: { legend: { display: false },
-                       tooltip: { callbacks: { label: c => fmtMoneyFull(c.parsed.x) + " · GP " + fmtPct(top[c.dataIndex].gpPct) } } },
-            scales: { x: { ticks: { callback: v => fmtMoney(v) } } },
-            onClick: (_, els) => { if (els.length) showCustomer(top[els[0].index].customerNumber); }
-        })
-    });
+    state.charts.topCustomers = new Chart(ctx, buildOverviewSingleSeriesConfig(state.topCustomersChartType, {
+        labels: top.map(g => truncate(g.customerName || g.customerNumber, 28)),
+        values: top.map(g => g.revenue),
+        colors: top.map((_, i) => barShade("#3f51b5", i / 10)),
+        tooltipLabel: (i, v) => top[i].customerName + ": " + fmtMoneyFull(v) + " · GP " + fmtPct(top[i].gpPct),
+        onClick: i => showCustomer(top[i].customerNumber),
+    }));
 }
 
 function renderTopItemsChart() {
     destroyChart("topItems");
     const top = [...state.byItem.values()].filter(it => it.revenue > 0).sort((a, b) => b.revenue - a.revenue).slice(0, 10);
     const ctx = document.getElementById("topItemsChart").getContext("2d");
-    state.charts.topItems = new Chart(ctx, {
-        type: "bar",
-        data: { labels: top.map(it => truncate((it.number ? it.number + " — " : "") + (it.description || ""), 30)),
-                datasets: [{ data: top.map(it => it.revenue),
-                             backgroundColor: top.map((_, i) => barShade("#00897b", i / 10)),
-                             borderRadius: 4 }] },
-        options: chartBase({
-            indexAxis: "y",
-            plugins: { legend: { display: false },
-                       tooltip: { callbacks: { label: c => fmtMoneyFull(c.parsed.x) + " · qty " + fmtInt(top[c.dataIndex].qty) + " · GP " + fmtPct(top[c.dataIndex].gpPct) } } },
-            scales: { x: { ticks: { callback: v => fmtMoney(v) } } },
-            onClick: (_, els) => { if (els.length) showItemDetail(top[els[0].index]); }
-        })
-    });
+    state.charts.topItems = new Chart(ctx, buildOverviewSingleSeriesConfig(state.topItemsChartType, {
+        labels: top.map(it => truncate((it.number ? it.number + " — " : "") + (it.description || ""), 30)),
+        values: top.map(it => it.revenue),
+        colors: top.map((_, i) => barShade("#00897b", i / 10)),
+        tooltipLabel: (i, v) => (top[i].number ? top[i].number + " — " : "") + (top[i].description || "") + ": " + fmtMoneyFull(v) + " · qty " + fmtInt(top[i].qty) + " · GP " + fmtPct(top[i].gpPct),
+        onClick: i => showItemDetail(top[i]),
+    }));
 }
 
 function renderLocationChart() {
     destroyChart("location");
     const rows = [...state.byLocation.values()].filter(r => r.revenue > 0).sort((a, b) => b.revenue - a.revenue);
     const ctx = document.getElementById("locationChart").getContext("2d");
-    state.charts.location = new Chart(ctx, {
-        type: "bar",
-        data: { labels: rows.map(r => r.code),
-                datasets: [{ data: rows.map(r => r.revenue),
-                             backgroundColor: rows.map((_, i) => barShade("#fb8c00", i / Math.max(rows.length, 1))),
-                             borderRadius: 4 }] },
-        options: chartBase({
-            indexAxis: "y",
-            plugins: { legend: { display: false },
-                       tooltip: { callbacks: { label: c => fmtMoneyFull(c.parsed.x) + " · GP " + fmtPct(rows[c.dataIndex].gpPct) } } },
-            scales: { x: { ticks: { callback: v => fmtMoney(v) } } },
-            onClick: (_, els) => {
-                if (!els.length) return;
-                const code = rows[els[0].index].code;
-                state.filters.location = (state.filters.location === code) ? "" : code;
-                document.getElementById("locationFilter").value = state.filters.location;
-                rebuildFiltered(); renderCurrentTab();
-            }
-        })
-    });
+    state.charts.location = new Chart(ctx, buildOverviewSingleSeriesConfig(state.locationChartType, {
+        labels: rows.map(r => r.code),
+        values: rows.map(r => r.revenue),
+        colors: rows.map((_, i) => barShade("#fb8c00", i / Math.max(rows.length, 1))),
+        tooltipLabel: (i, v) => rows[i].code + ": " + fmtMoneyFull(v) + " · GP " + fmtPct(rows[i].gpPct),
+        onClick: i => {
+            const code = rows[i].code;
+            state.filters.location = (state.filters.location === code) ? "" : code;
+            document.getElementById("locationFilter").value = state.filters.location;
+            rebuildFiltered(); renderCurrentTab();
+        },
+    }));
 }
 
 function renderSalespersonChart() {
     destroyChart("salesperson");
     const rows = [...state.bySalesperson.values()].filter(r => r.revenue > 0).sort((a, b) => b.revenue - a.revenue);
     const ctx = document.getElementById("salespersonChart").getContext("2d");
-    state.charts.salesperson = new Chart(ctx, {
-        type: "bar",
-        data: { labels: rows.map(r => r.code),
-                datasets: [{ data: rows.map(r => r.revenue),
-                             backgroundColor: rows.map((_, i) => barShade("#00acc1", i / Math.max(rows.length, 1))),
-                             borderRadius: 4 }] },
-        options: chartBase({
-            indexAxis: "y",
-            plugins: { legend: { display: false },
-                       tooltip: { callbacks: { label: c => fmtMoneyFull(c.parsed.x) + " · " + rows[c.dataIndex].invoiceCount + " inv · " + rows[c.dataIndex].customers.size + " cust · GP " + fmtPct(rows[c.dataIndex].gpPct) } } },
-            scales: { x: { ticks: { callback: v => fmtMoney(v) } } },
-            onClick: (_, els) => {
-                if (!els.length) return;
-                const code = rows[els[0].index].code;
-                state.filters.salesperson = (state.filters.salesperson === code) ? "" : code;
-                document.getElementById("salespersonFilter").value = state.filters.salesperson;
-                rebuildFiltered(); renderCurrentTab();
-            }
-        })
-    });
+    state.charts.salesperson = new Chart(ctx, buildOverviewSingleSeriesConfig(state.salespersonChartType, {
+        labels: rows.map(r => r.code),
+        values: rows.map(r => r.revenue),
+        colors: rows.map((_, i) => barShade("#00acc1", i / Math.max(rows.length, 1))),
+        tooltipLabel: (i, v) => rows[i].code + ": " + fmtMoneyFull(v) + " · " + rows[i].invoiceCount + " inv · " + rows[i].customers.size + " cust · GP " + fmtPct(rows[i].gpPct),
+        onClick: i => {
+            const code = rows[i].code;
+            state.filters.salesperson = (state.filters.salesperson === code) ? "" : code;
+            document.getElementById("salespersonFilter").value = state.filters.salesperson;
+            rebuildFiltered(); renderCurrentTab();
+        },
+    }));
 }
 
 function renderStatusChart() {
@@ -5784,35 +5823,53 @@ function renderStatusChart() {
         return "#6a1b9a";
     });
     const ctx = document.getElementById("statusChart").getContext("2d");
-    state.charts.status = new Chart(ctx, {
-        type: "doughnut",
-        data: { labels, datasets: [{ data, backgroundColor: palette, borderWidth: 0 }] },
-        plugins: [ChartDataLabels],
-        options: chartBase({ cutout: "62%",
-            plugins: { legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } },
-                       tooltip: { callbacks: {
-                           label: c => {
-                               const m = map.get(c.label);
-                               return c.label + ": " + fmtMoneyFull(m.amount) + " · " + fmtInt(m.count) + " inv";
-                           }
-                       } },
-                       datalabels: ringDataLabels({
-                           formatter: (value, ctx) => {
-                               const total = data.reduce((s, v) => s + (Number(v) || 0), 0);
-                               const pct = total ? (value / total * 100) : 0;
-                               if (pct < 4) return "";
-                               const valStr = isAmount ? fmtMoney(value) : fmtInt(value);
-                               return valStr + "\n" + pct.toFixed(0) + "%";
-                           }
-                       }) },
-            onClick: (_, els) => {
-                if (!els.length) return;
-                const status = labels[els[0].index];
-                state.filters.status = (state.filters.status === status) ? "" : status;
-                rebuildFiltered(); renderCurrentTab();
-            }
-        })
-    });
+    const ct = state.statusChartType || "doughnut";
+    const isRing = ct === "doughnut" || ct === "pie";
+    const valueTickFmt = v => isAmount ? fmtMoney(v) : fmtInt(v);
+    const tooltipLabel = c => {
+        const m = map.get(c.label);
+        return c.label + ": " + fmtMoneyFull(m.amount) + " · " + fmtInt(m.count) + " inv";
+    };
+    const onClick = (_, els) => {
+        if (!els.length) return;
+        const status = labels[els[0].index];
+        state.filters.status = (state.filters.status === status) ? "" : status;
+        rebuildFiltered(); renderCurrentTab();
+    };
+    if (isRing) {
+        state.charts.status = new Chart(ctx, {
+            type: ct,
+            data: { labels, datasets: [{ data, backgroundColor: palette, borderWidth: 0 }] },
+            plugins: [ChartDataLabels],
+            options: chartBase({ cutout: ct === "doughnut" ? "62%" : 0,
+                plugins: { legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } },
+                           tooltip: { callbacks: { label: tooltipLabel } },
+                           datalabels: ringDataLabels({
+                               formatter: (value) => {
+                                   const total = data.reduce((s, v) => s + (Number(v) || 0), 0);
+                                   const pct = total ? (value / total * 100) : 0;
+                                   if (pct < 4) return "";
+                                   return valueTickFmt(value) + "\n" + pct.toFixed(0) + "%";
+                               }
+                           }) },
+                onClick
+            })
+        });
+    } else {
+        state.charts.status = new Chart(ctx, {
+            type: "bar",
+            data: { labels, datasets: [{ data, backgroundColor: palette, borderRadius: 4 }] },
+            options: chartBase({
+                indexAxis: ct === "barH" ? "y" : "x",
+                plugins: { legend: { display: false },
+                           tooltip: { callbacks: { label: tooltipLabel } } },
+                scales: ct === "barH"
+                    ? { x: { ticks: { callback: valueTickFmt } } }
+                    : { y: { ticks: { callback: valueTickFmt } } },
+                onClick
+            })
+        });
+    }
 }
 
 function renderDayOfWeekChart() {
@@ -10749,6 +10806,11 @@ function wireEvents() {
     const spTrendSel = document.getElementById("spTrendChartType");
     if (spTrendSel) spTrendSel.addEventListener("change", e => { state.spTrendChartType = e.target.value; renderSalesperson(); });
     document.getElementById("dowChartType").addEventListener("change", e => { state.dowChartType = e.target.value; renderDayOfWeekChart(); });
+    document.getElementById("topCustomersChartType").addEventListener("change", e => { state.topCustomersChartType = e.target.value; renderTopCustomersChart(); });
+    document.getElementById("topItemsChartType").addEventListener("change", e => { state.topItemsChartType = e.target.value; renderTopItemsChart(); });
+    document.getElementById("locationChartType").addEventListener("change", e => { state.locationChartType = e.target.value; renderLocationChart(); });
+    document.getElementById("salespersonChartType").addEventListener("change", e => { state.salespersonChartType = e.target.value; renderSalespersonChart(); });
+    document.getElementById("statusChartType").addEventListener("change", e => { state.statusChartType = e.target.value; renderStatusChart(); });
     // Status metric toggle (count / amount)
     document.querySelectorAll("#statusMetricToggle button").forEach(btn => {
         btn.addEventListener("click", () => {
