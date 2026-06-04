@@ -8891,8 +8891,8 @@ async function handleLoad() {
             // Posting_Date vs Document_Date. PBI's sales measures use
             // Document_Date — if these two numbers differ AND the
             // Document_Date one matches PBI, that's the answer.
-            const from = state.loadedFrom || "";
-            const to   = state.loadedTo   || "";
+            // (Use local from/to — state.loadedFrom/To aren't set yet
+            // at this point in handleLoad.)
             const within = (d) => {
                 if (!d) return false;
                 const k = String(d).substring(0, 10);
