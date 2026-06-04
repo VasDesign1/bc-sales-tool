@@ -8860,14 +8860,25 @@ async function handleLoad() {
             }
             console.log("[Value Entry] loaded " + state.valueEntries.length + " rows, " + salesRows + " sales-related");
             console.log("[Value Entry] sales-only totals · Sales=" + fmtMoneyFull(sSales) + " · Cost(Actual)=" + fmtMoneyFull(Math.abs(sCost)) + " · Cost(NonInv)=" + fmtMoneyFull(Math.abs(sCostNI)) + " · Qty=" + fmtInt(Math.abs(sQty)));
-            // Print every (entryType / documentType) combination + count
-            // and (sales-only) sum so we can see exactly which slice of
-            // VE the filter accepts and reject.
-            const byTypeStr = [...byType.entries()]
-                .sort((a, b) => b[1] - a[1])
-                .map(([k, v]) => "  " + k + " → " + v)
+            // Per-(entryType / documentType) total contribution so we can
+            // see exactly which type group contributes the sales / cost.
+            // Critical for tracking down which slice PBI excludes vs we
+            // include (or vice versa).
+            const perType = new Map();
+            for (const v of state.valueEntries) {
+                const k = (v.entryType || "(blank)") + " / " + (v.documentType || "(blank)");
+                const cur = perType.get(k) || { count: 0, sales: 0, cost: 0, costNI: 0 };
+                cur.count++;
+                cur.sales += v.salesAmount;
+                cur.cost  += v.costAmount;
+                cur.costNI += v.costAmountNonInv;
+                perType.set(k, cur);
+            }
+            const perTypeStr = [...perType.entries()]
+                .sort((a, b) => Math.abs(b[1].sales) - Math.abs(a[1].sales))
+                .map(([k, v]) => "  " + k.padEnd(40) + " count=" + v.count + " sales=" + fmtMoneyFull(v.sales) + " cost=" + fmtMoneyFull(v.cost) + " costNI=" + fmtMoneyFull(v.costNI))
                 .join("\n");
-            console.log("[Value Entry] entry-type breakdown (entryType / documentType → count):\n" + byTypeStr);
+            console.log("[Value Entry] per-type contribution (sorted by |sales|):\n" + perTypeStr);
         }
         state.blanketOrders = blanketOrders || [];
         if (state.blanketOrders.length) {
