@@ -4886,13 +4886,32 @@ function renderFilterChips() {
 // pipeline view reflects what's actually open now, not historical
 // snapshots. Outstanding Invoices uses the toolbar's loaded set.
 function paintPipelineKpis() {
+    // Field names on salesOrderLines differ across BC tenants —
+    // standard v2.0 docs say "quantityShipped"/"quantityInvoiced" but
+    // some tenants publish "shippedQuantity"/"invoicedQuantity".
+    // Try both. If neither populated, qsh stays 0 and EVERY line
+    // shows as outstanding (explained the initial 539-orders bug).
+    const pick = (ln, names) => {
+        for (const n of names) if (ln[n] != null) return num(ln[n]);
+        return 0;
+    };
+    // BC sales order statuses include Draft / In Review / Open /
+    // Released / Pending Approval / Pending Prepayment. PBI's pipeline
+    // typically counts Open + Released only (orders actually in
+    // motion). Treat blank as "include" so a tenant that doesn't
+    // expose status still gets results.
+    const isPipelineOpen = so => {
+        const st = (so.status || "").toString().toLowerCase();
+        return st === "" || st === "open" || st === "released";
+    };
     let openCount = 0, openAmt = 0, sniCount = 0, sniAmt = 0;
     for (const so of (state.salesOrders || [])) {
+        if (!isPipelineOpen(so)) continue;
         let openLines = 0, sniLines = 0, soOpen = 0, soSni = 0;
         for (const ln of (so.salesOrderLines || [])) {
             const q   = num(ln.quantity);
-            const qsh = num(ln.quantityShipped);
-            const qin = num(ln.quantityInvoiced);
+            const qsh = pick(ln, ["quantityShipped", "shippedQuantity", "qtyShipped"]);
+            const qin = pick(ln, ["quantityInvoiced", "invoicedQuantity", "qtyInvoiced"]);
             const up  = num(ln.unitPrice);
             const openQ = q - qsh; if (openQ > 0) { openLines++; soOpen += openQ * up; }
             const sniQ  = qsh - qin; if (sniQ > 0) { sniLines++; soSni += sniQ * up; }
@@ -8306,7 +8325,7 @@ function showItemDetail(item) {
     renderIdChart();
     renderIdCustomerChart();
     renderIdInvoiceTable();
-    document.getElementById("idInvCount").textContent = rows.length + " line" + (rows.length === 1 ? "" : "s") + " on " + rows.length + " invoice rows";
+    document.getElementById("idInvCount").textContent = rows.length + " line" + (rows.length === 1 ? "" : "s") + " · click a row to open the invoice · click a customer name to drill into customer";
     openDrill("itemDetail");
 }
 
@@ -8369,9 +8388,12 @@ function renderIdCustomerChart() {
 function renderIdInvoiceTable() {
     const rows = state.charts._idRows || [];
     const tbody = document.querySelector("#idInvoiceTable tbody");
+    // Row click defaults to the invoice drill (more specific). The
+    // first column (Customer) gets its own data-action so a click
+    // there drills into the customer instead — both reachable.
     tbody.innerHTML = [...rows].sort((a, b) => a.postingDate < b.postingDate ? 1 : -1).slice(0, 1000).map(r => `
-        <tr class="clickable" data-cust="${escapeAttr(r.customerNumber)}">
-            <td>${escapeHtml(r.customerName || r.customerNumber)}</td>
+        <tr class="clickable" data-cust="${escapeAttr(r.customerNumber)}" data-inv-id="${escapeAttr(r.invoiceId)}">
+            <td data-action="customer" style="cursor:pointer;"><u>${escapeHtml(r.customerName || r.customerNumber)}</u></td>
             <td>${escapeHtml(r.salesperson)}</td>
             <td>${escapeHtml(r.invoiceNumber)}</td>
             <td>${fmtDate(r.postingDate)}</td>
@@ -9297,6 +9319,30 @@ async function handleLoad() {
             if (state.salesOrders[0].salesOrderLines && state.salesOrders[0].salesOrderLines.length) {
                 console.log("[Sales Orders] sample line fields:", Object.keys(state.salesOrders[0].salesOrderLines[0]).join(", "));
             }
+            // Status breakdown so we can see what values this tenant
+            // uses and whether the "Open + Released" filter is right.
+            const byStatus = new Map();
+            for (const so of state.salesOrders) {
+                const st = so.status || "(blank)";
+                byStatus.set(st, (byStatus.get(st) || 0) + 1);
+            }
+            console.log("[Sales Orders] by status:", [...byStatus].map(([s, n]) => s + ":" + n).join(", "));
+            // Field-population probe: sum of quantity vs shipped vs invoiced
+            // across all lines — instantly tells us whether the shipped/
+            // invoiced fields are populated at all on this tenant.
+            let totQ = 0, totQsh = 0, totQin = 0, lineCount = 0;
+            const seenLineKeys = new Set();
+            for (const so of state.salesOrders) {
+                for (const ln of (so.salesOrderLines || [])) {
+                    lineCount++;
+                    totQ   += num(ln.quantity);
+                    totQsh += num(ln.quantityShipped) + num(ln.shippedQuantity);
+                    totQin += num(ln.quantityInvoiced) + num(ln.invoicedQuantity);
+                    Object.keys(ln).forEach(k => seenLineKeys.add(k));
+                }
+            }
+            console.log("[Sales Orders] " + lineCount + " lines · Σqty=" + fmtInt(totQ) + " · Σshipped=" + fmtInt(totQsh) + " · Σinvoiced=" + fmtInt(totQin));
+            console.log("[Sales Orders] union of all line field names:", [...seenLineKeys].sort().join(", "));
         }
         state.valueEntries = valueEntries || [];
         // Build per-(docNumber|itemNo) cost map from VE rows so direct-
@@ -9782,7 +9828,19 @@ function wireEvents() {
     document.getElementById("idBack").addEventListener("click", closeDrill);
     document.querySelector("#idInvoiceTable tbody").addEventListener("click", e => {
         const tr = e.target.closest("tr.clickable"); if (!tr) return;
-        if (tr.dataset.cust) showCustomer(tr.dataset.cust);
+        const td = e.target.closest("td");
+        // Click on the Customer cell → drill into customer.
+        // Click anywhere else on the row → drill into the invoice
+        // (more specific). showInvoice needs state.currentCustomer set,
+        // so we prime it via showCustomer first.
+        if (td && td.dataset.action === "customer" && tr.dataset.cust) {
+            showCustomer(tr.dataset.cust);
+            return;
+        }
+        if (tr.dataset.invId) {
+            if (tr.dataset.cust) showCustomer(tr.dataset.cust);
+            showInvoice(tr.dataset.invId);
+        }
     });
     document.querySelectorAll("#custBucketToggle button").forEach(btn => {
         btn.addEventListener("click", () => {
