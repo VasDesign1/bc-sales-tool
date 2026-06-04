@@ -3422,10 +3422,46 @@ function buildCostMaps(iles) {
 
     console.log("[ILE] " + state.costStats.docKeys + " (docNumber|item) keys built for exact-cost lookup");
 
+    // ---- Shipment-line bridge ----
+    // On Ship-first-Invoice-later tenants the ILE document numbers are
+    // shipment numbers, never invoice numbers, so the docKey tier above is
+    // 0% useful. salesShipments is already fetched and its lines carry
+    // (customer, item, qty, shipmentNumber, date). Build a per-
+    // (customer|item) sorted list of shipment lines so costFromLine can
+    // walk it for invoices that miss same-day, average-weighted cost
+    // across the shipments inside a ~30 day lookback window, and pull the
+    // actual cost from state.costByItemDocKey keyed by shipmentNumber.
+    state.shipmentLinesByCustItem = new Map();
+    let shipLines = 0;
+    for (const sh of (state.shipments || [])) {
+        const cust = sh.customerNumber || "";
+        const sNo  = sh.number || "";
+        const date = sh.postingDate ? String(sh.postingDate).substring(0, 10) : "";
+        if (!cust || !sNo || !date) continue;
+        for (const ln of (sh.salesShipmentLines || [])) {
+            const itemNo = ln.lineObjectNumber || ln.itemId || "";
+            if (!itemNo) continue;
+            const q = Math.abs(num(ln.quantity));
+            if (q === 0) continue;
+            const k = cust + "|" + itemNo;
+            let arr = state.shipmentLinesByCustItem.get(k);
+            if (!arr) { arr = []; state.shipmentLinesByCustItem.set(k, arr); }
+            arr.push({ date, shipmentNumber: sNo, qty: q });
+            shipLines++;
+        }
+    }
+    // Newest first — the lookup walks until it crosses the 30-day cutoff
+    for (const arr of state.shipmentLinesByCustItem.values()) {
+        arr.sort((a, b) => a.date < b.date ? 1 : a.date > b.date ? -1 : 0);
+    }
+    state.costStats.shipKeys = state.shipmentLinesByCustItem.size;
+    console.log("[Shipments] indexed " + shipLines + " shipment lines into " +
+                state.costStats.shipKeys + " (cust|item) buckets for the cost-bridge tier");
+
     // Spot-check: how many invoice lines have a matching avg-cost AND
     // how many would hit the exact-document cost path (Ship+Invoice).
     if (state.invoices && state.invoices.length) {
-        let lineCount = 0, matched = 0, exact = 0, sameDay = 0;
+        let lineCount = 0, matched = 0, exact = 0, sameDay = 0, bridged = 0;
         for (const inv of state.invoices.slice(0, 100)) {
             const invDate = inv.postingDate ? String(inv.postingDate).substring(0, 10) : "";
             for (const ln of (inv.salesInvoiceLines || [])) {
@@ -3433,8 +3469,13 @@ function buildCostMaps(iles) {
                 const itemNo = ln.lineObjectNumber || ln.itemId || "";
                 if (itemNo && state.itemAvgCost.has(itemNo) && state.itemAvgCost.get(itemNo) > 0) matched++;
                 if (inv.number && itemNo && state.costByItemDocKey.has(inv.number + "|" + itemNo)) exact++;
-                if (inv.customerNumber && itemNo && invDate &&
-                    state.custItemDateAvgCost.has(inv.customerNumber + "|" + itemNo + "|" + invDate)) sameDay++;
+                const hitSameDay = inv.customerNumber && itemNo && invDate &&
+                    state.custItemDateAvgCost.has(inv.customerNumber + "|" + itemNo + "|" + invDate);
+                if (hitSameDay) sameDay++;
+                // Bridge counts a line if same-day MISSED but a shipment exists for
+                // this (cust|item) within the 30-day lookback before invDate.
+                if (!hitSameDay && inv.customerNumber && itemNo && invDate &&
+                    shipmentBridgeUnitCost(inv.customerNumber, itemNo, inv.postingDate, "inv", 30) > 0) bridged++;
             }
         }
         state.costStats.sampleLines = lineCount;
@@ -3442,8 +3483,11 @@ function buildCostMaps(iles) {
         const pct = lineCount ? Math.round(matched / lineCount * 100) : 0;
         const exactPct = lineCount ? Math.round(exact / lineCount * 100) : 0;
         const sameDayPct = lineCount ? Math.round(sameDay / lineCount * 100) : 0;
+        const bridgedPct = lineCount ? Math.round(bridged / lineCount * 100) : 0;
+        const combinedPct = lineCount ? Math.round((sameDay + bridged) / lineCount * 100) : 0;
         console.log("[ILE] exact-doc coverage: " + exact + "/" + lineCount + " (" + exactPct + "%) sample lines match by invoice No.");
         console.log("[ILE] same-day coverage: " + sameDay + "/" + lineCount + " (" + sameDayPct + "%) sample lines match by (cust+item+date).");
+        console.log("[ILE] shipment-bridge coverage: " + bridged + "/" + lineCount + " (" + bridgedPct + "%) extra lines bridged via shipments; combined precise = " + combinedPct + "%");
         console.log("[ILE] line-item coverage: " + matched + "/" + lineCount + " (" + pct + "%) sample lines have an avg-cost match");
     }
 }
@@ -3470,6 +3514,29 @@ function lineEntryType(ln) {
     return (ln.lineObjectNumber || ln.itemId) ? "Item" : "G/L Account";
 }
 
+// Walk shipment lines for this (customer, item), starting from the
+// invoice posting date and looking back up to `windowDays`. For each
+// shipment found, accumulate the ILE cost via the per-doc cost map.
+// Returns avg unit cost (totalCost / totalQty) or 0 when no match.
+// `which`: "inv" → state.costByItemDocKey, "noninv" → state.costNonInvByItemDocKey.
+function shipmentBridgeUnitCost(customerNumber, itemNo, postingDate, which, windowDays) {
+    if (!customerNumber || !itemNo || !postingDate) return 0;
+    const arr = state.shipmentLinesByCustItem && state.shipmentLinesByCustItem.get(customerNumber + "|" + itemNo);
+    if (!arr || !arr.length) return 0;
+    const invISO = String(postingDate).substring(0, 10);
+    const cutoffMs = new Date(invISO).getTime() - (windowDays || 30) * 86400000;
+    const docMap = (which === "noninv") ? state.costNonInvByItemDocKey : state.costByItemDocKey;
+    if (!docMap) return 0;
+    let totalCost = 0, totalQty = 0;
+    for (const c of arr) {                                    // newest first
+        if (c.date > invISO) continue;                        // future of invoice — skip
+        if (new Date(c.date).getTime() < cutoffMs) break;     // sorted desc; everything older crosses cutoff
+        const ile = docMap.get(c.shipmentNumber + "|" + itemNo);
+        if (ile && ile.qty > 0) { totalCost += ile.cost; totalQty += ile.qty; }
+    }
+    return totalQty > 0 ? totalCost / totalQty : 0;
+}
+
 function costFromLine(line, sign, postingDate, customerNumber, documentNumber) {
     if (!isItemLine(line)) return 0;
     sign = (sign == null) ? 1 : sign;
@@ -3486,16 +3553,20 @@ function costFromLine(line, sign, postingDate, customerNumber, documentNumber) {
         }
     }
     // Tiered fallback, tightest-match first:
-    //   1. cust + item + date    (same-day ILE entry — Ship+Invoice exact)
-    //   2. cust + item + month   (the actual shipment for this customer)
-    //   3. item + month          (any shipment of this item that month)
-    //   4. global item average   (last resort)
+    //   1. cust + item + date     (same-day ILE entry — Ship+Invoice exact)
+    //   2. shipment-line bridge   (Ship-first-Invoice-later: find earlier
+    //                              shipments to this customer for this item
+    //                              within 30 days, average their actual cost)
+    //   3. cust + item + month    (any shipment of this item to this customer)
+    //   4. item + month           (any shipment of this item that month)
+    //   5. global item average    (last resort)
     let uc = 0;
     if (postingDate && customerNumber) {
         const dk = String(postingDate).substring(0, 10);
         const v = state.custItemDateAvgCost.get(customerNumber + "|" + itemNo + "|" + dk);
         if (v != null && v > 0) uc = v;
     }
+    if (uc === 0) uc = shipmentBridgeUnitCost(customerNumber, itemNo, postingDate, "inv", 30);
     if (uc === 0 && postingDate) {
         const mk = monthKey(postingDate);
         if (customerNumber) {
@@ -3536,6 +3607,7 @@ function costNonInvFromLine(line, sign, postingDate, customerNumber, documentNum
         const v = state.custItemDateAvgCostNonInv.get(customerNumber + "|" + itemNo + "|" + dk);
         if (v != null && v > 0) uc = v;
     }
+    if (uc === 0) uc = shipmentBridgeUnitCost(customerNumber, itemNo, postingDate, "noninv", 30);
     if (uc === 0 && postingDate) {
         const mk = monthKey(postingDate);
         if (customerNumber) {
