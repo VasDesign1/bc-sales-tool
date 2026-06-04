@@ -6945,24 +6945,30 @@ function renderByItem() {
     for (const r of sortedForPareto) { c2 += r.revenue; itemsFor80++; if (sumP && c2 / sumP >= 0.8) break; }
     document.getElementById("itParetoMeta").textContent =
         sortedForPareto.length
-            ? `${itemsFor80} of ${sortedForPareto.length} items = 80% of sales · ` +
-              `top 50 shown`
+            ? ((itemsFor80 / sortedForPareto.length) * 100).toFixed(1) + "% of items (" + itemsFor80 + " of " + sortedForPareto.length + ") drive 80% of sales · top 50 shown"
             : "no data";
     const pareCtx = document.getElementById("itParetoChart");
     if (pareCtx) {
+        // Colour the bars representing the vital-few items differently so
+        // the 80/20 split is visible at a glance. paretoTop is capped at 50
+        // for chart legibility, but `itemsFor80` may be larger.
+        const barColors = paretoTop.map((_, i) => i < itemsFor80 ? "#3949ab" : "#bdbdbd");
         state.charts.itPareto = new Chart(pareCtx.getContext("2d"), {
             data: { labels: paretoTop.map((r, i) => (i + 1).toString()),
                     datasets: [
-                        { type: "bar", label: "Sales $", data: paretoTop.map(r => r.revenue), backgroundColor: "#3949ab", borderRadius: 3, yAxisID: "y" },
+                        { type: "bar", label: "Sales $", data: paretoTop.map(r => r.revenue), backgroundColor: barColors, borderRadius: 3, yAxisID: "y" },
                         { type: "line", label: "Cumulative %", data: cumPct, borderColor: "#f9a825", backgroundColor: "rgba(249,168,37,0.15)", tension: 0.2, yAxisID: "y1", pointRadius: 2 },
+                        { type: "line", label: "80% threshold", data: cumPct.map(() => 80), borderColor: "#e53935", borderDash: [5, 5], borderWidth: 1, pointRadius: 0, fill: false, yAxisID: "y1" },
                     ] },
             options: chartBase({
                 plugins: { legend: { position: "top" },
                            tooltip: { callbacks: { label: c => {
+                               if (c.dataset.label === "80% threshold") return null;
                                if (c.dataset.type === "line") return "Cumulative: " + c.parsed.y.toFixed(1) + "%";
                                const r = paretoTop[c.dataIndex];
                                return (r.number || "—") + " — " + (r.description || "") + ": " + fmtMoneyFull(r.revenue);
-                           } } } },
+                           } },
+                                      filter: t => t.dataset.label !== "80% threshold" } },
                 scales: {
                     y:  { position: "left",  ticks: { callback: v => fmtMoney(v) } },
                     y1: { position: "right", min: 0, max: 100, grid: { drawOnChartArea: false }, ticks: { callback: v => v + "%" } },
@@ -8698,7 +8704,7 @@ function buildParetoSectionHtml(dim) {
             </div>
             <div class="chart-grid">
                 <div class="card span-12">
-                    <div class="head"><h3>${escapeHtml(def.chartTitle)}</h3><div class="meta">orange line at 80%</div></div>
+                    <div class="head"><h3>${escapeHtml(def.chartTitle)}</h3><div class="meta">orange = cumulative · dashed red = 80% threshold · blue bars = vital few</div></div>
                     <div class="chart-wrap" style="min-height:360px;"><canvas id="paretoChart_${dim}"></canvas></div>
                 </div>
             </div>
@@ -8758,11 +8764,16 @@ function renderParetoSection(dim) {
             datasets: [
                 { type: "bar", label: def.labelMetric, data: values, backgroundColor: rows.map((_, i) => i < top80Count ? "#3f51b5" : "#bdbdbd"), borderRadius: 2, yAxisID: "y" },
                 { type: "line", label: "Cumulative %", data: cumPct, borderColor: "#fb8c00", backgroundColor: "rgba(251,140,0,0.10)", fill: false, tension: 0.1, pointRadius: 0, borderWidth: 2, yAxisID: "y1" },
+                // Flat dashed threshold line at 80% — makes the "vital few"
+                // boundary explicit, since the cumulative curve doesn't
+                // visually distinguish 80% from any other percentage.
+                { type: "line", label: "80% threshold", data: cumPct.map(() => 80), borderColor: "#e53935", borderDash: [5, 5], borderWidth: 1, pointRadius: 0, fill: false, yAxisID: "y1" },
             ],
         },
         options: chartBase({
             plugins: { legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } },
-                       tooltip: { callbacks: { label: c => c.dataset.label + ": " + (c.dataset.yAxisID === "y" ? def.fmt(c.parsed.y) : c.parsed.y.toFixed(1) + "%") } } },
+                       tooltip: { callbacks: { label: c => c.dataset.label + ": " + (c.dataset.yAxisID === "y" ? def.fmt(c.parsed.y) : c.parsed.y.toFixed(1) + "%") },
+                                  filter: t => t.dataset.label !== "80% threshold" } },
             scales: {
                 y:  { position: "left", ticks: { callback: v => fmtMoney(v) } },
                 y1: { position: "right", min: 0, max: 100, grid: { drawOnChartArea: false }, ticks: { callback: v => v + "%" } }
@@ -8781,7 +8792,11 @@ function renderParetoSection(dim) {
             <td><span class="badge ${r.band === "Top 80%" ? "badge-paid" : "badge-draft"}">${r.band}</span></td>
         </tr>
     `).join("") || '<tr><td colspan="6" class="empty">No data.</td></tr>';
-    document.getElementById("parMeta_" + dim).textContent = rows.length + " " + def.labelEntity.toLowerCase() + "s · 80% line at #" + top80Count;
+    const ratioPct = rows.length ? (top80Count / rows.length * 100) : 0;
+    document.getElementById("parMeta_" + dim).textContent =
+        rows.length
+            ? ratioPct.toFixed(1) + "% of " + def.labelEntity.toLowerCase() + "s (" + top80Count + " of " + rows.length + ") drive 80% of " + def.labelMetric.toLowerCase()
+            : "no data";
 }
 
 function renderPareto() {
