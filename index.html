@@ -8947,7 +8947,9 @@ async function handleLoad() {
                 veByDoc.set(v.documentNumber || "—", cur);
             }
             const docByInv = new Map();
-            for (const inv of state.invoices) {
+            // Same scope gotcha as the date diagnostic earlier — state.invoices
+            // isn't assigned until later in handleLoad. Use the local one.
+            for (const inv of invoices) {
                 if (!inv.number) continue;
                 const k = String(inv.postingDate || "").substring(0, 10);
                 if (k < from || k > to) continue;
@@ -8958,6 +8960,14 @@ async function handleLoad() {
                 }
                 docByInv.set(inv.number, cur);
             }
+            // Sanity: log a few invoice numbers + a few VE doc numbers so
+            // we can see if their formats actually match (in case BC v2.0
+            // REST returns invoice numbers in a different format than
+            // VE's Document_No).
+            const sampleInvoiceNumbers = invoices.slice(0, 5).map(i => i.number || "—").join(", ");
+            const sampleVeDocNumbers = [...veByDoc.keys()].slice(0, 5).join(", ");
+            console.log("[Value Entry] sample invoice numbers (Document side): " + sampleInvoiceNumbers);
+            console.log("[Value Entry] sample VE Document_No values: " + sampleVeDocNumbers);
             const allDocs = new Set([...veByDoc.keys(), ...docByInv.keys()]);
             const diffs = [];
             for (const doc of allDocs) {
