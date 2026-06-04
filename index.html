@@ -4183,16 +4183,15 @@ function getAdjustments() {
     }
     return { credit, qty, cost, gpImpact: credit - cost };
 }
-// Test whether a VE row belongs to a sales transaction. PBI's measures
-// filter on Item Ledger Entry Type = "Sale" (Source side) AND/OR
-// Document Type ∈ {Sales Invoice, Sales Credit Memo, Sales Shipment,
-// Sales Return Receipt}. We accept any of those.
+// Test whether a VE row belongs to a sales financial document.
+// PBI's "Sales (LCY)" + "Adjusted Cost (LCY)" measures use Document Type
+// in {Sales Invoice, Sales Credit Memo} — i.e. the financial side only,
+// NOT Sales Shipment / Sales Return Receipt (which post cost flows but
+// no revenue, leading to double-count if both sides land in the same
+// period).
 function isSalesValueEntry(v) {
-    const et = (v.entryType || "").toString();
-    if (/^sale$/i.test(et)) return true;                            // Item Ledger Entry Type = "Sale"
     const dt = (v.documentType || "").toString();
-    if (/^sales (invoice|credit memo|shipment|return receipt)$/i.test(dt)) return true;
-    return false;
+    return /^sales (invoice|credit memo)$/i.test(dt);
 }
 
 // Sum Sales / Cost (Actual + Non-Invtbl) directly from Value Entries
@@ -8861,7 +8860,14 @@ async function handleLoad() {
             }
             console.log("[Value Entry] loaded " + state.valueEntries.length + " rows, " + salesRows + " sales-related");
             console.log("[Value Entry] sales-only totals · Sales=" + fmtMoneyFull(sSales) + " · Cost(Actual)=" + fmtMoneyFull(Math.abs(sCost)) + " · Cost(NonInv)=" + fmtMoneyFull(Math.abs(sCostNI)) + " · Qty=" + fmtInt(Math.abs(sQty)));
-            console.log("[Value Entry] entry-type breakdown:", Object.fromEntries(byType));
+            // Print every (entryType / documentType) combination + count
+            // and (sales-only) sum so we can see exactly which slice of
+            // VE the filter accepts and reject.
+            const byTypeStr = [...byType.entries()]
+                .sort((a, b) => b[1] - a[1])
+                .map(([k, v]) => "  " + k + " → " + v)
+                .join("\n");
+            console.log("[Value Entry] entry-type breakdown (entryType / documentType → count):\n" + byTypeStr);
         }
         state.blanketOrders = blanketOrders || [];
         if (state.blanketOrders.length) {
