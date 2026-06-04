@@ -4242,10 +4242,16 @@ function getValueEntryTotals() {
     // a VE row. We don't try to bridge that here — renderOverview keeps
     // Document mode's sales total when in VE mode and only routes cost
     // through VE.
-    // Cost amounts on sales VE rows are negative (inventory decreasing).
-    // Take magnitude for display + math; sales is naturally positive on
-    // an invoice, negative on a credit memo, so leave sign as-is.
-    return { sales: sales, cost: Math.abs(cost) + Math.abs(costNI),
+    // Cost amounts on sale VE rows are negative (inventory leaving);
+    // on credit-memo / return-receipt rows they're positive (inventory
+    // coming back). PBI's measure sums signed values and negates the
+    // total, so credit-memo cost nets against sale cost cleanly. We
+    // mirror that by summing first, taking abs on the combined total.
+    // Previously we did Math.abs() on Cost_Amount_Actual and
+    // Cost_Amount_Non_Invtbl separately, which over-counted on days
+    // mixing returns + sales whenever the two columns disagreed on
+    // sign (07/05/2026 drifted ~$65 on cost for exactly this reason).
+    return { sales: sales, cost: Math.abs(cost + costNI),
              costActual: Math.abs(cost), costNonInv: Math.abs(costNI),
              qty: Math.abs(qty), rows };
 }
