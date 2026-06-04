@@ -373,13 +373,14 @@
         }
 
         /* ================================================================
-           THEME SYSTEM  —  five interchangeable visual templates.
+           THEME SYSTEM  —  ten interchangeable visual templates.
            Pure CSS overrides on top of the existing rules above, so the
            old "Classic" look is preserved when no theme class is on <html>.
            Each theme sets a class on <html> (theme-onyx / theme-linen /
-           theme-aurora / theme-atelier / theme-concierge). Theme rules use
-           the higher specificity of `html.theme-X selector` to win the
-           cascade without touching the underlying defaults.
+           theme-aurora / theme-atelier / theme-concierge / theme-marble /
+           theme-velvet / theme-glacier / theme-bibliotheque / theme-pavilion).
+           Theme rules use the higher specificity of `html.theme-X selector`
+           to win the cascade without touching the underlying defaults.
            ================================================================ */
 
         /* ---------- THEME PICKER OVERLAY ---------- */
@@ -496,6 +497,56 @@
         .theme-picker .opt.concierge .kpi-mini .lbl { color: #7a7368; }
         .theme-picker .opt.concierge .kpi-mini .val { color: #2c2a26; font-family: 'Fraunces', serif; font-weight: 500; }
         .theme-picker .opt.concierge .bar { background: linear-gradient(90deg, #0e4d3f, #9c7a3c); }
+        /* Marble swatch */
+        .theme-picker .opt.marble { background: #f1f2f4; color: #1c2833; border-color: rgba(28,40,51,0.10); }
+        .theme-picker .opt.marble .tag { color: #6a7681; }
+        .theme-picker .opt.marble .name { font-family: 'Cormorant Garamond', serif; color: #1e3a5f; font-weight: 500; }
+        .theme-picker .opt.marble .tagline { color: #6a7681; }
+        .theme-picker .opt.marble .preview { background: #ffffff; border: 1px solid rgba(28,40,51,0.08); border-radius: 8px; box-shadow: 0 1px 3px rgba(28,40,51,0.05); }
+        .theme-picker .opt.marble .kpi-mini { background: #f9fafb; border: 1px solid rgba(28,40,51,0.06); border-radius: 4px; }
+        .theme-picker .opt.marble .kpi-mini .lbl { color: #6a7681; }
+        .theme-picker .opt.marble .kpi-mini .val { color: #1c2833; font-family: 'Cormorant Garamond', serif; font-weight: 500; }
+        .theme-picker .opt.marble .bar { background: linear-gradient(90deg, #1e3a5f, #5c7791); }
+        /* Velvet swatch */
+        .theme-picker .opt.velvet { background: #2a1014; color: #f0e6d2; border-color: rgba(201,160,74,0.20); }
+        .theme-picker .opt.velvet .tag { color: rgba(240,230,210,0.55); }
+        .theme-picker .opt.velvet .name { font-family: 'Cormorant Garamond', serif; color: #c9a04a; font-weight: 600; }
+        .theme-picker .opt.velvet .tagline { color: rgba(240,230,210,0.72); }
+        .theme-picker .opt.velvet .preview { background: #1a0a0f; border: 1px solid rgba(201,160,74,0.18); border-radius: 6px; }
+        .theme-picker .opt.velvet .kpi-mini { border: 1px solid rgba(201,160,74,0.14); border-radius: 4px; }
+        .theme-picker .opt.velvet .kpi-mini .lbl { color: rgba(240,230,210,0.55); }
+        .theme-picker .opt.velvet .kpi-mini .val { color: #c9a04a; font-family: 'Cormorant Garamond', serif; font-weight: 500; }
+        .theme-picker .opt.velvet .bar { background: linear-gradient(90deg, #c9a04a, #8b6a2c); }
+        /* Glacier swatch */
+        .theme-picker .opt.glacier { background: #e8eef3; color: #1a2738; border-color: rgba(26,39,56,0.12); }
+        .theme-picker .opt.glacier .tag { color: #5e7286; }
+        .theme-picker .opt.glacier .name { font-family: 'Fraunces', serif; color: #1b4f7e; font-weight: 500; }
+        .theme-picker .opt.glacier .tagline { color: #5e7286; }
+        .theme-picker .opt.glacier .preview { background: #f6f9fb; border: 1px solid rgba(26,39,56,0.08); border-radius: 6px; box-shadow: inset 0 1px 0 rgba(255,255,255,0.7); }
+        .theme-picker .opt.glacier .kpi-mini { background: rgba(74,144,194,0.08); border-radius: 4px; }
+        .theme-picker .opt.glacier .kpi-mini .lbl { color: #5e7286; }
+        .theme-picker .opt.glacier .kpi-mini .val { color: #1a2738; font-family: 'Fraunces', serif; font-weight: 500; }
+        .theme-picker .opt.glacier .bar { background: linear-gradient(90deg, #1b4f7e, #7eb8d9); }
+        /* Bibliothèque swatch */
+        .theme-picker .opt.bibliotheque { background: #ede4d2; color: #2a1c0e; border-color: rgba(42,28,14,0.16); }
+        .theme-picker .opt.bibliotheque .tag { color: #6e5526; }
+        .theme-picker .opt.bibliotheque .name { font-family: 'Cormorant Garamond', serif; color: #7a1f2b; font-weight: 600; font-style: italic; }
+        .theme-picker .opt.bibliotheque .tagline { color: #6e5526; }
+        .theme-picker .opt.bibliotheque .preview { background: #f6efdd; border: 1px solid rgba(42,28,14,0.16); border-radius: 4px; }
+        .theme-picker .opt.bibliotheque .kpi-mini { background: transparent; border-bottom: 1px solid rgba(42,28,14,0.16); border-radius: 0; padding: 8px 4px; }
+        .theme-picker .opt.bibliotheque .kpi-mini .lbl { color: #6e5526; }
+        .theme-picker .opt.bibliotheque .kpi-mini .val { color: #2a1c0e; font-family: 'Cormorant Garamond', serif; font-weight: 600; font-style: italic; }
+        .theme-picker .opt.bibliotheque .bar { background: linear-gradient(90deg, #7a1f2b, #b8923c); }
+        /* Pavilion swatch */
+        .theme-picker .opt.pavilion { background: #efeae0; color: #2e3329; border-color: rgba(46,51,41,0.12); }
+        .theme-picker .opt.pavilion .tag { color: #6e7561; }
+        .theme-picker .opt.pavilion .name { font-family: 'Fraunces', serif; color: #2e3329; font-weight: 500; }
+        .theme-picker .opt.pavilion .tagline { color: #6e7561; }
+        .theme-picker .opt.pavilion .preview { background: #f9f5ec; border: 1px solid rgba(46,51,41,0.08); border-radius: 6px; }
+        .theme-picker .opt.pavilion .kpi-mini { background: transparent; border-radius: 4px; padding: 8px 4px; }
+        .theme-picker .opt.pavilion .kpi-mini .lbl { color: #6e7561; }
+        .theme-picker .opt.pavilion .kpi-mini .val { color: #2e3329; font-family: 'Fraunces', serif; font-weight: 500; }
+        .theme-picker .opt.pavilion .bar { background: linear-gradient(90deg, #6e7d5e, #a88a4c); }
         .theme-picker .change-banner {
             position: absolute; top: 20px; right: 24px;
             font-family: 'Inter', sans-serif; font-size: 12px;
@@ -1012,6 +1063,386 @@
         html.theme-concierge .signin-card .big-btn { background: #0e4d3f; color: #f3eee5; box-shadow: 0 4px 14px rgba(14,77,63,0.3); }
         html.theme-concierge .theme-btn { color: #0e4d3f; border-color: rgba(44,42,38,0.18); }
         html.theme-concierge .progress { background: #0e4d3f; color: #f3eee5; box-shadow: 0 4px 18px rgba(14,77,63,0.28); }
+
+        /* ================================================================
+           THEME 6 · MARBLE  —  Carrara white + steel navy + slate veining
+           ================================================================ */
+        html.theme-marble body { background: #f1f2f4; color: #1c2833; font-family: 'Inter', sans-serif; }
+        html.theme-marble .sidebar { background: #f9fafb; color: #1c2833; border-right: 1px solid rgba(28,40,51,0.10); }
+        html.theme-marble .sidebar .brand h1 { font-family: 'Cormorant Garamond', serif; font-weight: 500; font-size: 22px; color: #1e3a5f; letter-spacing: 0.5px; }
+        html.theme-marble .sidebar .brand .sub { color: #6a7681; }
+        html.theme-marble .sidebar a { color: #1c2833; opacity: 0.72; }
+        html.theme-marble .sidebar a:hover { background: rgba(28,40,51,0.04); opacity: 1; }
+        html.theme-marble .sidebar a.active { background: rgba(30,58,95,0.08); border-left-color: #1e3a5f; opacity: 1; color: #1e3a5f; font-weight: 700; }
+        html.theme-marble .sidebar .group-label { color: #6a7681; }
+        html.theme-marble .header { background: #f9fafb; box-shadow: 0 1px 0 rgba(28,40,51,0.08); border-bottom: 1px solid rgba(28,40,51,0.10); }
+        html.theme-marble .header h2 { font-family: 'Cormorant Garamond', serif; font-weight: 500; font-size: 24px; color: #1e3a5f; letter-spacing: 0.5px; }
+        html.theme-marble .header .right { color: #6a7681; }
+        html.theme-marble .header .right .user { color: #1c2833; }
+        html.theme-marble .toolbar { background: #ffffff; box-shadow: 0 1px 3px rgba(28,40,51,0.06); border: 1px solid rgba(28,40,51,0.08); }
+        html.theme-marble .toolbar label { color: #6a7681; letter-spacing: 0.8px; }
+        html.theme-marble .toolbar input, html.theme-marble .toolbar select { background: #fff; color: #1c2833; border-color: rgba(28,40,51,0.14); }
+        html.theme-marble .btn-primary { background: #1e3a5f; color: #f9fafb; box-shadow: 0 4px 12px rgba(30,58,95,0.20); }
+        html.theme-marble .btn-primary:hover { background: #16304f; transform: translateY(-1px); }
+        html.theme-marble .chip { background: rgba(30,58,95,0.10); color: #1e3a5f; }
+        html.theme-marble .kpi { background: #ffffff !important; color: #1c2833; border: 1px solid rgba(28,40,51,0.08); box-shadow: 0 1px 3px rgba(28,40,51,0.05); }
+        html.theme-marble .kpi::after { background: rgba(30,58,95,0.05); }
+        html.theme-marble .kpi .label { color: #6a7681; letter-spacing: 0.8px; }
+        html.theme-marble .kpi .value { color: #1c2833; font-family: 'Cormorant Garamond', serif; font-weight: 500; font-size: 30px; }
+        html.theme-marble .kpi .sub { color: #6a7681; }
+        html.theme-marble .card, html.theme-marble .panel, html.theme-marble .breadcrumb { background: #ffffff; box-shadow: 0 1px 3px rgba(28,40,51,0.05); border: 1px solid rgba(28,40,51,0.08); }
+        html.theme-marble .card h3, html.theme-marble .panel-header h2 { color: #1e3a5f; font-family: 'Cormorant Garamond', serif; font-weight: 500; font-size: 19px; letter-spacing: 0.3px; }
+        html.theme-marble .card .head .meta, html.theme-marble .panel-header .meta { color: #6a7681; }
+        html.theme-marble .panel-header { border-bottom: 1px solid rgba(28,40,51,0.08); }
+        html.theme-marble .panel-header input.search { background: #fff; color: #1c2833; border-color: rgba(28,40,51,0.14); }
+        html.theme-marble th { background: #eef1f4; color: #1e3a5f; border-bottom: 1px solid rgba(30,58,95,0.16); font-family: 'Inter', sans-serif; }
+        html.theme-marble th:hover { background: #e3e8ed; }
+        html.theme-marble td { color: #1c2833; border-bottom: 1px solid rgba(28,40,51,0.05); }
+        html.theme-marble tr:hover { background: rgba(30,58,95,0.04); border-left: 2px solid #5c7791; }
+        html.theme-marble td.pos { color: #2e5e3c; }
+        html.theme-marble td.neg { color: #8b2e2e; }
+        html.theme-marble .breadcrumb a { color: #1e3a5f; }
+        html.theme-marble .breadcrumb .current { color: #1c2833; }
+        html.theme-marble .breadcrumb .back-btn { background: rgba(30,58,95,0.10); color: #1e3a5f; }
+        html.theme-marble .toggle { border-color: rgba(28,40,51,0.14); }
+        html.theme-marble .toggle button { background: #ffffff; color: #1c2833; }
+        html.theme-marble .toggle button.active { background: #1e3a5f; color: #f9fafb; }
+        html.theme-marble .toggle button + button { border-left-color: rgba(28,40,51,0.14); }
+        html.theme-marble .mini-select { background: #ffffff; color: #1e3a5f; border-color: rgba(28,40,51,0.14); }
+        html.theme-marble .badge-open { background: rgba(184,142,60,0.16); color: #6e5526; }
+        html.theme-marble .badge-paid { background: rgba(46,94,60,0.14); color: #2e5e3c; }
+        html.theme-marble .badge-draft { background: rgba(28,40,51,0.08); color: #6a7681; }
+        html.theme-marble .badge-other { background: rgba(139,46,46,0.12); color: #8b2e2e; }
+        html.theme-marble .hint { background: rgba(92,119,145,0.10); border-left-color: #5c7791; color: #1c2833; }
+        html.theme-marble .card .head .more-btn, html.theme-marble .panel-header .more-btn { background: #f9fafb; color: #1e3a5f; border-color: rgba(28,40,51,0.14); }
+        html.theme-marble .card .head .more-btn:hover, html.theme-marble .panel-header .more-btn:hover { background: rgba(30,58,95,0.06); }
+        html.theme-marble .row-action-btn { background: rgba(30,58,95,0.10); color: #1e3a5f; }
+        html.theme-marble .row-action-btn:hover { background: #1e3a5f; color: #f9fafb; }
+        html.theme-marble .toolbar select,
+        html.theme-marble .toolbar .combo input {
+            background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M0 0l5 6 5-6z' fill='%236a7681'/></svg>");
+            background-repeat: no-repeat; background-position: right 10px center;
+        }
+        html.theme-marble .toolbar .combo-arrow { color: #6a7681; }
+        html.theme-marble .toolbar .combo-popup { background: #ffffff; border-color: rgba(28,40,51,0.14); box-shadow: 0 8px 24px rgba(28,40,51,0.16); }
+        html.theme-marble .toolbar .combo-popup .opt { border-bottom-color: rgba(28,40,51,0.06); }
+        html.theme-marble .toolbar .combo-popup .opt:hover, html.theme-marble .toolbar .combo-popup .opt.active { background: rgba(30,58,95,0.06); }
+        html.theme-marble .toolbar .combo-popup .opt .code { color: #1e3a5f; }
+        html.theme-marble .toolbar .combo-popup .opt .desc { color: #6a7681; }
+        html.theme-marble .toolbar .combo-popup .opt.empty { color: #6a7681; }
+        html.theme-marble .modal-card { background: #ffffff; }
+        html.theme-marble .modal-header { border-bottom-color: rgba(28,40,51,0.08); }
+        html.theme-marble .modal-header h2 { color: #1e3a5f; font-family: 'Cormorant Garamond', serif; }
+        html.theme-marble .signin-overlay { background: rgba(241,242,244,0.96); }
+        html.theme-marble .signin-card { background: #ffffff; color: #1c2833; border: 1px solid rgba(28,40,51,0.14); box-shadow: 0 12px 40px rgba(28,40,51,0.18); }
+        html.theme-marble .signin-card h2 { color: #1e3a5f; font-family: 'Cormorant Garamond', serif; }
+        html.theme-marble .signin-card .big-btn { background: #1e3a5f; color: #f9fafb; box-shadow: 0 4px 14px rgba(30,58,95,0.28); }
+        html.theme-marble .theme-btn { color: #1e3a5f; border-color: rgba(28,40,51,0.14); }
+        html.theme-marble .progress { background: #1e3a5f; color: #f9fafb; box-shadow: 0 4px 18px rgba(30,58,95,0.28); }
+
+        /* ================================================================
+           THEME 7 · VELVET  —  Oxblood + antique gold + cream serif
+           ================================================================ */
+        html.theme-velvet body { background: #1a0a0f; color: #f0e6d2; font-family: 'Inter', sans-serif; }
+        html.theme-velvet .sidebar { background: #2a1014; color: #f0e6d2; border-right: 1px solid rgba(201,160,74,0.16); }
+        html.theme-velvet .sidebar .brand h1 { font-family: 'Cormorant Garamond', serif; font-weight: 600; font-size: 22px; color: #c9a04a; letter-spacing: 0.5px; }
+        html.theme-velvet .sidebar .brand .sub { color: rgba(240,230,210,0.55); }
+        html.theme-velvet .sidebar a { color: #f0e6d2; opacity: 0.72; }
+        html.theme-velvet .sidebar a:hover { background: rgba(201,160,74,0.06); opacity: 1; }
+        html.theme-velvet .sidebar a.active { background: rgba(201,160,74,0.12); border-left-color: #c9a04a; opacity: 1; color: #c9a04a; font-weight: 700; }
+        html.theme-velvet .sidebar .group-label { color: rgba(240,230,210,0.45); }
+        html.theme-velvet .header { background: #2a1014; box-shadow: 0 1px 0 rgba(201,160,74,0.12); border-bottom: 1px solid rgba(201,160,74,0.16); }
+        html.theme-velvet .header h2 { font-family: 'Cormorant Garamond', serif; font-weight: 600; font-size: 24px; color: #c9a04a; letter-spacing: 0.5px; }
+        html.theme-velvet .header .right { color: rgba(240,230,210,0.62); }
+        html.theme-velvet .header .right .user { color: #f0e6d2; }
+        html.theme-velvet .toolbar { background: #2a1014; box-shadow: none; border: 1px solid rgba(201,160,74,0.16); }
+        html.theme-velvet .toolbar label { color: rgba(240,230,210,0.55); letter-spacing: 0.8px; }
+        html.theme-velvet .toolbar input, html.theme-velvet .toolbar select { background: #1a0a0f; color: #f0e6d2; border-color: rgba(201,160,74,0.20); }
+        html.theme-velvet .btn-primary { background: #c9a04a; color: #1a0a0f; box-shadow: 0 4px 12px rgba(201,160,74,0.30); }
+        html.theme-velvet .btn-primary:hover { background: #d6b259; transform: translateY(-1px); }
+        html.theme-velvet .chip { background: rgba(201,160,74,0.14); color: #c9a04a; }
+        html.theme-velvet .kpi { background: #2a1014 !important; color: #f0e6d2; border: 1px solid rgba(201,160,74,0.16); box-shadow: 0 1px 3px rgba(0,0,0,0.4); }
+        html.theme-velvet .kpi::after { background: rgba(201,160,74,0.08); }
+        html.theme-velvet .kpi .label { color: rgba(240,230,210,0.55); letter-spacing: 0.8px; }
+        html.theme-velvet .kpi .value { color: #c9a04a; font-family: 'Cormorant Garamond', serif; font-weight: 500; font-size: 30px; }
+        html.theme-velvet .kpi .sub { color: rgba(240,230,210,0.55); }
+        html.theme-velvet .card, html.theme-velvet .panel, html.theme-velvet .breadcrumb { background: #2a1014; box-shadow: 0 1px 3px rgba(0,0,0,0.4); border: 1px solid rgba(201,160,74,0.16); }
+        html.theme-velvet .card h3, html.theme-velvet .panel-header h2 { color: #c9a04a; font-family: 'Cormorant Garamond', serif; font-weight: 500; font-size: 19px; letter-spacing: 0.3px; }
+        html.theme-velvet .card .head .meta, html.theme-velvet .panel-header .meta { color: rgba(240,230,210,0.55); }
+        html.theme-velvet .panel-header { border-bottom: 1px solid rgba(201,160,74,0.14); }
+        html.theme-velvet .panel-header input.search { background: #1a0a0f; color: #f0e6d2; border-color: rgba(201,160,74,0.20); }
+        html.theme-velvet th { background: #1a0a0f; color: #c9a04a; border-bottom: 1px solid rgba(201,160,74,0.20); font-family: 'Inter', sans-serif; }
+        html.theme-velvet th:hover { background: #220c12; }
+        html.theme-velvet td { color: #f0e6d2; border-bottom: 1px solid rgba(201,160,74,0.08); }
+        html.theme-velvet tr:hover { background: rgba(201,160,74,0.06); border-left: 2px solid #c9a04a; }
+        html.theme-velvet td.pos { color: #b8c674; }
+        html.theme-velvet td.neg { color: #d97a6c; }
+        html.theme-velvet .breadcrumb a { color: #c9a04a; }
+        html.theme-velvet .breadcrumb .current { color: #f0e6d2; }
+        html.theme-velvet .breadcrumb .back-btn { background: rgba(201,160,74,0.14); color: #c9a04a; }
+        html.theme-velvet .toggle { border-color: rgba(201,160,74,0.20); }
+        html.theme-velvet .toggle button { background: #2a1014; color: #f0e6d2; }
+        html.theme-velvet .toggle button.active { background: #c9a04a; color: #1a0a0f; }
+        html.theme-velvet .toggle button + button { border-left-color: rgba(201,160,74,0.20); }
+        html.theme-velvet .mini-select { background: #1a0a0f; color: #c9a04a; border-color: rgba(201,160,74,0.20); }
+        html.theme-velvet .badge-open { background: rgba(201,160,74,0.18); color: #c9a04a; }
+        html.theme-velvet .badge-paid { background: rgba(184,198,116,0.16); color: #b8c674; }
+        html.theme-velvet .badge-draft { background: rgba(240,230,210,0.10); color: rgba(240,230,210,0.62); }
+        html.theme-velvet .badge-other { background: rgba(217,122,108,0.16); color: #d97a6c; }
+        html.theme-velvet .hint { background: rgba(201,160,74,0.08); border-left-color: #c9a04a; color: #f0e6d2; }
+        html.theme-velvet .card .head .more-btn, html.theme-velvet .panel-header .more-btn { background: #1a0a0f; color: #c9a04a; border-color: rgba(201,160,74,0.20); }
+        html.theme-velvet .card .head .more-btn:hover, html.theme-velvet .panel-header .more-btn:hover { background: rgba(201,160,74,0.10); }
+        html.theme-velvet .row-action-btn { background: rgba(201,160,74,0.14); color: #c9a04a; }
+        html.theme-velvet .row-action-btn:hover { background: #c9a04a; color: #1a0a0f; }
+        html.theme-velvet .toolbar select,
+        html.theme-velvet .toolbar .combo input {
+            background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M0 0l5 6 5-6z' fill='%23c9a04a'/></svg>");
+            background-repeat: no-repeat; background-position: right 10px center;
+        }
+        html.theme-velvet .toolbar .combo-arrow { color: #c9a04a; }
+        html.theme-velvet .toolbar .combo-popup { background: #2a1014; border-color: rgba(201,160,74,0.20); box-shadow: 0 8px 24px rgba(0,0,0,0.6); }
+        html.theme-velvet .toolbar .combo-popup .opt { border-bottom-color: rgba(201,160,74,0.08); }
+        html.theme-velvet .toolbar .combo-popup .opt:hover, html.theme-velvet .toolbar .combo-popup .opt.active { background: rgba(201,160,74,0.10); }
+        html.theme-velvet .toolbar .combo-popup .opt .code { color: #c9a04a; }
+        html.theme-velvet .toolbar .combo-popup .opt .desc { color: rgba(240,230,210,0.55); }
+        html.theme-velvet .toolbar .combo-popup .opt.empty { color: rgba(240,230,210,0.55); }
+        html.theme-velvet .modal-card { background: #2a1014; }
+        html.theme-velvet .modal-header { border-bottom-color: rgba(201,160,74,0.14); }
+        html.theme-velvet .modal-header h2 { color: #c9a04a; font-family: 'Cormorant Garamond', serif; }
+        html.theme-velvet .signin-overlay { background: rgba(26,10,15,0.96); }
+        html.theme-velvet .signin-card { background: #2a1014; color: #f0e6d2; border: 1px solid rgba(201,160,74,0.20); box-shadow: 0 12px 40px rgba(0,0,0,0.7); }
+        html.theme-velvet .signin-card h2 { color: #c9a04a; font-family: 'Cormorant Garamond', serif; }
+        html.theme-velvet .signin-card .big-btn { background: #c9a04a; color: #1a0a0f; box-shadow: 0 4px 14px rgba(201,160,74,0.40); }
+        html.theme-velvet .theme-btn { color: #c9a04a; border-color: rgba(201,160,74,0.20); }
+        html.theme-velvet .progress { background: #c9a04a; color: #1a0a0f; box-shadow: 0 4px 18px rgba(201,160,74,0.35); }
+
+        /* ================================================================
+           THEME 8 · GLACIER  —  Arctic ice + cobalt + silver hairlines
+           ================================================================ */
+        html.theme-glacier body { background: #e8eef3; color: #1a2738; font-family: 'Inter', sans-serif; }
+        html.theme-glacier .sidebar { background: #f6f9fb; color: #1a2738; border-right: 1px solid rgba(26,39,56,0.10); box-shadow: inset -1px 0 0 rgba(255,255,255,0.6); }
+        html.theme-glacier .sidebar .brand h1 { font-family: 'Fraunces', serif; font-weight: 500; font-size: 22px; color: #1b4f7e; letter-spacing: 0.5px; }
+        html.theme-glacier .sidebar .brand .sub { color: #5e7286; }
+        html.theme-glacier .sidebar a { color: #1a2738; opacity: 0.72; }
+        html.theme-glacier .sidebar a:hover { background: rgba(74,144,194,0.06); opacity: 1; }
+        html.theme-glacier .sidebar a.active { background: rgba(27,79,126,0.08); border-left-color: #1b4f7e; opacity: 1; color: #1b4f7e; font-weight: 700; }
+        html.theme-glacier .sidebar .group-label { color: #5e7286; }
+        html.theme-glacier .header { background: #f6f9fb; box-shadow: 0 1px 0 rgba(26,39,56,0.08); border-bottom: 1px solid rgba(26,39,56,0.10); }
+        html.theme-glacier .header h2 { font-family: 'Fraunces', serif; font-weight: 500; font-size: 24px; color: #1b4f7e; letter-spacing: 0.5px; }
+        html.theme-glacier .header .right { color: #5e7286; }
+        html.theme-glacier .header .right .user { color: #1a2738; }
+        html.theme-glacier .toolbar { background: #ffffff; box-shadow: 0 1px 3px rgba(26,39,56,0.06); border: 1px solid rgba(26,39,56,0.08); }
+        html.theme-glacier .toolbar label { color: #5e7286; letter-spacing: 0.8px; }
+        html.theme-glacier .toolbar input, html.theme-glacier .toolbar select { background: #f6f9fb; color: #1a2738; border-color: rgba(26,39,56,0.14); }
+        html.theme-glacier .btn-primary { background: #1b4f7e; color: #f6f9fb; box-shadow: 0 4px 12px rgba(27,79,126,0.25); }
+        html.theme-glacier .btn-primary:hover { background: #173f66; transform: translateY(-1px); }
+        html.theme-glacier .chip { background: rgba(27,79,126,0.10); color: #1b4f7e; }
+        html.theme-glacier .kpi { background: #f6f9fb !important; color: #1a2738; border: 1px solid rgba(26,39,56,0.08); box-shadow: inset 0 1px 0 rgba(255,255,255,0.8), 0 1px 3px rgba(26,39,56,0.05); }
+        html.theme-glacier .kpi::after { background: rgba(74,144,194,0.06); }
+        html.theme-glacier .kpi .label { color: #5e7286; letter-spacing: 0.8px; }
+        html.theme-glacier .kpi .value { color: #1a2738; font-family: 'Fraunces', serif; font-weight: 500; font-size: 30px; }
+        html.theme-glacier .kpi .sub { color: #5e7286; }
+        html.theme-glacier .card, html.theme-glacier .panel, html.theme-glacier .breadcrumb { background: #f6f9fb; box-shadow: inset 0 1px 0 rgba(255,255,255,0.7), 0 1px 3px rgba(26,39,56,0.05); border: 1px solid rgba(26,39,56,0.08); }
+        html.theme-glacier .card h3, html.theme-glacier .panel-header h2 { color: #1b4f7e; font-family: 'Fraunces', serif; font-weight: 500; font-size: 19px; letter-spacing: 0.3px; }
+        html.theme-glacier .card .head .meta, html.theme-glacier .panel-header .meta { color: #5e7286; }
+        html.theme-glacier .panel-header { border-bottom: 1px solid rgba(26,39,56,0.08); }
+        html.theme-glacier .panel-header input.search { background: #ffffff; color: #1a2738; border-color: rgba(26,39,56,0.14); }
+        html.theme-glacier th { background: #dde7ef; color: #1b4f7e; border-bottom: 1px solid rgba(27,79,126,0.16); font-family: 'Inter', sans-serif; }
+        html.theme-glacier th:hover { background: #d1dde7; }
+        html.theme-glacier td { color: #1a2738; border-bottom: 1px solid rgba(26,39,56,0.06); }
+        html.theme-glacier tr:hover { background: rgba(74,144,194,0.06); border-left: 2px solid #4a90c2; }
+        html.theme-glacier td.pos { color: #2e6d5c; }
+        html.theme-glacier td.neg { color: #8b3a4a; }
+        html.theme-glacier .breadcrumb a { color: #1b4f7e; }
+        html.theme-glacier .breadcrumb .current { color: #1a2738; }
+        html.theme-glacier .breadcrumb .back-btn { background: rgba(27,79,126,0.10); color: #1b4f7e; }
+        html.theme-glacier .toggle { border-color: rgba(26,39,56,0.14); }
+        html.theme-glacier .toggle button { background: #f6f9fb; color: #1a2738; }
+        html.theme-glacier .toggle button.active { background: #1b4f7e; color: #f6f9fb; }
+        html.theme-glacier .toggle button + button { border-left-color: rgba(26,39,56,0.14); }
+        html.theme-glacier .mini-select { background: #f6f9fb; color: #1b4f7e; border-color: rgba(26,39,56,0.14); }
+        html.theme-glacier .badge-open { background: rgba(184,142,60,0.16); color: #6e5526; }
+        html.theme-glacier .badge-paid { background: rgba(46,109,92,0.14); color: #2e6d5c; }
+        html.theme-glacier .badge-draft { background: rgba(26,39,56,0.08); color: #5e7286; }
+        html.theme-glacier .badge-other { background: rgba(139,58,74,0.12); color: #8b3a4a; }
+        html.theme-glacier .hint { background: rgba(74,144,194,0.10); border-left-color: #4a90c2; color: #1a2738; }
+        html.theme-glacier .card .head .more-btn, html.theme-glacier .panel-header .more-btn { background: #ffffff; color: #1b4f7e; border-color: rgba(26,39,56,0.14); }
+        html.theme-glacier .card .head .more-btn:hover, html.theme-glacier .panel-header .more-btn:hover { background: rgba(27,79,126,0.06); }
+        html.theme-glacier .row-action-btn { background: rgba(27,79,126,0.10); color: #1b4f7e; }
+        html.theme-glacier .row-action-btn:hover { background: #1b4f7e; color: #f6f9fb; }
+        html.theme-glacier .toolbar select,
+        html.theme-glacier .toolbar .combo input {
+            background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M0 0l5 6 5-6z' fill='%235e7286'/></svg>");
+            background-repeat: no-repeat; background-position: right 10px center;
+        }
+        html.theme-glacier .toolbar .combo-arrow { color: #5e7286; }
+        html.theme-glacier .toolbar .combo-popup { background: #f6f9fb; border-color: rgba(26,39,56,0.14); box-shadow: 0 8px 24px rgba(26,39,56,0.16); }
+        html.theme-glacier .toolbar .combo-popup .opt { border-bottom-color: rgba(26,39,56,0.06); }
+        html.theme-glacier .toolbar .combo-popup .opt:hover, html.theme-glacier .toolbar .combo-popup .opt.active { background: rgba(74,144,194,0.08); }
+        html.theme-glacier .toolbar .combo-popup .opt .code { color: #1b4f7e; }
+        html.theme-glacier .toolbar .combo-popup .opt .desc { color: #5e7286; }
+        html.theme-glacier .toolbar .combo-popup .opt.empty { color: #5e7286; }
+        html.theme-glacier .modal-card { background: #f6f9fb; }
+        html.theme-glacier .modal-header { border-bottom-color: rgba(26,39,56,0.08); }
+        html.theme-glacier .modal-header h2 { color: #1b4f7e; font-family: 'Fraunces', serif; }
+        html.theme-glacier .signin-overlay { background: rgba(232,238,243,0.96); }
+        html.theme-glacier .signin-card { background: #f6f9fb; color: #1a2738; border: 1px solid rgba(26,39,56,0.14); box-shadow: 0 12px 40px rgba(26,39,56,0.18); }
+        html.theme-glacier .signin-card h2 { color: #1b4f7e; font-family: 'Fraunces', serif; }
+        html.theme-glacier .signin-card .big-btn { background: #1b4f7e; color: #f6f9fb; box-shadow: 0 4px 14px rgba(27,79,126,0.28); }
+        html.theme-glacier .theme-btn { color: #1b4f7e; border-color: rgba(26,39,56,0.14); }
+        html.theme-glacier .progress { background: #1b4f7e; color: #f6f9fb; box-shadow: 0 4px 18px rgba(27,79,126,0.28); }
+
+        /* ================================================================
+           THEME 9 · BIBLIOTHÈQUE  —  Library parchment + claret + gilt
+           ================================================================ */
+        html.theme-bibliotheque body { background: #ede4d2; color: #2a1c0e; font-family: 'Inter', sans-serif; }
+        html.theme-bibliotheque .sidebar { background: #f6efdd; color: #2a1c0e; border-right: 1px solid rgba(42,28,14,0.16); }
+        html.theme-bibliotheque .sidebar .brand h1 { font-family: 'Cormorant Garamond', serif; font-weight: 600; font-style: italic; font-size: 22px; color: #7a1f2b; letter-spacing: 0.5px; }
+        html.theme-bibliotheque .sidebar .brand .sub { color: #6e5526; }
+        html.theme-bibliotheque .sidebar a { color: #2a1c0e; opacity: 0.75; }
+        html.theme-bibliotheque .sidebar a:hover { background: rgba(122,31,43,0.05); opacity: 1; }
+        html.theme-bibliotheque .sidebar a.active { background: rgba(122,31,43,0.10); border-left-color: #b8923c; opacity: 1; color: #7a1f2b; font-weight: 700; }
+        html.theme-bibliotheque .sidebar .group-label { color: #6e5526; }
+        html.theme-bibliotheque .header { background: #f6efdd; box-shadow: 0 1px 0 rgba(42,28,14,0.10); border-bottom: 1px solid rgba(42,28,14,0.16); }
+        html.theme-bibliotheque .header h2 { font-family: 'Cormorant Garamond', serif; font-weight: 600; font-style: italic; font-size: 26px; color: #7a1f2b; letter-spacing: 0.3px; }
+        html.theme-bibliotheque .header .right { color: #6e5526; }
+        html.theme-bibliotheque .header .right .user { color: #2a1c0e; }
+        html.theme-bibliotheque .toolbar { background: #f6efdd; box-shadow: inset 0 1px 0 rgba(255,255,255,0.5); border: 1px solid rgba(42,28,14,0.12); }
+        html.theme-bibliotheque .toolbar label { color: #6e5526; letter-spacing: 1px; }
+        html.theme-bibliotheque .toolbar input, html.theme-bibliotheque .toolbar select { background: #fbf6e6; color: #2a1c0e; border-color: rgba(42,28,14,0.18); }
+        html.theme-bibliotheque .btn-primary { background: #7a1f2b; color: #f6efdd; box-shadow: 0 4px 12px rgba(122,31,43,0.25); }
+        html.theme-bibliotheque .btn-primary:hover { background: #631823; transform: translateY(-1px); }
+        html.theme-bibliotheque .chip { background: rgba(122,31,43,0.10); color: #7a1f2b; }
+        html.theme-bibliotheque .kpi { background: #f6efdd !important; color: #2a1c0e; border: 1px solid rgba(42,28,14,0.12); box-shadow: inset 0 1px 0 rgba(255,255,255,0.6), 0 1px 3px rgba(42,28,14,0.06); }
+        html.theme-bibliotheque .kpi::after { background: rgba(184,146,60,0.08); }
+        html.theme-bibliotheque .kpi .label { color: #6e5526; letter-spacing: 1px; }
+        html.theme-bibliotheque .kpi .value { color: #2a1c0e; font-family: 'Cormorant Garamond', serif; font-weight: 600; font-style: italic; font-size: 32px; }
+        html.theme-bibliotheque .kpi .sub { color: #6e5526; }
+        html.theme-bibliotheque .card, html.theme-bibliotheque .panel, html.theme-bibliotheque .breadcrumb { background: #f6efdd; box-shadow: inset 0 1px 0 rgba(255,255,255,0.6), 0 1px 3px rgba(42,28,14,0.06); border: 1px solid rgba(42,28,14,0.12); }
+        html.theme-bibliotheque .card h3, html.theme-bibliotheque .panel-header h2 { color: #7a1f2b; font-family: 'Cormorant Garamond', serif; font-weight: 600; font-style: italic; font-size: 20px; letter-spacing: 0.3px; }
+        html.theme-bibliotheque .card .head .meta, html.theme-bibliotheque .panel-header .meta { color: #6e5526; }
+        html.theme-bibliotheque .panel-header { border-bottom: 1px solid rgba(42,28,14,0.16); }
+        html.theme-bibliotheque .panel-header input.search { background: #fbf6e6; color: #2a1c0e; border-color: rgba(42,28,14,0.18); }
+        html.theme-bibliotheque th { background: #e3d8bf; color: #7a1f2b; border-bottom: 1px solid rgba(122,31,43,0.20); font-family: 'Cormorant Garamond', serif; font-weight: 600; font-style: italic; letter-spacing: 0.3px; text-transform: none; }
+        html.theme-bibliotheque th:hover { background: #d9cdb1; }
+        html.theme-bibliotheque td { color: #2a1c0e; border-bottom: 1px solid rgba(42,28,14,0.08); }
+        html.theme-bibliotheque tr:hover { background: rgba(184,146,60,0.08); border-left: 2px solid #b8923c; }
+        html.theme-bibliotheque td.pos { color: #4a6e2d; }
+        html.theme-bibliotheque td.neg { color: #7a1f2b; }
+        html.theme-bibliotheque .breadcrumb a { color: #7a1f2b; }
+        html.theme-bibliotheque .breadcrumb .current { color: #2a1c0e; }
+        html.theme-bibliotheque .breadcrumb .back-btn { background: rgba(122,31,43,0.10); color: #7a1f2b; }
+        html.theme-bibliotheque .toggle { border-color: rgba(42,28,14,0.18); }
+        html.theme-bibliotheque .toggle button { background: #f6efdd; color: #2a1c0e; }
+        html.theme-bibliotheque .toggle button.active { background: #7a1f2b; color: #f6efdd; }
+        html.theme-bibliotheque .toggle button + button { border-left-color: rgba(42,28,14,0.18); }
+        html.theme-bibliotheque .mini-select { background: #f6efdd; color: #7a1f2b; border-color: rgba(42,28,14,0.18); }
+        html.theme-bibliotheque .badge-open { background: rgba(184,146,60,0.18); color: #6e5526; }
+        html.theme-bibliotheque .badge-paid { background: rgba(74,110,45,0.14); color: #4a6e2d; }
+        html.theme-bibliotheque .badge-draft { background: rgba(42,28,14,0.08); color: #6e5526; }
+        html.theme-bibliotheque .badge-other { background: rgba(122,31,43,0.12); color: #7a1f2b; }
+        html.theme-bibliotheque .hint { background: rgba(184,146,60,0.10); border-left-color: #b8923c; color: #2a1c0e; }
+        html.theme-bibliotheque .card .head .more-btn, html.theme-bibliotheque .panel-header .more-btn { background: #fbf6e6; color: #7a1f2b; border-color: rgba(42,28,14,0.18); }
+        html.theme-bibliotheque .card .head .more-btn:hover, html.theme-bibliotheque .panel-header .more-btn:hover { background: rgba(122,31,43,0.08); }
+        html.theme-bibliotheque .row-action-btn { background: rgba(122,31,43,0.10); color: #7a1f2b; }
+        html.theme-bibliotheque .row-action-btn:hover { background: #7a1f2b; color: #f6efdd; }
+        html.theme-bibliotheque .toolbar select,
+        html.theme-bibliotheque .toolbar .combo input {
+            background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M0 0l5 6 5-6z' fill='%236e5526'/></svg>");
+            background-repeat: no-repeat; background-position: right 10px center;
+        }
+        html.theme-bibliotheque .toolbar .combo-arrow { color: #6e5526; }
+        html.theme-bibliotheque .toolbar .combo-popup { background: #f6efdd; border-color: rgba(42,28,14,0.18); box-shadow: 0 8px 24px rgba(42,28,14,0.20); }
+        html.theme-bibliotheque .toolbar .combo-popup .opt { border-bottom-color: rgba(42,28,14,0.10); }
+        html.theme-bibliotheque .toolbar .combo-popup .opt:hover, html.theme-bibliotheque .toolbar .combo-popup .opt.active { background: rgba(184,146,60,0.10); }
+        html.theme-bibliotheque .toolbar .combo-popup .opt .code { color: #7a1f2b; }
+        html.theme-bibliotheque .toolbar .combo-popup .opt .desc { color: #6e5526; }
+        html.theme-bibliotheque .toolbar .combo-popup .opt.empty { color: #6e5526; }
+        html.theme-bibliotheque .modal-card { background: #f6efdd; }
+        html.theme-bibliotheque .modal-header { border-bottom-color: rgba(42,28,14,0.16); }
+        html.theme-bibliotheque .modal-header h2 { color: #7a1f2b; font-family: 'Cormorant Garamond', serif; font-style: italic; }
+        html.theme-bibliotheque .signin-overlay { background: rgba(237,228,210,0.96); }
+        html.theme-bibliotheque .signin-card { background: #f6efdd; color: #2a1c0e; border: 1px solid rgba(42,28,14,0.18); box-shadow: 0 12px 40px rgba(42,28,14,0.22); }
+        html.theme-bibliotheque .signin-card h2 { color: #7a1f2b; font-family: 'Cormorant Garamond', serif; font-style: italic; }
+        html.theme-bibliotheque .signin-card .big-btn { background: #7a1f2b; color: #f6efdd; box-shadow: 0 4px 14px rgba(122,31,43,0.30); }
+        html.theme-bibliotheque .theme-btn { color: #7a1f2b; border-color: rgba(42,28,14,0.18); }
+        html.theme-bibliotheque .progress { background: #7a1f2b; color: #f6efdd; box-shadow: 0 4px 18px rgba(122,31,43,0.30); }
+
+        /* ================================================================
+           THEME 10 · PAVILION  —  Sage + cream + brushed brass (Japandi)
+           ================================================================ */
+        html.theme-pavilion body { background: #efeae0; color: #2e3329; font-family: 'Inter', sans-serif; }
+        html.theme-pavilion .sidebar { background: #f9f5ec; color: #2e3329; border-right: 1px solid rgba(46,51,41,0.12); }
+        html.theme-pavilion .sidebar .brand h1 { font-family: 'Fraunces', serif; font-weight: 500; font-size: 22px; color: #2e3329; letter-spacing: 0.4px; }
+        html.theme-pavilion .sidebar .brand .sub { color: #6e7561; }
+        html.theme-pavilion .sidebar a { color: #2e3329; opacity: 0.72; }
+        html.theme-pavilion .sidebar a:hover { background: rgba(110,125,94,0.06); opacity: 1; }
+        html.theme-pavilion .sidebar a.active { background: rgba(110,125,94,0.10); border-left-color: #a88a4c; opacity: 1; color: #2e3329; font-weight: 700; }
+        html.theme-pavilion .sidebar .group-label { color: #6e7561; }
+        html.theme-pavilion .header { background: #f9f5ec; box-shadow: 0 1px 0 rgba(46,51,41,0.08); border-bottom: 1px solid rgba(46,51,41,0.12); }
+        html.theme-pavilion .header h2 { font-family: 'Fraunces', serif; font-weight: 500; font-size: 24px; color: #2e3329; letter-spacing: 0.4px; }
+        html.theme-pavilion .header .right { color: #6e7561; }
+        html.theme-pavilion .header .right .user { color: #2e3329; }
+        html.theme-pavilion .toolbar { background: transparent; box-shadow: none; border: 0; border-bottom: 1px solid rgba(46,51,41,0.14); border-radius: 0; padding-left: 0; padding-right: 0; }
+        html.theme-pavilion .toolbar label { color: #6e7561; letter-spacing: 1.2px; }
+        html.theme-pavilion .toolbar input, html.theme-pavilion .toolbar select { background: #f9f5ec; color: #2e3329; border-color: rgba(46,51,41,0.18); }
+        html.theme-pavilion .btn-primary { background: #6e7d5e; color: #f9f5ec; box-shadow: 0 4px 12px rgba(110,125,94,0.25); }
+        html.theme-pavilion .btn-primary:hover { background: #5b6c4d; transform: translateY(-1px); }
+        html.theme-pavilion .chip { background: rgba(110,125,94,0.12); color: #2e3329; }
+        html.theme-pavilion .kpi { background: #f9f5ec !important; color: #2e3329; border: 1px solid rgba(46,51,41,0.10); box-shadow: 0 1px 3px rgba(46,51,41,0.05); }
+        html.theme-pavilion .kpi::after { background: rgba(168,138,76,0.08); }
+        html.theme-pavilion .kpi .label { color: #6e7561; letter-spacing: 1.2px; }
+        html.theme-pavilion .kpi .value { color: #2e3329; font-family: 'Fraunces', serif; font-weight: 500; font-size: 30px; }
+        html.theme-pavilion .kpi .sub { color: #6e7561; }
+        html.theme-pavilion .card, html.theme-pavilion .panel, html.theme-pavilion .breadcrumb { background: #f9f5ec; box-shadow: 0 1px 3px rgba(46,51,41,0.05); border: 1px solid rgba(46,51,41,0.10); }
+        html.theme-pavilion .card h3, html.theme-pavilion .panel-header h2 { color: #2e3329; font-family: 'Fraunces', serif; font-weight: 500; font-size: 19px; letter-spacing: 0.3px; }
+        html.theme-pavilion .card .head .meta, html.theme-pavilion .panel-header .meta { color: #6e7561; }
+        html.theme-pavilion .panel-header { border-bottom: 1px solid rgba(46,51,41,0.10); }
+        html.theme-pavilion .panel-header input.search { background: #ffffff; color: #2e3329; border-color: rgba(46,51,41,0.18); }
+        html.theme-pavilion th { background: transparent; color: #2e3329; border-bottom: 1px solid rgba(46,51,41,0.20); font-family: 'Inter', sans-serif; font-weight: 600; letter-spacing: 1px; }
+        html.theme-pavilion th:hover { background: rgba(110,125,94,0.06); }
+        html.theme-pavilion td { color: #2e3329; border-bottom: 1px solid rgba(46,51,41,0.06); }
+        html.theme-pavilion tr:hover { background: rgba(168,138,76,0.06); border-left: 2px solid #a88a4c; }
+        html.theme-pavilion td.pos { color: #4a6e2d; }
+        html.theme-pavilion td.neg { color: #8b4a3a; }
+        html.theme-pavilion .breadcrumb a { color: #2e3329; }
+        html.theme-pavilion .breadcrumb .current { color: #2e3329; }
+        html.theme-pavilion .breadcrumb .back-btn { background: rgba(110,125,94,0.12); color: #2e3329; }
+        html.theme-pavilion .toggle { border-color: rgba(46,51,41,0.18); }
+        html.theme-pavilion .toggle button { background: #f9f5ec; color: #2e3329; }
+        html.theme-pavilion .toggle button.active { background: #6e7d5e; color: #f9f5ec; }
+        html.theme-pavilion .toggle button + button { border-left-color: rgba(46,51,41,0.18); }
+        html.theme-pavilion .mini-select { background: #f9f5ec; color: #2e3329; border-color: rgba(46,51,41,0.18); }
+        html.theme-pavilion .badge-open { background: rgba(168,138,76,0.16); color: #6e5526; }
+        html.theme-pavilion .badge-paid { background: rgba(74,110,45,0.14); color: #4a6e2d; }
+        html.theme-pavilion .badge-draft { background: rgba(46,51,41,0.08); color: #6e7561; }
+        html.theme-pavilion .badge-other { background: rgba(139,74,58,0.12); color: #8b4a3a; }
+        html.theme-pavilion .hint { background: rgba(168,138,76,0.10); border-left-color: #a88a4c; color: #2e3329; }
+        html.theme-pavilion .card .head .more-btn, html.theme-pavilion .panel-header .more-btn { background: #f9f5ec; color: #2e3329; border-color: rgba(46,51,41,0.18); }
+        html.theme-pavilion .card .head .more-btn:hover, html.theme-pavilion .panel-header .more-btn:hover { background: rgba(110,125,94,0.08); }
+        html.theme-pavilion .row-action-btn { background: rgba(110,125,94,0.12); color: #2e3329; }
+        html.theme-pavilion .row-action-btn:hover { background: #6e7d5e; color: #f9f5ec; }
+        html.theme-pavilion .toolbar select,
+        html.theme-pavilion .toolbar .combo input {
+            background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M0 0l5 6 5-6z' fill='%236e7561'/></svg>");
+            background-repeat: no-repeat; background-position: right 10px center;
+        }
+        html.theme-pavilion .toolbar .combo-arrow { color: #6e7561; }
+        html.theme-pavilion .toolbar .combo-popup { background: #f9f5ec; border-color: rgba(46,51,41,0.18); box-shadow: 0 8px 24px rgba(46,51,41,0.18); }
+        html.theme-pavilion .toolbar .combo-popup .opt { border-bottom-color: rgba(46,51,41,0.10); }
+        html.theme-pavilion .toolbar .combo-popup .opt:hover, html.theme-pavilion .toolbar .combo-popup .opt.active { background: rgba(110,125,94,0.08); }
+        html.theme-pavilion .toolbar .combo-popup .opt .code { color: #2e3329; }
+        html.theme-pavilion .toolbar .combo-popup .opt .desc { color: #6e7561; }
+        html.theme-pavilion .toolbar .combo-popup .opt.empty { color: #6e7561; }
+        html.theme-pavilion .modal-card { background: #f9f5ec; }
+        html.theme-pavilion .modal-header { border-bottom-color: rgba(46,51,41,0.10); }
+        html.theme-pavilion .modal-header h2 { color: #2e3329; font-family: 'Fraunces', serif; }
+        html.theme-pavilion .signin-overlay { background: rgba(239,234,224,0.96); }
+        html.theme-pavilion .signin-card { background: #f9f5ec; color: #2e3329; border: 1px solid rgba(46,51,41,0.18); box-shadow: 0 12px 40px rgba(46,51,41,0.20); }
+        html.theme-pavilion .signin-card h2 { color: #2e3329; font-family: 'Fraunces', serif; }
+        html.theme-pavilion .signin-card .big-btn { background: #6e7d5e; color: #f9f5ec; box-shadow: 0 4px 14px rgba(110,125,94,0.30); }
+        html.theme-pavilion .theme-btn { color: #2e3329; border-color: rgba(46,51,41,0.18); }
+        html.theme-pavilion .progress { background: #6e7d5e; color: #f9f5ec; box-shadow: 0 4px 18px rgba(110,125,94,0.28); }
     </style>
 </head>
 <body>
@@ -2705,7 +3136,7 @@
 <div class="theme-picker" id="themePicker" style="display:none;">
     <button class="change-banner" id="themePickerClose" style="display:none;">Close</button>
     <h1>Choose your interface</h1>
-    <div class="lead">Five interchangeable visual systems. Pick the one that fits the moment — you can switch any time via the Theme button in the header. Your choice persists across sessions on this device.</div>
+    <div class="lead">Ten interchangeable visual systems. Pick the one that fits the moment — you can switch any time via the Theme button in the header. Your choice persists across sessions on this device.</div>
     <div class="grid">
         <div class="opt onyx" data-theme="onyx">
             <div class="tag">01 · Dark Editorial</div>
@@ -2751,6 +3182,56 @@
             <div class="tag">05 · Hospitality</div>
             <div class="name">Concierge</div>
             <div class="tagline">Sand + emerald, brass on hover, embossed feel. Aman Hotels, Soho House.</div>
+            <div class="preview">
+                <div class="kpi-mini"><span class="lbl">Total Sales</span><span class="val">$2.74M</span></div>
+                <div class="kpi-mini"><span class="lbl">Win Rate</span><span class="val">68%</span></div>
+                <div class="bar"></div>
+            </div>
+        </div>
+        <div class="opt marble" data-theme="marble">
+            <div class="tag">06 · Private Bank</div>
+            <div class="name">Marble</div>
+            <div class="tagline">Carrara white, steel navy, slate hairlines. Coutts statement on hand-laid paper.</div>
+            <div class="preview">
+                <div class="kpi-mini"><span class="lbl">Total Sales</span><span class="val">$2.74M</span></div>
+                <div class="kpi-mini"><span class="lbl">Win Rate</span><span class="val">68%</span></div>
+                <div class="bar"></div>
+            </div>
+        </div>
+        <div class="opt velvet" data-theme="velvet">
+            <div class="tag">07 · Opera House</div>
+            <div class="name">Velvet</div>
+            <div class="tagline">Oxblood + antique gold + cream serif. La Scala loge at curtain call.</div>
+            <div class="preview">
+                <div class="kpi-mini"><span class="lbl">Total Sales</span><span class="val">$2.74M</span></div>
+                <div class="kpi-mini"><span class="lbl">Win Rate</span><span class="val">68%</span></div>
+                <div class="bar"></div>
+            </div>
+        </div>
+        <div class="opt glacier" data-theme="glacier">
+            <div class="tag">08 · Arctic Mineral</div>
+            <div class="name">Glacier</div>
+            <div class="tagline">Ice blue, cobalt accent, crystalline white. Tom Ford for arctic explorers.</div>
+            <div class="preview">
+                <div class="kpi-mini"><span class="lbl">Total Sales</span><span class="val">$2.74M</span></div>
+                <div class="kpi-mini"><span class="lbl">Win Rate</span><span class="val">68%</span></div>
+                <div class="bar"></div>
+            </div>
+        </div>
+        <div class="opt bibliotheque" data-theme="bibliotheque">
+            <div class="tag">09 · Reading Room</div>
+            <div class="name">Bibliothèque</div>
+            <div class="tagline">Parchment, ink, claret leather, gilt edges. British Museum reading room.</div>
+            <div class="preview">
+                <div class="kpi-mini"><span class="lbl">Total Sales</span><span class="val">$2.74M</span></div>
+                <div class="kpi-mini"><span class="lbl">Win Rate</span><span class="val">68%</span></div>
+                <div class="bar"></div>
+            </div>
+        </div>
+        <div class="opt pavilion" data-theme="pavilion">
+            <div class="tag">10 · Japandi</div>
+            <div class="name">Pavilion</div>
+            <div class="tagline">Sage, cream, brushed brass, walnut. Quiet Tadao Andō / Børge Mogensen calm.</div>
             <div class="preview">
                 <div class="kpi-mini"><span class="lbl">Total Sales</span><span class="val">$2.74M</span></div>
                 <div class="kpi-mini"><span class="lbl">Win Rate</span><span class="val">68%</span></div>
@@ -10655,9 +11136,9 @@ renderItemComboPopup("");
 // "classic" is the original look; selecting it just clears any
 // theme class so the underlying default CSS applies unchanged.
 // ============================================================
-const NAMED_THEMES = ["onyx", "linen", "aurora", "atelier", "concierge"];
+const NAMED_THEMES = ["onyx", "linen", "aurora", "atelier", "concierge", "marble", "velvet", "glacier", "bibliotheque", "pavilion"];
 const THEME_NAMES  = ["classic", ...NAMED_THEMES];
-const DARK_THEMES  = new Set(["onyx", "aurora"]);
+const DARK_THEMES  = new Set(["onyx", "aurora", "velvet"]);
 
 function currentTheme() {
     for (const t of NAMED_THEMES) if (document.documentElement.classList.contains("theme-" + t)) return t;
@@ -10671,12 +11152,17 @@ function applyChartDefaultsForTheme(theme) {
     Chart.defaults.color = isDark ? "rgba(245,244,241,0.78)" : "rgba(26,26,26,0.78)";
     Chart.defaults.borderColor = isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)";
     // Use the theme's display font for chart labels — feels coherent.
-    const family = theme === "onyx"      ? "'Inter', sans-serif"
-                 : theme === "linen"     ? "'Inter', sans-serif"
-                 : theme === "aurora"    ? "'Inter', sans-serif"
-                 : theme === "atelier"   ? "'Space Grotesk', sans-serif"
-                 : theme === "concierge" ? "'Inter', sans-serif"
-                 :                          "'Segoe UI', sans-serif"; // classic
+    const family = theme === "onyx"         ? "'Inter', sans-serif"
+                 : theme === "linen"        ? "'Inter', sans-serif"
+                 : theme === "aurora"       ? "'Inter', sans-serif"
+                 : theme === "atelier"      ? "'Space Grotesk', sans-serif"
+                 : theme === "concierge"    ? "'Inter', sans-serif"
+                 : theme === "marble"       ? "'Inter', sans-serif"
+                 : theme === "velvet"       ? "'Inter', sans-serif"
+                 : theme === "glacier"      ? "'Inter', sans-serif"
+                 : theme === "bibliotheque" ? "'Inter', sans-serif"
+                 : theme === "pavilion"     ? "'Inter', sans-serif"
+                 :                             "'Segoe UI', sans-serif"; // classic
     Chart.defaults.font.family = family;
 }
 
