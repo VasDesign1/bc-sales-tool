@@ -1126,7 +1126,7 @@
                     <label for="snapshotAsOf">Compare as of</label>
                     <input type="datetime-local" id="snapshotAsOf">
                 </div>
-                <div class="field" title="Document mode: sales = sum of salesInvoiceLines (amountExcludingTax − invoiceDiscountAllocation). Cost = ILE-based per-(customer, item, day) average with multi-tier fallback. Fast, runs on already-fetched data, ~0.1% drift vs Power BI on the cost line. Value Entry mode: sales = VE Sales_Amount_Actual minus invoice header discount; cost = VE Cost_Amount_Actual + Cost_Amount_Non_Invtbl. Uses BC's actual posted cost flows from table 5802 — closer to PBI structurally but inherits BC quirks (G/L Account or charge revenue lines don't appear in VE, so totals can differ from PBI by a few dollars per invoice). Both modes honour date / customer / item filters in VE mode; salesperson + branch filters apply in Document mode only.">
+                <div class="field" title="Document mode: sales = sum of salesInvoiceLines (amountExcludingTax − invoiceDiscountAllocation), cost = ILE-based per-(customer, item, day) average with multi-tier fallback. Fast, runs on already-fetched data, ~0.1% drift vs Power BI on the cost line. Value Entry mode: sales is still Document mode's sum (VE's Sales_Amount_Actual only covers Item lines and would miss G/L Account / charge / comment lines, which can swing an invoice by thousands), but cost is sourced directly from BC table 5802 (Cost_Amount_Actual + Cost_Amount_Non_Invtbl) — same flow PBI's Adjusted Cost reads. Both modes honour date / customer / item filters; salesperson + branch filters apply in Document mode only.">
                     <label for="salesMode">Cost source</label>
                     <select id="salesMode">
                         <option value="document" selected>Document (fast)</option>
@@ -4239,27 +4239,12 @@ function getValueEntryTotals() {
     // invoices in the same period + customer filter to bring the
     // headline in line with PBI. Item filter would need proportional
     // allocation back to lines — skip for now (any drift is small).
-    if (!fItem) {
-        // BC v2.0 REST exposes the invoice-level discount on each line as
-        // `invoiceDiscountAllocation`, not on the header `discountAmount`
-        // (which reads 0 on this tenant). Sum per line. That total equals
-        // exactly the gap we observed between VE Sales_Amount_Actual and
-        // Document mode's invoice-line-net total.
-        let invoiceDiscount = 0;
-        let invsCount = 0, linesCount = 0;
-        for (const inv of (state.invoices || [])) {
-            if (!inRange(inv.postingDate)) continue;
-            if (fCust && inv.customerNumber !== fCust) continue;
-            invsCount++;
-            for (const ln of (inv.salesInvoiceLines || [])) {
-                linesCount++;
-                invoiceDiscount += num(ln.invoiceDiscountAllocation);
-            }
-        }
-        console.log("[VE mode] discount subtract — looped " + invsCount + " invoices / " +
-            linesCount + " lines, sum of invoiceDiscountAllocation = $" + invoiceDiscount.toFixed(2));
-        sales -= invoiceDiscount;
-    }
+    // Note: VE Sales_Amount_Actual only reflects Item line revenue. Some
+    // invoices include non-Item lines (G/L Account, Comment, Charge) that
+    // contribute to invoice-line totals (Document mode) but never produce
+    // a VE row. We don't try to bridge that here — renderOverview keeps
+    // Document mode's sales total when in VE mode and only routes cost
+    // through VE.
     // Cost amounts on sales VE rows are negative (inventory decreasing).
     // Take magnitude for display + math; sales is naturally positive on
     // an invoice, negative on a credit memo, so leave sign as-is.
@@ -4787,17 +4772,23 @@ function renderOverview() {
     let subGp  = totalInv ? fmtMoney(totalGp / totalInv) + " avg/inv" : "";
 
     if (state.salesMode === "valueentry" && state.valueEntries && state.valueEntries.length) {
-        // Value Entry mode — sales/cost taken directly from BC Value Entries
-        // (matches PBI). Salesperson and Location filters don't yet apply in
-        // this mode because VE rows don't carry those fields; the UI hint
-        // flags this when those filters are active.
+        // Value Entry mode — keep Document mode's sales total (it already
+        // matches PBI to the dollar because it sums invoice-line revenue
+        // including non-Item lines), and only route COST through Value
+        // Entries. VE's Sales_Amount_Actual only covers Item lines, so it
+        // structurally undercounts invoices that contain G/L Account /
+        // Comment / Charge lines (e.g. SINV001806 had a −$10,400 non-Item
+        // line that VE can't see). Cost is the part PBI sources from VE
+        // anyway, so that's the only override we need.
+        // Salesperson and Location filters don't yet apply in this mode
+        // because VE rows don't carry those fields; the UI hint flags
+        // this when those filters are active.
         const ve = getValueEntryTotals();
-        totalRev = ve.sales;
         const veCost = ve.cost;
-        totalGp = ve.sales - veCost;
+        totalGp  = totalRev - veCost;
         totalQty = ve.qty;
-        subRev = ve.rows + " VE rows · PBI-aligned";
-        subGp  = "cost = $" + fmtMoneyFull(veCost).replace("$", "");
+        subRev = ve.rows + " VE rows · Document sales + VE cost";
+        subGp  = "cost from VE: " + fmtMoneyFull(veCost);
     }
 
     document.getElementById("kpiRevenue").textContent  = fmtMoneyFull(totalRev);
