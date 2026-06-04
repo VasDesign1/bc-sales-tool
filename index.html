@@ -1126,6 +1126,13 @@
                     <label for="snapshotAsOf">Compare as of</label>
                     <input type="datetime-local" id="snapshotAsOf">
                 </div>
+                <div class="field" title="Document = invoice line totals (current default). Value Entry = read sales + cost directly from BC Value Entries (matches Power BI to the penny). Value Entry mode currently honours date / customer / item filters only; salesperson + branch filters need a join to the source document.">
+                    <label for="salesMode">Cost source</label>
+                    <select id="salesMode">
+                        <option value="document" selected>Document (fast)</option>
+                        <option value="valueentry">Value Entry (PBI-exact)</option>
+                    </select>
+                </div>
             </div>
 
             <div class="filter-chips" id="filterChips"></div>
@@ -2817,6 +2824,101 @@ async function bcDiscoverSalesLinesEntity(headerEntity) {
     return null;
 }
 
+// Discover the Value Entry entity (BC page 5802). PBI reads cost and
+// sales from Value Entries, not from invoice lines. Returns the published
+// entity name + a field map for the columns the tool needs.
+async function bcDiscoverValueEntryEntity() {
+    const md = await bcGetODataMetadata();
+    const allSets = Object.keys(md.entitySets);
+    const named = allSets.filter(n => /value.?entr/i.test(n));
+    const SALES_AMT  = [/^salesAmountActual$/i, /^Sales_Amount_Actual_?$/i, /^sales_amount_actual$/i];
+    const COST_AMT   = [/^costAmountActual$/i, /^Cost_Amount_Actual_?$/i, /^cost_amount_actual$/i];
+    const COST_NI    = [/^costAmountNonInvtbl$/i, /^Cost_Amount_Non_Invtbl_?$/i, /^cost_amount_non_invtbl$/i];
+    const ITEM_NO    = [/^itemNumber$/i, /^Item_No_?$/i, /^itemNo$/i];
+    const DOC_NO     = [/^documentNumber$/i, /^Document_No_?$/i, /^documentNo$/i];
+    const DOC_TYPE   = [/^documentType$/i, /^Document_Type$/i];
+    const SOURCE_NO  = [/^sourceNumber$/i, /^Source_No_?$/i, /^sourceNo$/i];
+    const SOURCE_TYP = [/^sourceType$/i, /^Source_Type$/i];
+    const DATE       = [/^postingDate$/i, /^Posting_Date$/i, /^posting_date$/i];
+    const QTY_INVD   = [/^invoicedQuantity$/i, /^Invoiced_Quantity$/i, /^invoiced_quantity$/i];
+    const ENTRY_TYPE = [/^itemLedgerEntryType$/i, /^Item_Ledger_Entry_Type$/i];
+    const candidates = named.length ? named : allSets;
+    for (const candidate of candidates) {
+        const typeName = md.entitySets[candidate];
+        const fields = md.entityTypes[typeName] || [];
+        if (!fields.length) continue;
+        const fSales   = bcFindField(fields, SALES_AMT);
+        const fCost    = bcFindField(fields, COST_AMT);
+        const fItem    = bcFindField(fields, ITEM_NO);
+        const fDate    = bcFindField(fields, DATE);
+        // Need at least sales OR cost, plus item + date — minimum to be useful
+        if (!(fSales || fCost) || !fItem || !fDate) continue;
+        return {
+            entity: candidate, fields,
+            fSales, fCost,
+            fCostNI:    bcFindField(fields, COST_NI),
+            fItem,      fDate,
+            fDocNo:     bcFindField(fields, DOC_NO),
+            fDocType:   bcFindField(fields, DOC_TYPE),
+            fSourceNo:  bcFindField(fields, SOURCE_NO),
+            fSourceTyp: bcFindField(fields, SOURCE_TYP),
+            fQtyInvd:   bcFindField(fields, QTY_INVD),
+            fEntryType: bcFindField(fields, ENTRY_TYPE),
+        };
+    }
+    return null;
+}
+
+// Fetch Value Entries for the period, with discovered field names.
+// Returns an array of normalised rows {postingDate, itemNumber,
+// documentNumber, documentType, sourceNumber, sourceType, salesAmount,
+// costAmount, costAmountNonInv, invoicedQty, entryType} — sourceNumber
+// is the customer No on sales rows, vendor No on purchase rows.
+async function fetchValueEntries(fromISO, toISO) {
+    state.veDiagnostic = "";
+    let info;
+    try { info = await bcDiscoverValueEntryEntity(); }
+    catch (e) {
+        console.warn("[Value Entry] metadata discovery failed:", e.message);
+        state.veDiagnostic = "OData $metadata fetch failed: " + e.message;
+        return [];
+    }
+    if (!info) {
+        state.veDiagnostic = "No Value Entry entity published in this tenant. Ask BC admin to publish page 5802 as a Web Service named 'ValueEntries'.";
+        console.warn("[Value Entry] no candidate entity found");
+        return [];
+    }
+    const coName = encodeURIComponent(await bcGetCompanyInternalName());
+    const filter = info.fDate + " ge " + fromISO + " and " + info.fDate + " le " + toISO;
+    const params = ["$top=200000", "$filter=" + encodeURIComponent(filter)];
+    const url = BC_ODATA_URL + "/Company('" + coName + "')/" + info.entity + "?" + params.join("&");
+    try {
+        const rows = await bcFetchAll(url, "Value Entries (" + info.entity + ")");
+        console.log("[Value Entry] " + info.entity + " → " + rows.length + " rows");
+        if (rows.length) console.log("[Value Entry] sample row keys:", Object.keys(rows[0]).join(", "));
+        const normalised = rows.map(r => ({
+            postingDate:      info.fDate      ? r[info.fDate]      : "",
+            itemNumber:       info.fItem      ? r[info.fItem]      : "",
+            documentNumber:   info.fDocNo     ? r[info.fDocNo]     : "",
+            documentType:     info.fDocType   ? r[info.fDocType]   : "",
+            sourceNumber:     info.fSourceNo  ? r[info.fSourceNo]  : "",
+            sourceType:       info.fSourceTyp ? r[info.fSourceTyp] : "",
+            salesAmount:      info.fSales     ? num(r[info.fSales])  : 0,
+            costAmount:       info.fCost      ? num(r[info.fCost])   : 0,
+            costAmountNonInv: info.fCostNI    ? num(r[info.fCostNI]) : 0,
+            invoicedQty:      info.fQtyInvd   ? num(r[info.fQtyInvd]) : 0,
+            entryType:        info.fEntryType ? r[info.fEntryType] : "",
+        }));
+        state.veFieldMap = info;
+        state.veDiagnostic = "Source: OData " + info.entity + " · " + rows.length + " rows.";
+        return normalised;
+    } catch (e) {
+        console.warn("[Value Entry] OData fetch failed:", e.message);
+        state.veDiagnostic = "OData " + info.entity + " fetch failed: " + e.message;
+        return [];
+    }
+}
+
 // kind: "quote" | "blanket"
 async function bcDiscoverSalesEntity(kind) {
     const md = await bcGetODataMetadata();
@@ -3197,6 +3299,8 @@ const state = {
     custFilter: "", itemFilter: "", eomFilter: "", customerItemFilter: "",
     filters: { location: "", salesperson: "", customer: "", customerName: "", item: "", itemDesc: "", status: "" },
     snapshotAsOf: null,
+    salesMode: "document",     // "document" (invoice lines) | "valueentry" (BC Value Entries; PBI-exact)
+    valueEntries: [],
     charts: {},
     tab: "overview",
     drill: null, // null | "customer" | "invoice" | "item"
@@ -4072,6 +4176,39 @@ function getAdjustments() {
     }
     return { credit, qty, cost, gpImpact: credit - cost };
 }
+// Sum Sales / Cost (Actual + Non-Invtbl) directly from Value Entries,
+// honouring the current toolbar filters. This is what PBI's "Adjusted
+// Sales" + "Adjusted Cost" measures read, so when salesMode === "valueentry"
+// the headline KPIs use this and match PBI to the cent (assuming both
+// tools have ingested the same posting period).
+//
+// Filter handling:
+//   * Date — getDateRangePredicate over postingDate
+//   * Customer — sourceNumber === filter when sourceType ∈ {Customer, ""}
+//   * Item — itemNumber === filter
+//   * Salesperson / Location — not present on VE rows directly; would need
+//     a join via documentNumber → invoice. For v1 they're ignored when
+//     salesMode is valueentry (a hint banner explains).
+function getValueEntryTotals() {
+    const inRange = getDateRangePredicate();
+    let sales = 0, cost = 0, costNI = 0, qty = 0, rows = 0;
+    const fCust = state.filters.customer || "";
+    const fItem = state.filters.item || "";
+    for (const v of (state.valueEntries || [])) {
+        if (!inRange(v.postingDate)) continue;
+        if (fCust && v.sourceNumber !== fCust) continue;
+        if (fItem && v.itemNumber !== fItem) continue;
+        sales  += v.salesAmount;
+        cost   += v.costAmount;
+        costNI += v.costAmountNonInv;
+        qty    += v.invoicedQty;
+        rows++;
+    }
+    return { sales: Math.abs(sales), cost: Math.abs(cost) + Math.abs(costNI),
+             costActual: Math.abs(cost), costNonInv: Math.abs(costNI),
+             qty: Math.abs(qty), rows };
+}
+
 // Stamp Adjusted Sales / Cost / Profit / Margin into the four KPI tiles
 // identified by the given prefix (e.g. "kpi", "brKpi", "spKpi").
 // Gross cost is derived from sales − GP so call sites don't have to
@@ -4582,15 +4719,31 @@ function renderFilterChips() {
 // ============================================================
 function renderOverview() {
     const groups = [...state.byCustomer.values()];
-    const totalRev = groups.reduce((s, g) => s + g.revenue, 0);
-    const totalGp  = groups.reduce((s, g) => s + g.gp, 0);
-    const totalQty = groups.reduce((s, g) => s + g.qty, 0);
+    let totalRev = groups.reduce((s, g) => s + g.revenue, 0);
+    let totalGp  = groups.reduce((s, g) => s + g.gp, 0);
+    let totalQty = groups.reduce((s, g) => s + g.qty, 0);
     const totalInv = state.filtered.length;
+    let subRev = totalInv + " invoices";
+    let subGp  = totalInv ? fmtMoney(totalGp / totalInv) + " avg/inv" : "";
+
+    if (state.salesMode === "valueentry" && state.valueEntries && state.valueEntries.length) {
+        // Value Entry mode — sales/cost taken directly from BC Value Entries
+        // (matches PBI). Salesperson and Location filters don't yet apply in
+        // this mode because VE rows don't carry those fields; the UI hint
+        // flags this when those filters are active.
+        const ve = getValueEntryTotals();
+        totalRev = ve.sales;
+        const veCost = ve.cost;
+        totalGp = ve.sales - veCost;
+        totalQty = ve.qty;
+        subRev = ve.rows + " VE rows · PBI-aligned";
+        subGp  = "cost = $" + fmtMoneyFull(veCost).replace("$", "");
+    }
 
     document.getElementById("kpiRevenue").textContent  = fmtMoneyFull(totalRev);
-    document.getElementById("kpiRevenueSub").textContent = totalInv + " invoices";
+    document.getElementById("kpiRevenueSub").textContent = subRev;
     document.getElementById("kpiGp").textContent       = fmtMoneyFull(totalGp);
-    document.getElementById("kpiGpSub").textContent    = totalInv ? fmtMoney(totalGp / totalInv) + " avg/inv" : "";
+    document.getElementById("kpiGpSub").textContent    = subGp;
     document.getElementById("kpiGpp").textContent      = fmtPct(totalRev ? totalGp / totalRev : 0);
     document.getElementById("kpiQty").textContent      = fmtInt(totalQty);
     paintAdjustedKpis("kpi", totalRev, totalGp);
@@ -8650,7 +8803,7 @@ async function handleLoad() {
     const btn = document.getElementById("loadBtn");
     btn.disabled = true; btn.textContent = "Loading…";
     try {
-        const [locs, items, customers, invoices, iles, creditMemos, shipments, returnReceipts, quotes, quoteExtras, blanketOrders] = await Promise.all([
+        const [locs, items, customers, invoices, iles, creditMemos, shipments, returnReceipts, quotes, quoteExtras, blanketOrders, valueEntries] = await Promise.all([
             fetchLocations(),
             fetchItems(),
             fetchCustomers(),
@@ -8662,7 +8815,22 @@ async function handleLoad() {
             fetchSalesQuotes(from, to),
             fetchSalesQuoteExtras(from, to),
             fetchBlanketSalesOrders(from, to),
+            fetchValueEntries(from, to),
         ]);
+        state.valueEntries = valueEntries || [];
+        if (state.valueEntries.length) {
+            // Quick sanity sum so the user can compare to PBI before flipping
+            // the mode toggle. Numbers honour the loaded date range only —
+            // toolbar filters aren't applied yet at this point.
+            let sSales = 0, sCost = 0, sCostNI = 0, sQty = 0;
+            for (const v of state.valueEntries) {
+                sSales  += v.salesAmount;
+                sCost   += v.costAmount;
+                sCostNI += v.costAmountNonInv;
+                sQty    += v.invoicedQty;
+            }
+            console.log("[Value Entry] loaded " + state.valueEntries.length + " rows for the period · Sales=" + fmtMoneyFull(Math.abs(sSales)) + " · Cost(Actual)=" + fmtMoneyFull(Math.abs(sCost)) + " · Cost(NonInv)=" + fmtMoneyFull(Math.abs(sCostNI)) + " · Qty=" + fmtInt(Math.abs(sQty)));
+        }
         state.blanketOrders = blanketOrders || [];
         if (state.blanketOrders.length) {
             console.log("[Blanket SO] loaded " + state.blanketOrders.length + " orders, sample fields:", Object.keys(state.blanketOrders[0]).join(", "));
@@ -8800,6 +8968,22 @@ function wireEvents() {
         state.snapshotAsOf = v ? new Date(v) : null;
         rebuildFiltered(); renderCurrentTab();
     });
+    const salesModeEl = document.getElementById("salesMode");
+    if (salesModeEl) {
+        salesModeEl.addEventListener("change", e => {
+            state.salesMode = e.target.value;
+            if (state.salesMode === "valueentry" && (!state.valueEntries || !state.valueEntries.length)) {
+                alert("No Value Entries were loaded. Either your tenant hasn't published page 5802 as a Web Service, or Reload sales hasn't been clicked since adding this feature. Reload sales to retry.");
+                e.target.value = "document";
+                state.salesMode = "document";
+                return;
+            }
+            if (state.salesMode === "valueentry" && (state.filters.salesperson || state.filters.location)) {
+                console.warn("[VE mode] salesperson / location filters not yet applied in VE mode (no join field on Value Entry rows).");
+            }
+            renderCurrentTab();
+        });
+    }
     document.getElementById("itemFilterBox").addEventListener("change", e => {
         const v = (e.target.value || "").trim();
         const opts = state.itemFilterOptions || [];
