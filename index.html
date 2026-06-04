@@ -1126,13 +1126,6 @@
                     <label for="snapshotAsOf">Compare as of</label>
                     <input type="datetime-local" id="snapshotAsOf">
                 </div>
-                <div class="field" title="Document mode: sales = sum of salesInvoiceLines (amountExcludingTax − invoiceDiscountAllocation), cost = ILE-based per-(customer, item, day) average with multi-tier fallback. Fast, runs on already-fetched data, ~0.1% drift vs Power BI on the cost line. Value Entry mode: sales is still Document mode's sum (VE's Sales_Amount_Actual only covers Item lines and would miss G/L Account / charge / comment lines, which can swing an invoice by thousands), but cost is sourced directly from BC table 5802 (Cost_Amount_Actual + Cost_Amount_Non_Invtbl) — same flow PBI's Adjusted Cost reads. Both modes honour date / customer / item filters; salesperson + branch filters apply in Document mode only.">
-                    <label for="salesMode">Cost source</label>
-                    <select id="salesMode">
-                        <option value="document" selected>Document (fast)</option>
-                        <option value="valueentry">Value Entry (BC accounting)</option>
-                    </select>
-                </div>
             </div>
 
             <div class="filter-chips" id="filterChips"></div>
@@ -3302,7 +3295,6 @@ const state = {
     custFilter: "", itemFilter: "", eomFilter: "", customerItemFilter: "",
     filters: { location: "", salesperson: "", customer: "", customerName: "", item: "", itemDesc: "", status: "" },
     snapshotAsOf: null,
-    salesMode: "document",     // "document" (invoice lines) | "valueentry" (BC Value Entries; PBI-exact)
     valueEntries: [],
     charts: {},
     tab: "overview",
@@ -4157,13 +4149,13 @@ function chartBase(opts) { return Object.assign({ responsive: true, maintainAspe
 // shows a sales-KPI row. Credit revenue and the implied cost are
 // subtracted from gross totals to give "net of returns" figures.
 function getAdjustments() {
-    // Value Entry mode: Sales Credit Memo rows are already netted into
-    // the VE sales/cost totals (PBI does the same). Returning zero here
-    // makes the Adjusted-* tiles mirror the headline, which is the
-    // correct accounting view when the headline IS already adjusted.
-    if (state.salesMode === "valueentry" && state.valueEntries && state.valueEntries.length) {
-        return { credit: 0, qty: 0, cost: 0, gpImpact: 0, mode: "ve" };
-    }
+    // Sales side always comes from Document mode (invoice lines), which
+    // is gross of credit memos — so we ALWAYS subtract `credit` from
+    // sales. Cost side comes from Value Entries when they're loaded;
+    // VE already nets credit-memo cost rows, so we zero `cost` in that
+    // case. Otherwise (no VE data) cost comes from ILE-derived line
+    // costs which are gross, and we subtract the credit-memo cost too.
+    const veCostInUse = state.valueEntries && state.valueEntries.length > 0;
     const inRange = getDateRangePredicate();
     let credit = 0, qty = 0, cost = 0;
     for (const cm of (state.creditMemos || [])) {
@@ -4184,7 +4176,8 @@ function getAdjustments() {
         if (!cmAmount && cm.totalAmountExcludingTax != null) cmAmount = num(cm.totalAmountExcludingTax);
         credit += cmAmount; qty += cmQty; cost += cmCost;
     }
-    return { credit, qty, cost, gpImpact: credit - cost };
+    const adjCost = veCostInUse ? 0 : cost;
+    return { credit, qty, cost: adjCost, gpImpact: credit - adjCost, mode: veCostInUse ? "ve-cost" : "document" };
 }
 // Test whether a VE row belongs to a sales financial document.
 // PBI's "Sales (LCY)" + "Adjusted Cost (LCY)" measures use Document Type
@@ -4199,8 +4192,8 @@ function isSalesValueEntry(v) {
 
 // Sum Sales / Cost (Actual + Non-Invtbl) directly from Value Entries
 // for sales-related rows only, honouring the current toolbar filters.
-// This is what PBI's "Adjusted Sales" + "Adjusted Cost" measures read,
-// so when salesMode === "valueentry" the headline KPIs match PBI.
+// This is what PBI's "Adjusted Cost" measure reads. Only `cost` is
+// used by callers — `sales` is computed for diagnostics / drill views.
 //
 // Filter handling:
 //   * Date — getDateRangePredicate over postingDate
@@ -4269,11 +4262,11 @@ function paintAdjustedKpis(prefix, grossSales, grossGp) {
     if (el("AdjCost"))  el("AdjCost").textContent  = fmtMoneyFull(adjCost);
     if (el("AdjGp"))    el("AdjGp").textContent    = fmtMoneyFull(adjGp);
     if (el("AdjGpp"))   el("AdjGpp").textContent   = fmtPct(adjGpp);
-    const veMode = adj.mode === "ve";
-    if (el("AdjSalesSub")) el("AdjSalesSub").textContent = veMode ? "VE already nets returns" : (adj.credit ? "−" + fmtMoneyFull(adj.credit) + " returns" : "no returns");
-    if (el("AdjCostSub"))  el("AdjCostSub").textContent  = veMode ? "VE already nets returns" : (adj.cost   ? "−" + fmtMoneyFull(adj.cost)   + " return cost" : "no returns");
-    if (el("AdjGpSub"))    el("AdjGpSub").textContent    = veMode ? "VE already nets returns" : (adj.gpImpact ? "−" + fmtMoneyFull(adj.gpImpact) + " return GP" : "no returns");
-    if (el("AdjGppSub"))   el("AdjGppSub").textContent   = veMode ? "PBI-aligned (VE source)" : "after credit memos";
+    const veCost = adj.mode === "ve-cost";
+    if (el("AdjSalesSub")) el("AdjSalesSub").textContent = adj.credit ? "−" + fmtMoneyFull(adj.credit) + " returns" : "no returns";
+    if (el("AdjCostSub"))  el("AdjCostSub").textContent  = veCost ? "VE cost (returns already netted)" : (adj.cost ? "−" + fmtMoneyFull(adj.cost) + " return cost" : "no returns");
+    if (el("AdjGpSub"))    el("AdjGpSub").textContent    = veCost ? (adj.credit ? "−" + fmtMoneyFull(adj.credit) + " returns" : "no returns") : (adj.gpImpact ? "−" + fmtMoneyFull(adj.gpImpact) + " return GP" : "no returns");
+    if (el("AdjGppSub"))   el("AdjGppSub").textContent   = veCost ? "PBI-aligned (VE cost)" : "after credit memos";
 }
 
 // Convert a hex colour to rgba(r,g,b,alpha) for fill backgrounds.
@@ -4771,23 +4764,17 @@ function renderOverview() {
     let subRev = totalInv + " invoices";
     let subGp  = totalInv ? fmtMoney(totalGp / totalInv) + " avg/inv" : "";
 
-    if (state.salesMode === "valueentry" && state.valueEntries && state.valueEntries.length) {
-        // Value Entry mode — keep Document mode's sales total (it already
-        // matches PBI to the dollar because it sums invoice-line revenue
-        // including non-Item lines), and only route COST through Value
-        // Entries. VE's Sales_Amount_Actual only covers Item lines, so it
-        // structurally undercounts invoices that contain G/L Account /
-        // Comment / Charge lines (e.g. SINV001806 had a −$10,400 non-Item
-        // line that VE can't see). Cost is the part PBI sources from VE
-        // anyway, so that's the only override we need.
-        // Salesperson and Location filters don't yet apply in this mode
-        // because VE rows don't carry those fields; the UI hint flags
-        // this when those filters are active.
+    if (state.valueEntries && state.valueEntries.length) {
+        // Cost from BC Value Entries (table 5802) — same flow PBI's
+        // Adjusted Cost reads. Sales stays on the Document/invoice-line
+        // sum because VE's Sales_Amount_Actual only covers Item lines
+        // (non-Item lines — G/L Account, Comment, Charge — are invisible
+        // to VE but can swing an invoice by thousands; SINV001806 had a
+        // −$10,400 non-Item line in our 22/05 test).
         const ve = getValueEntryTotals();
         const veCost = ve.cost;
         totalGp  = totalRev - veCost;
         totalQty = ve.qty;
-        subRev = ve.rows + " VE rows · Document sales + VE cost";
         subGp  = "cost from VE: " + fmtMoneyFull(veCost);
     }
 
@@ -9146,22 +9133,6 @@ function wireEvents() {
         state.snapshotAsOf = v ? new Date(v) : null;
         rebuildFiltered(); renderCurrentTab();
     });
-    const salesModeEl = document.getElementById("salesMode");
-    if (salesModeEl) {
-        salesModeEl.addEventListener("change", e => {
-            state.salesMode = e.target.value;
-            if (state.salesMode === "valueentry" && (!state.valueEntries || !state.valueEntries.length)) {
-                alert("No Value Entries were loaded. Either your tenant hasn't published page 5802 as a Web Service, or Reload sales hasn't been clicked since adding this feature. Reload sales to retry.");
-                e.target.value = "document";
-                state.salesMode = "document";
-                return;
-            }
-            if (state.salesMode === "valueentry" && (state.filters.salesperson || state.filters.location)) {
-                console.warn("[VE mode] salesperson / location filters not yet applied in VE mode (no join field on Value Entry rows).");
-            }
-            renderCurrentTab();
-        });
-    }
     document.getElementById("itemFilterBox").addEventListener("change", e => {
         const v = (e.target.value || "").trim();
         const opts = state.itemFilterOptions || [];
