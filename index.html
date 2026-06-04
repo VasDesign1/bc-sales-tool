@@ -2840,6 +2840,7 @@ async function bcDiscoverValueEntryEntity() {
     const SOURCE_NO  = [/^sourceNumber$/i, /^Source_No_?$/i, /^sourceNo$/i];
     const SOURCE_TYP = [/^sourceType$/i, /^Source_Type$/i];
     const DATE       = [/^postingDate$/i, /^Posting_Date$/i, /^posting_date$/i];
+    const DOC_DATE   = [/^documentDate$/i, /^Document_Date$/i, /^document_date$/i];
     const QTY_INVD   = [/^invoicedQuantity$/i, /^Invoiced_Quantity$/i, /^invoiced_quantity$/i];
     const ENTRY_TYPE = [/^itemLedgerEntryType$/i, /^Item_Ledger_Entry_Type$/i];
     const candidates = named.length ? named : allSets;
@@ -2858,6 +2859,7 @@ async function bcDiscoverValueEntryEntity() {
             fSales, fCost,
             fCostNI:    bcFindField(fields, COST_NI),
             fItem,      fDate,
+            fDocDate:   bcFindField(fields, DOC_DATE),
             fDocNo:     bcFindField(fields, DOC_NO),
             fDocType:   bcFindField(fields, DOC_TYPE),
             fSourceNo:  bcFindField(fields, SOURCE_NO),
@@ -2898,6 +2900,7 @@ async function fetchValueEntries(fromISO, toISO) {
         if (rows.length) console.log("[Value Entry] sample row keys:", Object.keys(rows[0]).join(", "));
         const normalised = rows.map(r => ({
             postingDate:      info.fDate      ? r[info.fDate]      : "",
+            documentDate:     info.fDocDate   ? r[info.fDocDate]   : "",
             itemNumber:       info.fItem      ? r[info.fItem]      : "",
             documentNumber:   info.fDocNo     ? r[info.fDocNo]     : "",
             documentType:     info.fDocType   ? r[info.fDocType]   : "",
@@ -4208,12 +4211,17 @@ function isSalesValueEntry(v) {
 //     mode; the toggle handler logs a warning when active.
 function getValueEntryTotals() {
     const inRange = getDateRangePredicate();
+    // Default to Document_Date filter — PBI's sales measures filter on
+    // Document_Date, not Posting_Date. Posting_Date can be a day later
+    // than Document_Date when invoices are posted on a different day.
+    // state.veDateField overrides ("postingDate" or "documentDate").
+    const dateField = state.veDateField || "documentDate";
     let sales = 0, cost = 0, costNI = 0, qty = 0, rows = 0;
-    let salesInvoiceSign = 0, salesCmSign = 0;   // diagnostic: sales-invoice cost is negative in BC
     const fCust = state.filters.customer || "";
     const fItem = state.filters.item || "";
     for (const v of (state.valueEntries || [])) {
-        if (!inRange(v.postingDate)) continue;
+        const d = v[dateField] || v.postingDate;   // fall back to posting if doc date is blank
+        if (!inRange(d)) continue;
         if (!isSalesValueEntry(v)) continue;
         if (fCust && v.sourceNumber !== fCust) continue;
         if (fItem && v.itemNumber !== fItem) continue;
@@ -8879,6 +8887,27 @@ async function handleLoad() {
                 .map(([k, v]) => "  " + k.padEnd(40) + " count=" + v.count + " sales=" + fmtMoneyFull(v.sales) + " cost=" + fmtMoneyFull(v.cost) + " costNI=" + fmtMoneyFull(v.costNI))
                 .join("\n");
             console.log("[Value Entry] per-type contribution (sorted by |sales|):\n" + perTypeStr);
+            // Side-by-side diagnostic: same totals filtered by
+            // Posting_Date vs Document_Date. PBI's sales measures use
+            // Document_Date — if these two numbers differ AND the
+            // Document_Date one matches PBI, that's the answer.
+            const from = state.loadedFrom || "";
+            const to   = state.loadedTo   || "";
+            const within = (d) => {
+                if (!d) return false;
+                const k = String(d).substring(0, 10);
+                return k >= from && k <= to;
+            };
+            let p1 = 0, p2 = 0, d1 = 0, d2 = 0, dateMismatch = 0;
+            for (const v of state.valueEntries) {
+                if (!isSalesValueEntry(v)) continue;
+                if (within(v.postingDate))  { p1 += v.salesAmount; p2 += v.costAmount; }
+                if (within(v.documentDate)) { d1 += v.salesAmount; d2 += v.costAmount; }
+                if (within(v.postingDate) !== within(v.documentDate)) dateMismatch++;
+            }
+            console.log("[Value Entry] Posting_Date filter  · Sales=" + fmtMoneyFull(p1) + " · Cost=" + fmtMoneyFull(Math.abs(p2)));
+            console.log("[Value Entry] Document_Date filter · Sales=" + fmtMoneyFull(d1) + " · Cost=" + fmtMoneyFull(Math.abs(d2)));
+            console.log("[Value Entry] rows where posting / document date land on different sides of the window: " + dateMismatch);
         }
         state.blanketOrders = blanketOrders || [];
         if (state.blanketOrders.length) {
