@@ -1126,11 +1126,11 @@
                     <label for="snapshotAsOf">Compare as of</label>
                     <input type="datetime-local" id="snapshotAsOf">
                 </div>
-                <div class="field" title="Document = invoice line totals (current default). Value Entry = read sales + cost directly from BC Value Entries (matches Power BI to the penny). Value Entry mode currently honours date / customer / item filters only; salesperson + branch filters need a join to the source document.">
+                <div class="field" title="Document mode: sales = sum of salesInvoiceLines (amountExcludingTax − invoiceDiscountAllocation). Cost = ILE-based per-(customer, item, day) average with multi-tier fallback. Fast, runs on already-fetched data, ~0.1% drift vs Power BI on the cost line. Value Entry mode: sales = VE Sales_Amount_Actual minus invoice header discount; cost = VE Cost_Amount_Actual + Cost_Amount_Non_Invtbl. Uses BC's actual posted cost flows from table 5802 — closer to PBI structurally but inherits BC quirks (G/L Account or charge revenue lines don't appear in VE, so totals can differ from PBI by a few dollars per invoice). Both modes honour date / customer / item filters in VE mode; salesperson + branch filters apply in Document mode only.">
                     <label for="salesMode">Cost source</label>
                     <select id="salesMode">
                         <option value="document" selected>Document (fast)</option>
-                        <option value="valueentry">Value Entry (PBI-exact)</option>
+                        <option value="valueentry">Value Entry (BC accounting)</option>
                     </select>
                 </div>
             </div>
