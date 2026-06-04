@@ -1029,6 +1029,7 @@
             <a data-tab="branch">Branch Sales</a>
             <a data-tab="salesperson">Salesperson Sales</a>
             <a data-tab="byItem">Sales by Item</a>
+            <a data-tab="customerItem">Customer × Item</a>
             <a data-tab="eom">EOM Report</a>
             <a data-tab="quotes">Sales Quote Overview</a>
             <a data-tab="blanketOrders">Blanket Sales Order Overview</a>
@@ -1733,6 +1734,73 @@
                                 <th class="num" data-sort="customerCount">Customers</th>
                                 <th class="num" data-sort="lineCount">Lines</th>
                             </tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB: Customer × Item -->
+            <section data-tab-content="customerItem" style="display:none;">
+                <div class="card">
+                    <div class="head">
+                        <h3>Customer × Item analysis</h3>
+                        <div class="meta">Stocked items only — items with an Item Category Code in BC. Non-categorised items (special purchases / non-stock) are excluded.</div>
+                    </div>
+                    <div style="display:flex; gap:14px; flex-wrap:wrap; padding:14px;">
+                        <div class="field" style="min-width:280px;">
+                            <label for="cxiView">View by</label>
+                            <select id="cxiView">
+                                <option value="customer">Customer → items they buy / don't buy</option>
+                                <option value="item">Item → customers who buy / don't buy it</option>
+                            </select>
+                        </div>
+                        <div class="field" id="cxiCustField" style="min-width:280px;">
+                            <label for="cxiCustomer">Customer</label>
+                            <select id="cxiCustomer"><option value="">— pick a customer —</option></select>
+                        </div>
+                        <div class="field" id="cxiItemField" style="min-width:280px; display:none;">
+                            <label for="cxiItem">Item</label>
+                            <select id="cxiItem"><option value="">— pick an item —</option></select>
+                        </div>
+                        <div class="field" style="min-width:200px;">
+                            <label for="cxiSalesperson">Salesperson</label>
+                            <select id="cxiSalesperson"><option value="">All salespeople</option></select>
+                        </div>
+                        <div class="field" style="min-width:200px;">
+                            <label for="cxiStatus">Show</label>
+                            <select id="cxiStatus">
+                                <option value="all">Buyers + non-buyers</option>
+                                <option value="buyers">Buyers only</option>
+                                <option value="nonbuyers">Non-buyers only</option>
+                            </select>
+                        </div>
+                        <div class="field" style="flex:1; min-width:220px;">
+                            <label for="cxiSearch">Search</label>
+                            <input type="text" id="cxiSearch" placeholder="Filter results…">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="kpi-row" style="grid-template-columns: repeat(4, 1fr);">
+                    <div class="kpi k-rev"><div class="label">Universe size</div><div class="value" id="cxiKpiUniverse">—</div><div class="sub" id="cxiKpiUniverseSub">&nbsp;</div></div>
+                    <div class="kpi k-gp"><div class="label">Buyers</div><div class="value" id="cxiKpiBuyers">—</div><div class="sub" id="cxiKpiBuyersSub">have purchased</div></div>
+                    <div class="kpi k-cust"><div class="label">Non-buyers</div><div class="value" id="cxiKpiNonbuyers">—</div><div class="sub" id="cxiKpiNonbuyersSub">opportunity</div></div>
+                    <div class="kpi k-avg"><div class="label">Sales captured</div><div class="value" id="cxiKpiSales">—</div><div class="sub" id="cxiKpiSalesSub">selected period</div></div>
+                </div>
+
+                <div class="hint" id="cxiHelpBanner" style="display:block;">
+                    Pick a customer (or switch to "Item" view and pick an item) to see the buy / don't-buy breakdown. "Don't buy" = in the selected date range, this customer made no purchases of that item.
+                </div>
+
+                <div class="panel" id="cxiTablePanel" style="display:none;">
+                    <div class="panel-header">
+                        <h2 id="cxiTableTitle">—</h2>
+                        <div class="meta" id="cxiTableMeta"></div>
+                    </div>
+                    <div class="table-scroll">
+                        <table id="cxiTable">
+                            <thead><tr id="cxiTableHead"></tr></thead>
                             <tbody></tbody>
                         </table>
                     </div>
@@ -3319,6 +3387,7 @@ const state = {
     snapshotAsOf: null,
     valueEntries: [],
     salesOrders: [],
+    cxi: { view: "customer", customer: "", item: "", salesperson: "", status: "all", search: "" },
     charts: {},
     tab: "overview",
     drill: null, // null | "customer" | "invoice" | "item"
@@ -4497,6 +4566,7 @@ function renderCurrentTab() {
         case "branch":      renderBranch();   break;
         case "salesperson": renderSalesperson(); break;
         case "byItem":      renderByItem();   break;
+        case "customerItem": renderCustomerItem(); break;
         case "eom":         renderEOM();      break;
         case "quotes":         renderQuotes();   break;
         case "blanketOrders":  renderBlanketOrders(); break;
@@ -5496,6 +5566,276 @@ function renderSalesperson() {
 // ============================================================
 // SALES BY ITEM TAB
 // ============================================================
+// ============================================================
+// CUSTOMER × ITEM TAB
+// ============================================================
+// Cross-analysis of which customers buy which *stocked* items.
+// Universe of stocked items = state.items where itemCategoryCode is set
+// (user definition: non-categorised items are special purchases / non-stock).
+// Universe of customers = state.customers, optionally narrowed by salesperson
+// using customer.salespersonCode. Buy-status is derived from invoice lines
+// in state.filtered (toolbar date range + filters).
+function buildCxiBuyMap() {
+    const buys = new Map(); // key "cust|item" -> {sales, qty, lastDate, lines}
+    for (const inv of (state.filtered || [])) {
+        if (!inv.customerNumber) continue;
+        for (const ln of (inv.salesInvoiceLines || [])) {
+            if (!isItemLine(ln)) continue;
+            const it = ln.lineObjectNumber || ln.itemId || "";
+            if (!it) continue;
+            const k = inv.customerNumber + "|" + it;
+            const cur = buys.get(k) || { sales: 0, qty: 0, lastDate: "", lines: 0 };
+            cur.sales += lineNetAmount(ln);
+            cur.qty   += num(ln.quantity);
+            const d = String(inv.postingDate || "").substring(0, 10);
+            if (d > cur.lastDate) cur.lastDate = d;
+            cur.lines++;
+            buys.set(k, cur);
+        }
+    }
+    return buys;
+}
+
+function populateCxiPickers() {
+    // Customer dropdown — every customer with a name. Sort by display name.
+    const custSel = document.getElementById("cxiCustomer");
+    if (custSel && custSel.options.length <= 1) {
+        const custs = [...(state.customers || [])].sort((a, b) =>
+            (a.displayName || "").localeCompare(b.displayName || ""));
+        for (const c of custs) {
+            const opt = document.createElement("option");
+            opt.value = c.number;
+            opt.textContent = (c.displayName || c.number) + " · " + c.number;
+            custSel.appendChild(opt);
+        }
+    }
+    // Item dropdown — stocked items only, sorted by item number.
+    const itSel = document.getElementById("cxiItem");
+    if (itSel && itSel.options.length <= 1) {
+        const stocked = (state.items || [])
+            .filter(it => (it.itemCategoryCode || "").trim() !== "")
+            .sort((a, b) => (a.number || "").localeCompare(b.number || ""));
+        for (const it of stocked) {
+            const opt = document.createElement("option");
+            opt.value = it.number;
+            opt.textContent = it.number + " · " + (it.displayName || "");
+            itSel.appendChild(opt);
+        }
+    }
+    // Salesperson dropdown — distinct values from invoices (matches the
+    // rest of the tool's salesperson model). Skip the empty option insert
+    // if already populated.
+    const spSel = document.getElementById("cxiSalesperson");
+    if (spSel && spSel.options.length <= 1) {
+        const sps = new Set();
+        for (const inv of (state.invoices || [])) {
+            if (inv.salesperson) sps.add(inv.salesperson);
+        }
+        [...sps].sort().forEach(s => {
+            const opt = document.createElement("option");
+            opt.value = s; opt.textContent = s;
+            spSel.appendChild(opt);
+        });
+    }
+}
+
+function renderCustomerItem() {
+    populateCxiPickers();
+    // Mirror current state into controls so re-renders pick up filter chips.
+    const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+    setVal("cxiView",        state.cxi.view);
+    setVal("cxiCustomer",    state.cxi.customer);
+    setVal("cxiItem",        state.cxi.item);
+    setVal("cxiSalesperson", state.cxi.salesperson);
+    setVal("cxiStatus",      state.cxi.status);
+    setVal("cxiSearch",      state.cxi.search);
+    document.getElementById("cxiCustField").style.display = (state.cxi.view === "customer") ? "" : "none";
+    document.getElementById("cxiItemField").style.display = (state.cxi.view === "item") ? "" : "none";
+
+    const stocked = (state.items || []).filter(it => (it.itemCategoryCode || "").trim() !== "");
+    const stockedSet = new Set(stocked.map(it => it.number));
+    const itemMeta = new Map(stocked.map(it => [it.number, it]));
+
+    // Customer master salespersonCode → for narrowing the universe in By Item view.
+    const custSp = new Map();
+    for (const c of (state.customers || [])) {
+        custSp.set(c.number, (c.salespersonCode || "").toString());
+    }
+    // Per-customer "last salesperson seen" from invoices, as a fallback when
+    // the customer master doesn't have one set.
+    const lastSpByCust = new Map();
+    for (const inv of (state.invoices || [])) {
+        if (!inv.customerNumber || !inv.salesperson) continue;
+        const k = inv.customerNumber;
+        const prev = lastSpByCust.get(k);
+        if (!prev || (inv.postingDate && inv.postingDate > prev.d)) {
+            lastSpByCust.set(k, { sp: inv.salesperson, d: inv.postingDate });
+        }
+    }
+    const spForCust = c => custSp.get(c) || (lastSpByCust.get(c) && lastSpByCust.get(c).sp) || "(unassigned)";
+
+    const buys = buildCxiBuyMap();
+    const banner = document.getElementById("cxiHelpBanner");
+    const panel  = document.getElementById("cxiTablePanel");
+    const helpVisible = (state.cxi.view === "customer" && !state.cxi.customer) ||
+                       (state.cxi.view === "item"     && !state.cxi.item);
+    banner.style.display = helpVisible ? "block" : "none";
+    panel.style.display  = helpVisible ? "none"  : "block";
+    if (helpVisible) return;
+
+    if (state.cxi.view === "customer") {
+        renderCxiByCustomer(stocked, itemMeta, buys, spForCust);
+    } else {
+        renderCxiByItem(stockedSet, itemMeta, buys, spForCust);
+    }
+}
+
+function renderCxiByCustomer(stocked, itemMeta, buys, spForCust) {
+    const cust = state.cxi.customer;
+    const custObj = (state.customers || []).find(c => c.number === cust);
+    const custName = custObj ? (custObj.displayName || cust) : cust;
+    // For each stocked item, is this customer a buyer?
+    const rows = stocked.map(it => {
+        const b = buys.get(cust + "|" + it.number);
+        return {
+            itemNo: it.number,
+            description: it.displayName || "",
+            category: it.itemCategoryCode || "",
+            isBuyer: !!b,
+            sales: b ? b.sales : 0,
+            qty:   b ? b.qty   : 0,
+            lastDate: b ? b.lastDate : "",
+            lines: b ? b.lines : 0,
+        };
+    });
+    const filtered = filterCxiRows(rows, ["itemNo", "description", "category"]);
+    const buyers = filtered.filter(r => r.isBuyer).length;
+    const nonbuyers = filtered.filter(r => !r.isBuyer).length;
+    const totalSales = filtered.reduce((s, r) => s + r.sales, 0);
+    paintCxiKpis(filtered.length, buyers, nonbuyers, totalSales, "stocked items in universe");
+
+    document.getElementById("cxiTableTitle").textContent =
+        custName + " · stocked-item buy profile";
+    document.getElementById("cxiTableMeta").textContent =
+        filtered.length + " items · " + buyers + " bought · " + nonbuyers + " not bought";
+
+    const head = document.getElementById("cxiTableHead");
+    head.innerHTML =
+        '<th>Item No</th><th>Description</th><th>Category</th><th>Status</th>' +
+        '<th class="num">Sales $</th><th class="num">Qty</th><th>Last purchase</th><th class="num">Lines</th>';
+    // Default sort: buyers first (highest sales), then non-buyers alphabetical.
+    filtered.sort((a, b) => {
+        if (a.isBuyer !== b.isBuyer) return a.isBuyer ? -1 : 1;
+        if (a.isBuyer) return b.sales - a.sales;
+        return (a.itemNo || "").localeCompare(b.itemNo || "");
+    });
+    const tbody = document.querySelector("#cxiTable tbody");
+    tbody.innerHTML = filtered.map(r =>
+        '<tr>' +
+        '<td>' + escapeHtml(r.itemNo) + '</td>' +
+        '<td>' + escapeHtml(r.description) + '</td>' +
+        '<td>' + escapeHtml(r.category) + '</td>' +
+        '<td>' + (r.isBuyer
+            ? '<span style="color:#2e7d32;font-weight:600;">Buyer</span>'
+            : '<span style="color:#c62828;font-weight:600;">Not a buyer</span>') + '</td>' +
+        '<td class="num">' + (r.isBuyer ? fmtMoney(r.sales) : "—") + '</td>' +
+        '<td class="num">' + (r.isBuyer ? fmtInt(r.qty)     : "—") + '</td>' +
+        '<td>' + (r.isBuyer ? fmtDate(r.lastDate) : "—") + '</td>' +
+        '<td class="num">' + (r.isBuyer ? fmtInt(r.lines)   : "—") + '</td>' +
+        '</tr>').join("");
+}
+
+function renderCxiByItem(stockedSet, itemMeta, buys, spForCust) {
+    const it = state.cxi.item;
+    const itObj = itemMeta.get(it);
+    if (!itObj) {
+        // Item picked isn't in stocked universe (no category code). Show
+        // a clarifying message rather than empty results.
+        document.getElementById("cxiTableTitle").textContent = it + " — not a stocked item";
+        document.getElementById("cxiTableMeta").textContent = "Pick an item with an Item Category Code.";
+        document.querySelector("#cxiTable tbody").innerHTML = "";
+        paintCxiKpis(0, 0, 0, 0, "");
+        return;
+    }
+    // For each customer, is this customer a buyer of this item?
+    const spFilter = state.cxi.salesperson;
+    const rows = (state.customers || [])
+        .filter(c => !spFilter || spForCust(c.number) === spFilter)
+        .map(c => {
+            const b = buys.get(c.number + "|" + it);
+            return {
+                customer: c.number,
+                customerName: c.displayName || c.number,
+                salesperson: spForCust(c.number),
+                isBuyer: !!b,
+                sales: b ? b.sales : 0,
+                qty:   b ? b.qty   : 0,
+                lastDate: b ? b.lastDate : "",
+                lines: b ? b.lines : 0,
+            };
+        });
+    const filtered = filterCxiRows(rows, ["customer", "customerName", "salesperson"]);
+    const buyers = filtered.filter(r => r.isBuyer).length;
+    const nonbuyers = filtered.filter(r => !r.isBuyer).length;
+    const totalSales = filtered.reduce((s, r) => s + r.sales, 0);
+    paintCxiKpis(filtered.length, buyers, nonbuyers, totalSales,
+        spFilter ? ("customers · salesperson " + spFilter) : "customers in universe");
+
+    document.getElementById("cxiTableTitle").textContent =
+        it + " · " + (itObj.displayName || "") + " — customer buy profile";
+    document.getElementById("cxiTableMeta").textContent =
+        filtered.length + " customers · " + buyers + " buy this · " + nonbuyers + " don't";
+
+    const head = document.getElementById("cxiTableHead");
+    head.innerHTML =
+        '<th>Customer No</th><th>Customer</th><th>Salesperson</th><th>Status</th>' +
+        '<th class="num">Sales $</th><th class="num">Qty</th><th>Last purchase</th><th class="num">Lines</th>';
+    filtered.sort((a, b) => {
+        if (a.isBuyer !== b.isBuyer) return a.isBuyer ? -1 : 1;
+        if (a.isBuyer) return b.sales - a.sales;
+        return (a.customerName || "").localeCompare(b.customerName || "");
+    });
+    const tbody = document.querySelector("#cxiTable tbody");
+    tbody.innerHTML = filtered.map(r =>
+        '<tr>' +
+        '<td>' + escapeHtml(r.customer) + '</td>' +
+        '<td>' + escapeHtml(r.customerName) + '</td>' +
+        '<td>' + escapeHtml(r.salesperson) + '</td>' +
+        '<td>' + (r.isBuyer
+            ? '<span style="color:#2e7d32;font-weight:600;">Buyer</span>'
+            : '<span style="color:#c62828;font-weight:600;">Not a buyer</span>') + '</td>' +
+        '<td class="num">' + (r.isBuyer ? fmtMoney(r.sales) : "—") + '</td>' +
+        '<td class="num">' + (r.isBuyer ? fmtInt(r.qty)     : "—") + '</td>' +
+        '<td>' + (r.isBuyer ? fmtDate(r.lastDate) : "—") + '</td>' +
+        '<td class="num">' + (r.isBuyer ? fmtInt(r.lines)   : "—") + '</td>' +
+        '</tr>').join("");
+}
+
+function filterCxiRows(rows, searchFields) {
+    const s = (state.cxi.status || "all").toLowerCase();
+    const q = (state.cxi.search || "").trim().toLowerCase();
+    return rows.filter(r => {
+        if (s === "buyers"    && !r.isBuyer) return false;
+        if (s === "nonbuyers" &&  r.isBuyer) return false;
+        if (q) {
+            const hay = searchFields.map(f => (r[f] || "").toString().toLowerCase()).join(" ");
+            if (!hay.includes(q)) return false;
+        }
+        return true;
+    });
+}
+
+function paintCxiKpis(universe, buyers, nonbuyers, sales, universeSub) {
+    const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+    set("cxiKpiUniverse",     fmtInt(universe));
+    set("cxiKpiUniverseSub",  universeSub);
+    set("cxiKpiBuyers",       fmtInt(buyers));
+    set("cxiKpiNonbuyers",    fmtInt(nonbuyers));
+    set("cxiKpiSales",        fmtMoneyFull(sales));
+    set("cxiKpiBuyersSub",    universe ? fmtPct(buyers / universe) + " of universe" : "of universe");
+    set("cxiKpiNonbuyersSub", universe ? fmtPct(nonbuyers / universe) + " opportunity" : "opportunity");
+}
+
 function renderByItem() {
     renderFilterChips();
     // Compute # customers per item once (state.byItem doesn't track this).
@@ -9334,6 +9674,26 @@ function wireEvents() {
     document.getElementById("itemSearch").addEventListener("input", e => { state.itemFilter = e.target.value; renderByItem(); });
     document.getElementById("itCategoryFilterClear").addEventListener("click", e => {
         e.preventDefault(); state.byItemCategoryFilter = ""; renderByItem();
+    });
+
+    // Customer × Item tab controls
+    document.getElementById("cxiView").addEventListener("change", e => {
+        state.cxi.view = e.target.value; renderCustomerItem();
+    });
+    document.getElementById("cxiCustomer").addEventListener("change", e => {
+        state.cxi.customer = e.target.value; renderCustomerItem();
+    });
+    document.getElementById("cxiItem").addEventListener("change", e => {
+        state.cxi.item = e.target.value; renderCustomerItem();
+    });
+    document.getElementById("cxiSalesperson").addEventListener("change", e => {
+        state.cxi.salesperson = e.target.value; renderCustomerItem();
+    });
+    document.getElementById("cxiStatus").addEventListener("change", e => {
+        state.cxi.status = e.target.value; renderCustomerItem();
+    });
+    document.getElementById("cxiSearch").addEventListener("input", e => {
+        state.cxi.search = e.target.value; renderCustomerItem();
     });
 
     // Customer drill: toggle the full items table
