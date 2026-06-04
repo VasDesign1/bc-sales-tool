@@ -4233,6 +4233,21 @@ function getValueEntryTotals() {
         qty    += v.invoicedQty;
         rows++;
     }
+    // VE's Sales_Amount_Actual is recorded BEFORE invoice-level
+    // discount allocation. Salesinvoice lines (and PBI's Sales (LCY)
+    // measure) have it deducted. Subtract inv.discountAmount for
+    // invoices in the same period + customer filter to bring the
+    // headline in line with PBI. Item filter would need proportional
+    // allocation back to lines — skip for now (any drift is small).
+    if (!fItem) {
+        let invoiceDiscount = 0;
+        for (const inv of (state.invoices || [])) {
+            if (!inRange(inv.postingDate)) continue;
+            if (fCust && inv.customerNumber !== fCust) continue;
+            invoiceDiscount += num(inv.discountAmount);
+        }
+        sales -= invoiceDiscount;
+    }
     // Cost amounts on sales VE rows are negative (inventory decreasing).
     // Take magnitude for display + math; sales is naturally positive on
     // an invoice, negative on a credit memo, so leave sign as-is.
