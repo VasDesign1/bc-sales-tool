@@ -8932,6 +8932,54 @@ async function handleLoad() {
             const salesNoCost = salesInvoiceRows.filter(v => v.salesAmount > 0 && Math.abs(v.costAmount) < 0.005);
             const salesNoCostTotal = salesNoCost.reduce((s, v) => s + v.salesAmount, 0);
             console.log("[Value Entry] Sales Invoice rows with sales>0 AND cost≈0: " + salesNoCost.length + " rows totalling " + fmtMoneyFull(salesNoCostTotal));
+            // Per-invoice comparison: sum VE sales by documentNumber vs
+            // sum of invoice-line net amounts (Document mode source). If
+            // a specific doc has VE > Document, that's an invoice where
+            // VE has extra rows (e.g. item charges, multiple shipment
+            // allocations). Print the 15 biggest |diff|.
+            const veByDoc = new Map();
+            for (const v of state.valueEntries) {
+                if (!isSalesValueEntry(v)) continue;
+                const k = String(v.postingDate || "").substring(0, 10);
+                if (k < from || k > to) continue;
+                const cur = veByDoc.get(v.documentNumber || "—") || { sales: 0, cost: 0, rows: 0 };
+                cur.sales += v.salesAmount; cur.cost += v.costAmount; cur.rows++;
+                veByDoc.set(v.documentNumber || "—", cur);
+            }
+            const docByInv = new Map();
+            for (const inv of state.invoices) {
+                if (!inv.number) continue;
+                const k = String(inv.postingDate || "").substring(0, 10);
+                if (k < from || k > to) continue;
+                const cur = docByInv.get(inv.number) || { sales: 0, lines: 0 };
+                for (const ln of (inv.salesInvoiceLines || [])) {
+                    cur.sales += lineNetAmount(ln);
+                    cur.lines++;
+                }
+                docByInv.set(inv.number, cur);
+            }
+            const allDocs = new Set([...veByDoc.keys(), ...docByInv.keys()]);
+            const diffs = [];
+            for (const doc of allDocs) {
+                if (doc === "—") continue;
+                const ve = veByDoc.get(doc) || { sales: 0, rows: 0 };
+                const dc = docByInv.get(doc) || { sales: 0, lines: 0 };
+                const diff = ve.sales - dc.sales;
+                if (Math.abs(diff) > 0.5) {
+                    diffs.push({ doc, veSales: ve.sales, veRows: ve.rows, docSales: dc.sales, docLines: dc.lines, diff });
+                }
+            }
+            diffs.sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff));
+            const sumDiff = diffs.reduce((s, d) => s + d.diff, 0);
+            const veOnly = diffs.filter(d => d.docSales === 0).length;
+            const docOnly = diffs.filter(d => d.veSales === 0).length;
+            console.log("[Value Entry] per-invoice VE vs Document: " + diffs.length + " docs with diff > $0.50, sumDiff=" + fmtMoneyFull(sumDiff) + " (VE-only docs: " + veOnly + ", Document-only docs: " + docOnly + ")");
+            console.log("[Value Entry] top 15 |diff| invoices (negative = Document has more):\n" +
+                diffs.slice(0, 15).map(d =>
+                    "  " + d.doc + " | VE: $" + d.veSales.toFixed(2) + " (" + d.veRows + " rows)" +
+                    " | Doc: $" + d.docSales.toFixed(2) + " (" + d.docLines + " lines)" +
+                    " | diff: " + (d.diff >= 0 ? "+" : "") + d.diff.toFixed(2)
+                ).join("\n"));
         }
         state.blanketOrders = blanketOrders || [];
         if (state.blanketOrders.length) {
