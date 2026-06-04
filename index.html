@@ -8744,10 +8744,15 @@ function renderParetoSection(dim) {
         cumPct.push(pct * 100);
         tblRows.push({
             rank: i + 1, name: r.name, value: r.value,
-            cum, cumPct: pct, band: pct <= 0.8 ? "Top 80%" : "Bottom 20%",
+            cum, cumPct: pct,
+            // Use the same predicate the bar colouring uses (i < top80Count)
+            // so the table badge and the chart agree. The threshold-crosser
+            // belongs to the vital few — it's the contributor that gets the
+            // cumulative *to* 80%.
         });
     });
     if (!top80Hit) top80Count = rows.length;
+    tblRows.forEach((r, i) => { r.band = i < top80Count ? "Top 80%" : "Bottom 20%"; });
 
     document.getElementById("parKpiTotal_" + dim).textContent = fmtInt(rows.length);
     document.getElementById("parKpiTop80_" + dim).textContent = fmtInt(top80Count);
