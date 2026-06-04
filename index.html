@@ -4240,31 +4240,22 @@ function getValueEntryTotals() {
     // headline in line with PBI. Item filter would need proportional
     // allocation back to lines — skip for now (any drift is small).
     if (!fItem) {
+        // BC v2.0 REST exposes the invoice-level discount on each line as
+        // `invoiceDiscountAllocation`, not on the header `discountAmount`
+        // (which reads 0 on this tenant). Sum per line. That total equals
+        // exactly the gap we observed between VE Sales_Amount_Actual and
+        // Document mode's invoice-line-net total.
         let invoiceDiscount = 0;
-        let invsConsidered = 0, invsWithDiscount = 0;
-        // BC v2.0 SalesInvoice exposes "discountAmount" (invoice-level
-        // header discount). Some tenants/configs may name it differently
-        // — fall back through a few common variants.
         for (const inv of (state.invoices || [])) {
             if (!inRange(inv.postingDate)) continue;
             if (fCust && inv.customerNumber !== fCust) continue;
-            invsConsidered++;
-            const d = num(inv.discountAmount)
-                   || num(inv.invoiceDiscountAmount)
-                   || num(inv.invoiceDiscountAllocation);
-            if (d) invsWithDiscount++;
-            invoiceDiscount += d;
+            for (const ln of (inv.salesInvoiceLines || [])) {
+                invoiceDiscount += num(ln.invoiceDiscountAllocation);
+            }
         }
         if (invoiceDiscount > 0) {
             console.log("[VE mode] subtracting $" + invoiceDiscount.toFixed(2) +
-                " in invoice-level discounts (" + invsWithDiscount + " of " + invsConsidered + " invoices have one)");
-        } else if (invsConsidered > 0) {
-            // Sample one invoice's full keys so we can see if discountAmount
-            // is exposed under a different name on this tenant.
-            const sample = (state.invoices || []).find(inv =>
-                inRange(inv.postingDate) && (!fCust || inv.customerNumber === fCust)
-            );
-            if (sample) console.log("[VE mode] no invoice discounts found; sample invoice keys:", Object.keys(sample).join(", "));
+                " in invoice-level discount allocations summed from invoice lines");
         }
         sales -= invoiceDiscount;
     }
