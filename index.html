@@ -5541,6 +5541,7 @@ function paintPipelineKpis() {
         oiCount++;
         oiAmt += num(inv.totalAmountExcludingTax);
     }
+    console.log("[Pipeline calc] basis=amountExcludingTax/qty · openAmt=" + fmtMoneyFull(openAmt) + " · sniAmt=" + fmtMoneyFull(sniAmt) + " · openCount=" + openCount + " · sniCount=" + sniCount);
     const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
     set("kpiPipeOpenAmt", fmtMoneyFull(openAmt));
     set("kpiPipeOpenSub", openCount + " orders · not fully shipped");
