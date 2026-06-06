@@ -3731,7 +3731,13 @@ async function fetchSalesOrderOutstandingLines() {
     const fOutQty     = bcFindField(fields, [/^outstanding.?quantity$/i, /outstandingQuantity/i]);
     const fOutAmtLcy  = bcFindField(fields, [/^outstanding.?amount.?lcy$/i, /outstandingAmountLcy/i]);
     const fOutAmt     = bcFindField(fields, [/^outstanding.?amount$/i, /outstandingAmount/i]);
-    const fSniLcy     = bcFindField(fields, [/^shipped.?not.?inv.?lcy.?no.?vat$/i, /^shipped.?not.?invoiced.?lcy$/i, /shippedNotInvLcyNoVat/i, /shippedNotInvoicedLcy/i]);
+    // shippedNotInvoicedLcy (with VAT) is what PBI's tile reads —
+    // confirmed against this tenant: PBI shows $42.92K and that field
+    // sums to $42,919.32. The shippedNotInvLcyNoVat variant gives the
+    // ex-VAT value (~$39K) which doesn't match PBI. Order the regexes
+    // so the with-VAT field wins; fall through to no-VAT only if the
+    // with-VAT one isn't published.
+    const fSniLcy     = bcFindField(fields, [/^shipped.?not.?invoiced.?lcy$/i, /shippedNotInvoicedLcy/i, /^shipped.?not.?inv.?lcy.?no.?vat$/i, /shippedNotInvLcyNoVat/i]);
     const fSniQty     = bcFindField(fields, [/^qty.?shipped.?not.?invoiced$/i, /qtyShippedNotInvoiced/i]);
     if (!fDocType || !fDocNo) {
         console.warn("[SO outstanding] missing documentType / documentNumber fields on lines entity");
@@ -3744,28 +3750,7 @@ async function fetchSalesOrderOutstandingLines() {
     let rows = [];
     try { rows = await bcFetchAll(url, "Sales order lines (OData outstanding)"); }
     catch (e) { console.warn("[SO outstanding] OData fetch failed:", e.message); return []; }
-    console.log("[SO outstanding] " + linesInfo.entity + " (documentType=Order) → " + rows.length + " rows");
-    if (rows.length) {
-        console.log("[SO outstanding] field map: docNo=" + fDocNo +
-            " · outQty=" + fOutQty + " · outAmtLcy=" + fOutAmtLcy +
-            " · outAmt=" + fOutAmt + " · sniLcy=" + fSniLcy + " · sniQty=" + fSniQty);
-        // Auto-probe: any field on a sample row whose name contains
-        // "outstanding" or "shippedNotInv" or "Lcy". Sum across all
-        // rows so we can spot which exact field maps to PBI's tile.
-        const sampleKeys = Object.keys(rows[0]);
-        const candidateKeys = sampleKeys.filter(k =>
-            /outstanding|shippedNotInv|shipped_not_inv|outstandingAmt|outstandingAmount|Lcy|LCY/i.test(k));
-        const sums = {};
-        for (const k of candidateKeys) sums[k] = 0;
-        for (const r of rows) for (const k of candidateKeys) sums[k] += num(r[k]);
-        const sorted = candidateKeys
-            .map(k => ({ k, v: sums[k] }))
-            .sort((a, b) => Math.abs(b.v) - Math.abs(a.v));
-        console.log("[SO outstanding] candidate field sums:");
-        for (const { k, v } of sorted) {
-            console.log("  " + k + " = " + fmtMoneyFull(v));
-        }
-    }
+    console.log("[SO outstanding] " + linesInfo.entity + " (documentType=Order) → " + rows.length + " rows · outAmtLcy=" + fOutAmtLcy + " · sniLcy=" + fSniLcy);
     return rows.map(r => ({
         documentNumber: fDocNo ? r[fDocNo] : "",
         quantity:       fQty ? num(r[fQty]) : 0,
@@ -5632,41 +5617,9 @@ function paintPipelineKpis() {
         oiAmt += num(inv.totalAmountExcludingTax);
     }
     const basisSource = (state.salesOrderOutstandingLines && state.salesOrderOutstandingLines.length)
-        ? "BC OData outstandingAmountLcy / shippedNotInvLcy"
+        ? "BC OData outstandingAmountLcy / shippedNotInvoicedLcy"
         : "v2.0 fallback amountExcludingTax/qty × ratio";
     console.log("[Pipeline calc] basis=" + basisSource + " · openAmt=" + fmtMoneyFull(openAmt) + " · sniAmt=" + fmtMoneyFull(sniAmt) + " · openCount=" + openCount + " · sniCount=" + sniCount);
-    // Diagnostic — print four alternative formulas so we can see which
-    // matches PBI's Outstanding Sales Orders (LCY). One of these should
-    // line up; whichever one wins becomes the new basis.
-    let altA = 0, altB = 0, altC = 0, altD = 0;
-    for (const so of (state.salesOrders || [])) {
-        let openLines = 0;
-        let lineOpenQty = 0, lineTotalQty = 0;
-        let sumLineAmountExclTax = 0, sumLineAmountInclTax = 0, sumLineGrossPrice = 0;
-        for (const ln of (so.salesOrderLines || [])) {
-            const q = num(ln.quantity);
-            if (q <= 0) continue;
-            const qsh = pick(ln, ["quantityShipped", "shippedQuantity", "qtyShipped"]);
-            const openQ = q - qsh;
-            if (openQ > 0) {
-                openLines++;
-                lineOpenQty  += openQ;
-                lineTotalQty += q;
-                sumLineAmountExclTax += num(ln.amountExcludingTax) * openQ / q;
-                sumLineAmountInclTax += num(ln.amountIncludingTax) * openQ / q;
-                sumLineGrossPrice    += num(ln.unitPrice) * openQ;
-            }
-        }
-        if (!openLines) continue;
-        altA += sumLineAmountExclTax;                                                     // current
-        altB += sumLineAmountInclTax;                                                     // incl GST
-        altC += num(so.totalAmountExcludingTax);                                          // header total, no proration
-        altD += lineTotalQty ? num(so.totalAmountExcludingTax) * lineOpenQty / lineTotalQty : 0; // header total, header-prorated
-    }
-    console.log("[Pipeline alt] A) line amountExcludingTax × ratio = " + fmtMoneyFull(altA));
-    console.log("[Pipeline alt] B) line amountIncludingTax × ratio = " + fmtMoneyFull(altB));
-    console.log("[Pipeline alt] C) order totalAmountExcludingTax (no proration) = " + fmtMoneyFull(altC));
-    console.log("[Pipeline alt] D) order totalAmountExcludingTax × header proration = " + fmtMoneyFull(altD));
     const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
     set("kpiPipeOpenAmt", fmtMoneyFull(openAmt));
     set("kpiPipeOpenSub", openCount + " orders · not fully shipped");
