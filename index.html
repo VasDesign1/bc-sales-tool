@@ -3749,6 +3749,22 @@ async function fetchSalesOrderOutstandingLines() {
         console.log("[SO outstanding] field map: docNo=" + fDocNo +
             " · outQty=" + fOutQty + " · outAmtLcy=" + fOutAmtLcy +
             " · outAmt=" + fOutAmt + " · sniLcy=" + fSniLcy + " · sniQty=" + fSniQty);
+        // Auto-probe: any field on a sample row whose name contains
+        // "outstanding" or "shippedNotInv" or "Lcy". Sum across all
+        // rows so we can spot which exact field maps to PBI's tile.
+        const sampleKeys = Object.keys(rows[0]);
+        const candidateKeys = sampleKeys.filter(k =>
+            /outstanding|shippedNotInv|shipped_not_inv|outstandingAmt|outstandingAmount|Lcy|LCY/i.test(k));
+        const sums = {};
+        for (const k of candidateKeys) sums[k] = 0;
+        for (const r of rows) for (const k of candidateKeys) sums[k] += num(r[k]);
+        const sorted = candidateKeys
+            .map(k => ({ k, v: sums[k] }))
+            .sort((a, b) => Math.abs(b.v) - Math.abs(a.v));
+        console.log("[SO outstanding] candidate field sums:");
+        for (const { k, v } of sorted) {
+            console.log("  " + k + " = " + fmtMoneyFull(v));
+        }
     }
     return rows.map(r => ({
         documentNumber: fDocNo ? r[fDocNo] : "",
