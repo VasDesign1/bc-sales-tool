@@ -5517,11 +5517,16 @@ function paintPipelineKpis() {
         let openLines = 0, sniLines = 0, soOpen = 0, soSni = 0;
         for (const ln of (so.salesOrderLines || [])) {
             const q   = num(ln.quantity);
+            if (q <= 0) continue;
             const qsh = pick(ln, ["quantityShipped", "shippedQuantity", "qtyShipped"]);
             const qin = pick(ln, ["quantityInvoiced", "invoicedQuantity", "qtyInvoiced"]);
-            const up  = num(ln.unitPrice);
-            const openQ = q - qsh; if (openQ > 0) { openLines++; soOpen += openQ * up; }
-            const sniQ  = qsh - qin; if (sniQ > 0) { sniLines++; soSni += sniQ * up; }
+            // Use the line's NET amount (after line discount + invoice
+            // discount) divided by qty for a per-unit price. unitPrice
+            // is the list / gross price and over-states the pipeline by
+            // 2–3× on tenants with material line discounts.
+            const netPerUnit = lineNetAmount(ln) / q;
+            const openQ = q - qsh; if (openQ > 0) { openLines++; soOpen += openQ * netPerUnit; }
+            const sniQ  = qsh - qin; if (sniQ > 0) { sniLines++; soSni += sniQ * netPerUnit; }
         }
         if (openLines) { openCount++; openAmt += soOpen; }
         if (sniLines)  { sniCount++; sniAmt  += soSni; }
