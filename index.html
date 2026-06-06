@@ -5542,6 +5542,38 @@ function paintPipelineKpis() {
         oiAmt += num(inv.totalAmountExcludingTax);
     }
     console.log("[Pipeline calc] basis=amountExcludingTax/qty · openAmt=" + fmtMoneyFull(openAmt) + " · sniAmt=" + fmtMoneyFull(sniAmt) + " · openCount=" + openCount + " · sniCount=" + sniCount);
+    // Diagnostic — print four alternative formulas so we can see which
+    // matches PBI's Outstanding Sales Orders (LCY). One of these should
+    // line up; whichever one wins becomes the new basis.
+    let altA = 0, altB = 0, altC = 0, altD = 0;
+    for (const so of (state.salesOrders || [])) {
+        let openLines = 0;
+        let lineOpenQty = 0, lineTotalQty = 0;
+        let sumLineAmountExclTax = 0, sumLineAmountInclTax = 0, sumLineGrossPrice = 0;
+        for (const ln of (so.salesOrderLines || [])) {
+            const q = num(ln.quantity);
+            if (q <= 0) continue;
+            const qsh = pick(ln, ["quantityShipped", "shippedQuantity", "qtyShipped"]);
+            const openQ = q - qsh;
+            if (openQ > 0) {
+                openLines++;
+                lineOpenQty  += openQ;
+                lineTotalQty += q;
+                sumLineAmountExclTax += num(ln.amountExcludingTax) * openQ / q;
+                sumLineAmountInclTax += num(ln.amountIncludingTax) * openQ / q;
+                sumLineGrossPrice    += num(ln.unitPrice) * openQ;
+            }
+        }
+        if (!openLines) continue;
+        altA += sumLineAmountExclTax;                                                     // current
+        altB += sumLineAmountInclTax;                                                     // incl GST
+        altC += num(so.totalAmountExcludingTax);                                          // header total, no proration
+        altD += lineTotalQty ? num(so.totalAmountExcludingTax) * lineOpenQty / lineTotalQty : 0; // header total, header-prorated
+    }
+    console.log("[Pipeline alt] A) line amountExcludingTax × ratio = " + fmtMoneyFull(altA));
+    console.log("[Pipeline alt] B) line amountIncludingTax × ratio = " + fmtMoneyFull(altB));
+    console.log("[Pipeline alt] C) order totalAmountExcludingTax (no proration) = " + fmtMoneyFull(altC));
+    console.log("[Pipeline alt] D) order totalAmountExcludingTax × header proration = " + fmtMoneyFull(altD));
     const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
     set("kpiPipeOpenAmt", fmtMoneyFull(openAmt));
     set("kpiPipeOpenSub", openCount + " orders · not fully shipped");
