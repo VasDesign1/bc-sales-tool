@@ -5520,13 +5520,16 @@ function paintPipelineKpis() {
             if (q <= 0) continue;
             const qsh = pick(ln, ["quantityShipped", "shippedQuantity", "qtyShipped"]);
             const qin = pick(ln, ["quantityInvoiced", "invoicedQuantity", "qtyInvoiced"]);
-            // Use the line's NET amount (after line discount + invoice
-            // discount) divided by qty for a per-unit price. unitPrice
-            // is the list / gross price and over-states the pipeline by
-            // 2–3× on tenants with material line discounts.
-            const netPerUnit = lineNetAmount(ln) / q;
-            const openQ = q - qsh; if (openQ > 0) { openLines++; soOpen += openQ * netPerUnit; }
-            const sniQ  = qsh - qin; if (sniQ > 0) { sniLines++; soSni += sniQ * netPerUnit; }
+            // Use amountExcludingTax (line discount applied, invoice
+            // discount NOT yet applied) — matches PBI's Outstanding
+            // Amount on order lines. On orders the invoiceDiscount-
+            // Allocation is only a *projected* discount that hasn't
+            // posted yet, so subtracting it (as we do for invoice lines
+            // via lineNetAmount) under-states the pipeline by the
+            // invoice-discount headroom (~7% on this tenant).
+            const grossPerUnit = num(ln.amountExcludingTax) / q;
+            const openQ = q - qsh; if (openQ > 0) { openLines++; soOpen += openQ * grossPerUnit; }
+            const sniQ  = qsh - qin; if (sniQ > 0) { sniLines++; soSni += sniQ * grossPerUnit; }
         }
         if (openLines) { openCount++; openAmt += soOpen; }
         if (sniLines)  { sniCount++; sniAmt  += soSni; }
