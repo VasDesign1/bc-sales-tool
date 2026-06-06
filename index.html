@@ -3699,6 +3699,66 @@ async function fetchSalesOrders() {
     try { return await bcFetchAll(url, "Sales orders"); }
     catch (e) { console.warn("Sales orders fetch failed:", e.message); return []; }
 }
+
+// Fetch sales-order lines via OData v4 so we get BC's server-computed
+// outstanding-amount fields (outstandingAmountLcy, shippedNotInvLcyNoVat,
+// etc.) — these are the same fields PBI reads from the Sales Line table.
+// The v2.0 REST salesOrderLines endpoint exposes only the raw amounts
+// and we have to recompute outstanding ourselves, which never matches
+// PBI to the dollar because BC applies tax and discount overrides
+// per-line that we can't replicate from v2.0 fields alone.
+async function fetchSalesOrderOutstandingLines() {
+    let headerInfo, linesInfo;
+    try { headerInfo = await bcDiscoverSalesEntity("blanket"); }
+    catch (e) { console.warn("[SO outstanding] header discovery failed:", e.message); return []; }
+    if (!headerInfo) {
+        console.warn("[SO outstanding] no OData salesDocuments entity published");
+        return [];
+    }
+    try { linesInfo = await bcDiscoverSalesLinesEntity(headerInfo.entity); }
+    catch (e) { console.warn("[SO outstanding] lines discovery failed:", e.message); return []; }
+    if (!linesInfo) {
+        console.warn("[SO outstanding] no OData salesDocumentLines entity published");
+        return [];
+    }
+    // Field finders for the BC-computed outstanding columns. They live
+    // on the Sales Line table and are exposed by the standard
+    // SalesDocumentLines OData web service.
+    const fields = linesInfo.fields || [];
+    const fDocType    = bcFindField(fields, [/^document.?type$/i, /documentType/i]);
+    const fDocNo      = linesInfo.fDocNo;
+    const fQty        = linesInfo.fQty;
+    const fOutQty     = bcFindField(fields, [/^outstanding.?quantity$/i, /outstandingQuantity/i]);
+    const fOutAmtLcy  = bcFindField(fields, [/^outstanding.?amount.?lcy$/i, /outstandingAmountLcy/i]);
+    const fOutAmt     = bcFindField(fields, [/^outstanding.?amount$/i, /outstandingAmount/i]);
+    const fSniLcy     = bcFindField(fields, [/^shipped.?not.?inv.?lcy.?no.?vat$/i, /^shipped.?not.?invoiced.?lcy$/i, /shippedNotInvLcyNoVat/i, /shippedNotInvoicedLcy/i]);
+    const fSniQty     = bcFindField(fields, [/^qty.?shipped.?not.?invoiced$/i, /qtyShippedNotInvoiced/i]);
+    if (!fDocType || !fDocNo) {
+        console.warn("[SO outstanding] missing documentType / documentNumber fields on lines entity");
+        return [];
+    }
+    const coName = encodeURIComponent(await bcGetCompanyInternalName());
+    const filter = fDocType + " eq 'Order'";
+    const url = BC_ODATA_URL + "/Company('" + coName + "')/" + linesInfo.entity +
+        "?$top=200000&$filter=" + encodeURIComponent(filter);
+    let rows = [];
+    try { rows = await bcFetchAll(url, "Sales order lines (OData outstanding)"); }
+    catch (e) { console.warn("[SO outstanding] OData fetch failed:", e.message); return []; }
+    console.log("[SO outstanding] " + linesInfo.entity + " (documentType=Order) → " + rows.length + " rows");
+    if (rows.length) {
+        console.log("[SO outstanding] field map: docNo=" + fDocNo +
+            " · outQty=" + fOutQty + " · outAmtLcy=" + fOutAmtLcy +
+            " · outAmt=" + fOutAmt + " · sniLcy=" + fSniLcy + " · sniQty=" + fSniQty);
+    }
+    return rows.map(r => ({
+        documentNumber: fDocNo ? r[fDocNo] : "",
+        quantity:       fQty ? num(r[fQty]) : 0,
+        outstandingQuantity:  fOutQty ? num(r[fOutQty]) : 0,
+        qtyShippedNotInvoiced: fSniQty ? num(r[fSniQty]) : 0,
+        outstandingAmountLcy:  fOutAmtLcy ? num(r[fOutAmtLcy]) : (fOutAmt ? num(r[fOutAmt]) : 0),
+        shippedNotInvLcy:      fSniLcy ? num(r[fSniLcy]) : 0,
+    }));
+}
 async function fetchSalesShipments(fromISO, toISO) {
     const compId = await bcGetCompanyId();
     const filter = "postingDate ge " + fromISO + " and postingDate le " + toISO;
@@ -3983,6 +4043,7 @@ const state = {
     snapshotAsOf: null,
     valueEntries: [],
     salesOrders: [],
+    salesOrderOutstandingLines: [],
     cxi: {
         view: "customer", customer: "", item: "", salesperson: "", status: "all", search: "",
         sortCust: { key: "sales", dir: "desc" }, // By Customer view (rows = items)
@@ -5513,26 +5574,39 @@ function paintPipelineKpis() {
     // (qty > qtyShipped) instead: only orders with remaining qty
     // contribute to "Outstanding Sales Orders".
     let openCount = 0, openAmt = 0, sniCount = 0, sniAmt = 0;
-    for (const so of (state.salesOrders || [])) {
-        let openLines = 0, sniLines = 0, soOpen = 0, soSni = 0;
-        for (const ln of (so.salesOrderLines || [])) {
-            const q   = num(ln.quantity);
-            if (q <= 0) continue;
-            const qsh = pick(ln, ["quantityShipped", "shippedQuantity", "qtyShipped"]);
-            const qin = pick(ln, ["quantityInvoiced", "invoicedQuantity", "qtyInvoiced"]);
-            // Use amountExcludingTax (line discount applied, invoice
-            // discount NOT yet applied) — matches PBI's Outstanding
-            // Amount on order lines. On orders the invoiceDiscount-
-            // Allocation is only a *projected* discount that hasn't
-            // posted yet, so subtracting it (as we do for invoice lines
-            // via lineNetAmount) under-states the pipeline by the
-            // invoice-discount headroom (~7% on this tenant).
-            const grossPerUnit = num(ln.amountExcludingTax) / q;
-            const openQ = q - qsh; if (openQ > 0) { openLines++; soOpen += openQ * grossPerUnit; }
-            const sniQ  = qsh - qin; if (sniQ > 0) { sniLines++; soSni += sniQ * grossPerUnit; }
+    // Prefer BC's server-computed outstandingAmountLcy / shippedNotInv
+    // LcyNoVat from OData v4 — that's what PBI reads from the Sales
+    // Line table. Falls back to per-line ratio calc against v2.0
+    // amountExcludingTax if OData isn't published in this tenant.
+    if (state.salesOrderOutstandingLines && state.salesOrderOutstandingLines.length) {
+        const openDocs = new Set(), sniDocs = new Set();
+        for (const ln of state.salesOrderOutstandingLines) {
+            if (ln.outstandingQuantity > 0) {
+                openAmt += ln.outstandingAmountLcy;
+                if (ln.documentNumber) openDocs.add(ln.documentNumber);
+            }
+            if (ln.qtyShippedNotInvoiced > 0) {
+                sniAmt += ln.shippedNotInvLcy;
+                if (ln.documentNumber) sniDocs.add(ln.documentNumber);
+            }
         }
-        if (openLines) { openCount++; openAmt += soOpen; }
-        if (sniLines)  { sniCount++; sniAmt  += soSni; }
+        openCount = openDocs.size;
+        sniCount = sniDocs.size;
+    } else {
+        for (const so of (state.salesOrders || [])) {
+            let openLines = 0, sniLines = 0, soOpen = 0, soSni = 0;
+            for (const ln of (so.salesOrderLines || [])) {
+                const q   = num(ln.quantity);
+                if (q <= 0) continue;
+                const qsh = pick(ln, ["quantityShipped", "shippedQuantity", "qtyShipped"]);
+                const qin = pick(ln, ["quantityInvoiced", "invoicedQuantity", "qtyInvoiced"]);
+                const grossPerUnit = num(ln.amountExcludingTax) / q;
+                const openQ = q - qsh; if (openQ > 0) { openLines++; soOpen += openQ * grossPerUnit; }
+                const sniQ  = qsh - qin; if (sniQ > 0) { sniLines++; soSni += sniQ * grossPerUnit; }
+            }
+            if (openLines) { openCount++; openAmt += soOpen; }
+            if (sniLines)  { sniCount++; sniAmt  += soSni; }
+        }
     }
     let oiCount = 0, oiAmt = 0;
     for (const inv of (state.filtered || [])) {
@@ -5541,7 +5615,10 @@ function paintPipelineKpis() {
         oiCount++;
         oiAmt += num(inv.totalAmountExcludingTax);
     }
-    console.log("[Pipeline calc] basis=amountExcludingTax/qty · openAmt=" + fmtMoneyFull(openAmt) + " · sniAmt=" + fmtMoneyFull(sniAmt) + " · openCount=" + openCount + " · sniCount=" + sniCount);
+    const basisSource = (state.salesOrderOutstandingLines && state.salesOrderOutstandingLines.length)
+        ? "BC OData outstandingAmountLcy / shippedNotInvLcy"
+        : "v2.0 fallback amountExcludingTax/qty × ratio";
+    console.log("[Pipeline calc] basis=" + basisSource + " · openAmt=" + fmtMoneyFull(openAmt) + " · sniAmt=" + fmtMoneyFull(sniAmt) + " · openCount=" + openCount + " · sniCount=" + sniCount);
     // Diagnostic — print four alternative formulas so we can see which
     // matches PBI's Outstanding Sales Orders (LCY). One of these should
     // line up; whichever one wins becomes the new basis.
@@ -10343,7 +10420,7 @@ async function handleLoad() {
     const btn = document.getElementById("loadBtn");
     btn.disabled = true; btn.textContent = "Loading…";
     try {
-        const [locs, items, customers, invoices, iles, creditMemos, shipments, returnReceipts, quotes, quoteExtras, blanketOrders, valueEntries, salesOrders] = await Promise.all([
+        const [locs, items, customers, invoices, iles, creditMemos, shipments, returnReceipts, quotes, quoteExtras, blanketOrders, valueEntries, salesOrders, salesOrderOutstanding] = await Promise.all([
             fetchLocations(),
             fetchItems(),
             fetchCustomers(),
@@ -10357,8 +10434,10 @@ async function handleLoad() {
             fetchBlanketSalesOrders(from, to),
             fetchValueEntries(from, to),
             fetchSalesOrders(),
+            fetchSalesOrderOutstandingLines(),
         ]);
         state.salesOrders = salesOrders || [];
+        state.salesOrderOutstandingLines = salesOrderOutstanding || [];
         if (state.salesOrders.length) {
             console.log("[Sales Orders] loaded " + state.salesOrders.length + " orders, sample fields:", Object.keys(state.salesOrders[0]).join(", "));
             if (state.salesOrders[0].salesOrderLines && state.salesOrders[0].salesOrderLines.length) {
