@@ -5580,15 +5580,14 @@ function paintPipelineKpis() {
     const inRange = getDateRangePredicate();
     let openCount = 0, openAmt = 0, sniCount = 0, sniAmt = 0;
     if (state.salesOrderOutstandingLines && state.salesOrderOutstandingLines.length) {
-        // Filter by each LINE's shipmentDate — that's what PBI's
-        // standard Outstanding Sales Orders tile uses (each line has
-        // its own expected ship date, independent of the order header).
-        // Confirmed against this tenant: 169 orders / ≈$245K matches
-        // PBI's 171 / $245.64K within data-freshness drift.
+        // Outstanding: filter by LINE's shipmentDate (future delivery
+        // in the picked period). SNI: do NOT filter — already-shipped
+        // lines have shipmentDate in the past, so a date filter zeros
+        // them out. SNI is inherently a current-state metric ("what's
+        // in shipped-but-unbilled limbo right now").
         const openDocs = new Set(), sniDocs = new Set();
         for (const ln of state.salesOrderOutstandingLines) {
-            if (!inRange(ln.shipmentDate)) continue;
-            if (ln.outstandingQuantity > 0) {
+            if (ln.outstandingQuantity > 0 && inRange(ln.shipmentDate)) {
                 openAmt += ln.outstandingAmountLcy;
                 if (ln.documentNumber) openDocs.add(ln.documentNumber);
             }
@@ -5600,18 +5599,18 @@ function paintPipelineKpis() {
         openCount = openDocs.size;
         sniCount = sniDocs.size;
     } else {
-        // v2.0 fallback — same line-level shipmentDate filter, computed
-        // amount via amountExcludingTax × ratio.
+        // v2.0 fallback — Outstanding filtered by line.shipmentDate,
+        // SNI unfiltered (current-state metric).
         for (const so of (state.salesOrders || [])) {
             let openLines = 0, sniLines = 0, soOpen = 0, soSni = 0;
             for (const ln of (so.salesOrderLines || [])) {
-                if (!inRange((ln.shipmentDate || "").toString().slice(0, 10))) continue;
                 const q   = num(ln.quantity);
                 if (q <= 0) continue;
                 const qsh = pick(ln, ["quantityShipped", "shippedQuantity", "qtyShipped"]);
                 const qin = pick(ln, ["quantityInvoiced", "invoicedQuantity", "qtyInvoiced"]);
                 const grossPerUnit = num(ln.amountExcludingTax) / q;
-                const openQ = q - qsh; if (openQ > 0) { openLines++; soOpen += openQ * grossPerUnit; }
+                const lineShipDate = (ln.shipmentDate || "").toString().slice(0, 10);
+                const openQ = q - qsh; if (openQ > 0 && inRange(lineShipDate)) { openLines++; soOpen += openQ * grossPerUnit; }
                 const sniQ  = qsh - qin; if (sniQ > 0) { sniLines++; soSni += sniQ * grossPerUnit; }
             }
             if (openLines) { openCount++; openAmt += soOpen; }
@@ -5628,31 +5627,12 @@ function paintPipelineKpis() {
     const basisSource = (state.salesOrderOutstandingLines && state.salesOrderOutstandingLines.length)
         ? "BC OData outstandingAmountLcy / shippedNotInvoicedLcy"
         : "v2.0 fallback amountExcludingTax/qty × ratio";
-    console.log("[Pipeline calc] basis=" + basisSource + " · filter=line.shipmentDate · openAmt=" + fmtMoneyFull(openAmt) + " · sniAmt=" + fmtMoneyFull(sniAmt) + " · openCount=" + openCount + " · sniCount=" + sniCount);
-    // Probe: filter at HEADER level — if ANY line of the order has
-    // shipmentDate in range, count the WHOLE order's outstanding
-    // amount (across all its lines). Standard PBI tile may use this
-    // shape; per-line filter under-counts.
-    if (state.salesOrderOutstandingLines && state.salesOrderOutstandingLines.length) {
-        const docsWithInRangeLine = new Set();
-        for (const ln of state.salesOrderOutstandingLines) {
-            if (inRange(ln.shipmentDate) && ln.documentNumber) docsWithInRangeLine.add(ln.documentNumber);
-        }
-        let hdrOpenAmt = 0;
-        const hdrOpenDocs = new Set();
-        for (const ln of state.salesOrderOutstandingLines) {
-            if (!docsWithInRangeLine.has(ln.documentNumber)) continue;
-            if (ln.outstandingQuantity <= 0) continue;
-            hdrOpenAmt += ln.outstandingAmountLcy;
-            hdrOpenDocs.add(ln.documentNumber);
-        }
-        console.log("[Pipeline probe] header-level filter (any-line-in-range, sum ALL outstanding): " + hdrOpenDocs.size + " orders · " + fmtMoneyFull(hdrOpenAmt));
-    }
+    console.log("[Pipeline calc] outstanding=line.shipmentDate-filter · sni=current-state · open=" + fmtMoneyFull(openAmt) + "/" + openCount + " · sni=" + fmtMoneyFull(sniAmt) + "/" + sniCount);
     const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
     set("kpiPipeOpenAmt", fmtMoneyFull(openAmt));
-    set("kpiPipeOpenSub", openCount + " orders · not fully shipped (in range)");
+    set("kpiPipeOpenSub", openCount + " orders · scheduled to ship in range");
     set("kpiPipeSniAmt",  fmtMoneyFull(sniAmt));
-    set("kpiPipeSniSub",  sniCount + " orders · awaiting invoice (in range)");
+    set("kpiPipeSniSub",  sniCount + " orders · awaiting invoice (current state)");
     set("kpiPipeOiAmt",   fmtMoneyFull(oiAmt));
     set("kpiPipeOiSub",   oiCount + " invoices · unpaid in range");
 }
