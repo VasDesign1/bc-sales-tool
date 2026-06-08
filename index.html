@@ -5622,36 +5622,69 @@ function paintPipelineKpis() {
         : "v2.0 fallback amountExcludingTax/qty × ratio";
     console.log("[Pipeline calc] basis=" + basisSource + " · openAmt=" + fmtMoneyFull(openAmt) + " · sniAmt=" + fmtMoneyFull(sniAmt) + " · openCount=" + openCount + " · sniCount=" + sniCount);
     // Date-field probe — log the Outstanding count + sum under each
-    // candidate date field on the order header. Whichever matches PBI
-    // is what we should be filtering by. Runs only when OData lines
-    // are available and the toolbar has a date range applied.
+    // candidate date field at BOTH header AND line level. Whichever
+    // matches PBI is what we should be filtering by.
     if (state.salesOrderOutstandingLines && state.salesOrderOutstandingLines.length) {
-        const fields = ["orderDate", "postingDate", "requestedDeliveryDate", "promisedDeliveryDate", "lastModifiedDateTime"];
+        const headerFields = ["orderDate", "postingDate", "requestedDeliveryDate", "promisedDeliveryDate", "lastModifiedDateTime"];
+        const lineFields   = ["shipmentDate", "documentDate", "plannedDeliveryDate", "plannedShipmentDate", "requestedDeliveryDate"];
         const probe = {};
-        for (const f of fields) probe[f] = { docs: new Set(), amt: 0 };
+        for (const f of headerFields) probe["H." + f] = { docs: new Set(), amt: 0 };
+        for (const f of lineFields)   probe["L." + f] = { docs: new Set(), amt: 0 };
         const probeNoFilter = { docs: new Set(), amt: 0 };
         const headerByNum = new Map();
         for (const so of (state.salesOrders || [])) {
             if (so.number) headerByNum.set(so.number, so);
         }
+        // Build a v2.0 line lookup so we can read line-level dates the
+        // OData outstanding rows might not carry directly.
+        const v2LineByDoc = new Map(); // docNum → array of v2.0 lines
+        for (const so of (state.salesOrders || [])) {
+            if (!so.number) continue;
+            v2LineByDoc.set(so.number, so.salesOrderLines || []);
+        }
         for (const ln of state.salesOrderOutstandingLines) {
             if (ln.outstandingQuantity <= 0) continue;
             const h = headerByNum.get(ln.documentNumber);
             if (!h) continue;
-            // No-filter baseline
             if (ln.documentNumber) probeNoFilter.docs.add(ln.documentNumber);
             probeNoFilter.amt += ln.outstandingAmountLcy;
-            // Per-field
-            for (const f of fields) {
+            // Header-date probes
+            for (const f of headerFields) {
                 const d = (h[f] || "").toString().slice(0, 10);
                 if (!inRange(d)) continue;
-                if (ln.documentNumber) probe[f].docs.add(ln.documentNumber);
-                probe[f].amt += ln.outstandingAmountLcy;
+                if (ln.documentNumber) probe["H." + f].docs.add(ln.documentNumber);
+                probe["H." + f].amt += ln.outstandingAmountLcy;
             }
         }
-        console.log("[Pipeline probe] no date filter at all: " + probeNoFilter.docs.size + " orders · " + fmtMoneyFull(probeNoFilter.amt));
-        for (const f of fields) {
-            console.log("[Pipeline probe] filtered by " + f + ": " + probe[f].docs.size + " orders · " + fmtMoneyFull(probe[f].amt));
+        // Line-date probes — per LINE: if any line in the order has its
+        // own date in range, the line's outstanding contributes. Walk the
+        // v2.0 salesOrderLines (which have line-level date fields) and
+        // attribute the OData outstandingAmountLcy proportionally to the
+        // matched line. Since v2.0 line and OData line don't always share
+        // a key, fall back to summing the v2.0 line's amountExcludingTax-
+        // ratio for orders matching ANY line in range.
+        for (const so of (state.salesOrders || [])) {
+            for (const ln of (so.salesOrderLines || [])) {
+                const q = num(ln.quantity); if (q <= 0) continue;
+                const qsh = num(ln.shippedQuantity) || num(ln.quantityShipped);
+                const openQ = q - qsh; if (openQ <= 0) continue;
+                const lineOpenAmt = num(ln.amountExcludingTax) * openQ / q;
+                for (const f of lineFields) {
+                    const d = (ln[f] || "").toString().slice(0, 10);
+                    if (!inRange(d)) continue;
+                    if (so.number) probe["L." + f].docs.add(so.number);
+                    probe["L." + f].amt += lineOpenAmt;
+                }
+            }
+        }
+        console.log("[Pipeline probe] no date filter: " + probeNoFilter.docs.size + " orders · " + fmtMoneyFull(probeNoFilter.amt));
+        for (const f of headerFields) {
+            const p = probe["H." + f];
+            console.log("[Pipeline probe] H." + f + ": " + p.docs.size + " orders · " + fmtMoneyFull(p.amt));
+        }
+        for (const f of lineFields) {
+            const p = probe["L." + f];
+            console.log("[Pipeline probe] L." + f + ": " + p.docs.size + " orders · " + fmtMoneyFull(p.amt));
         }
     }
     const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
