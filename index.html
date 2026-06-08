@@ -1532,7 +1532,12 @@
                         <option value="365" selected>Last 12 months</option>
                         <option value="ytd">Year to date</option>
                         <option value="fy">Current Fiscal Year (Jul–Jun)</option>
+                        <option value="month">Specific month…</option>
                     </select>
+                </div>
+                <div class="field" id="monthPickerField" style="display:none;">
+                    <label for="monthPicker">Month</label>
+                    <select id="monthPicker"><option value="">— pick a month —</option></select>
                 </div>
                 <div class="field">
                     <label for="locationFilter">Branch</label>
@@ -5554,34 +5559,29 @@ function renderFilterChips() {
 //     Amount = Σ (qtyShipped − qtyInvoiced) × unitPrice over those lines.
 //   - Outstanding Invoices:    invoices in state.filtered where status != "Paid".
 //     Amount = Σ totalAmountExcludingTax.
-// Sales-order metrics are CURRENT-STATE (no date filter) so the
-// pipeline view reflects what's actually open now, not historical
-// snapshots. Outstanding Invoices uses the toolbar's loaded set.
+// All three KPIs honour the toolbar date range: Outstanding Invoices
+// via state.filtered (already date-scoped), the two sales-order tiles
+// via each order's orderDate against the toolbar predicate. That way
+// "May 2026" shows the pipeline as of orders placed in May, not the
+// current-state global pipeline.
 function paintPipelineKpis() {
-    // Field names on salesOrderLines differ across BC tenants —
-    // standard v2.0 docs say "quantityShipped"/"quantityInvoiced" but
-    // some tenants publish "shippedQuantity"/"invoicedQuantity".
-    // Try both. If neither populated, qsh stays 0 and EVERY line
-    // shows as outstanding (explained the initial 539-orders bug).
     const pick = (ln, names) => {
         for (const n of names) if (ln[n] != null) return num(ln[n]);
         return 0;
     };
-    // No status filter — BC v2.0 salesOrders only returns currently-
-    // active order headers (closed orders move to historical tables),
-    // and tenants use the "status" field inconsistently (this one had
-    // 384 "Draft" + 80 "Open", where the 384 Draft are real customer
-    // orders PBI also counts). Trust the line-level outstanding logic
-    // (qty > qtyShipped) instead: only orders with remaining qty
-    // contribute to "Outstanding Sales Orders".
+    const inRange = getDateRangePredicate();
+    // Map order document number → orderDate so we can filter the OData
+    // outstanding-lines (which carry only documentNumber, no date) by
+    // the toolbar's From/To range.
+    const orderDate = new Map();
+    for (const so of (state.salesOrders || [])) {
+        if (so.number) orderDate.set(so.number, so.orderDate || so.postingDate || "");
+    }
     let openCount = 0, openAmt = 0, sniCount = 0, sniAmt = 0;
-    // Prefer BC's server-computed outstandingAmountLcy / shippedNotInv
-    // LcyNoVat from OData v4 — that's what PBI reads from the Sales
-    // Line table. Falls back to per-line ratio calc against v2.0
-    // amountExcludingTax if OData isn't published in this tenant.
     if (state.salesOrderOutstandingLines && state.salesOrderOutstandingLines.length) {
         const openDocs = new Set(), sniDocs = new Set();
         for (const ln of state.salesOrderOutstandingLines) {
+            if (!inRange(orderDate.get(ln.documentNumber) || "")) continue;
             if (ln.outstandingQuantity > 0) {
                 openAmt += ln.outstandingAmountLcy;
                 if (ln.documentNumber) openDocs.add(ln.documentNumber);
@@ -5595,6 +5595,7 @@ function paintPipelineKpis() {
         sniCount = sniDocs.size;
     } else {
         for (const so of (state.salesOrders || [])) {
+            if (!inRange(so.orderDate || so.postingDate || "")) continue;
             let openLines = 0, sniLines = 0, soOpen = 0, soSni = 0;
             for (const ln of (so.salesOrderLines || [])) {
                 const q   = num(ln.quantity);
@@ -5622,9 +5623,9 @@ function paintPipelineKpis() {
     console.log("[Pipeline calc] basis=" + basisSource + " · openAmt=" + fmtMoneyFull(openAmt) + " · sniAmt=" + fmtMoneyFull(sniAmt) + " · openCount=" + openCount + " · sniCount=" + sniCount);
     const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
     set("kpiPipeOpenAmt", fmtMoneyFull(openAmt));
-    set("kpiPipeOpenSub", openCount + " orders · not fully shipped");
+    set("kpiPipeOpenSub", openCount + " orders · not fully shipped (in range)");
     set("kpiPipeSniAmt",  fmtMoneyFull(sniAmt));
-    set("kpiPipeSniSub",  sniCount + " orders · awaiting invoice");
+    set("kpiPipeSniSub",  sniCount + " orders · awaiting invoice (in range)");
     set("kpiPipeOiAmt",   fmtMoneyFull(oiAmt));
     set("kpiPipeOiSub",   oiCount + " invoices · unpaid in range");
 }
@@ -10362,6 +10363,17 @@ function populateFilterDropdowns() {
 function applyQuickRange(value) {
     const today = new Date();
     const toEl = document.getElementById("toDate"), fromEl = document.getElementById("fromDate");
+    const mpField = document.getElementById("monthPickerField");
+    if (value === "month") {
+        // Reveal the month sub-picker; don't change the date inputs
+        // until the user picks a specific month. Populate the dropdown
+        // on first reveal (last 24 months).
+        if (mpField) mpField.style.display = "";
+        populateMonthPicker();
+        setPeriodBadge();
+        return;
+    }
+    if (mpField) mpField.style.display = "none";
     if (value === "ytd") {
         fromEl.value = today.getFullYear() + "-01-01";
         toEl.value   = today.toISOString().slice(0, 10);
@@ -10376,6 +10388,36 @@ function applyQuickRange(value) {
         fromEl.value = past.toISOString().slice(0, 10);
         toEl.value   = today.toISOString().slice(0, 10);
     }
+    setPeriodBadge();
+}
+
+// Populate the Month sub-picker with the last 24 months (most recent first).
+// Idempotent — only fills options once.
+function populateMonthPicker() {
+    const sel = document.getElementById("monthPicker");
+    if (!sel || sel.options.length > 1) return;
+    const monthNames = ["January", "February", "March", "April", "May", "June",
+                        "July", "August", "September", "October", "November", "December"];
+    const today = new Date();
+    for (let i = 0; i < 24; i++) {
+        const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+        const yyyy = d.getFullYear();
+        const mm   = String(d.getMonth() + 1).padStart(2, "0");
+        const opt = document.createElement("option");
+        opt.value = yyyy + "-" + mm;
+        opt.textContent = monthNames[d.getMonth()] + " " + yyyy;
+        sel.appendChild(opt);
+    }
+}
+
+// Set From / To to the first and last day of yyyy-mm.
+function applyMonth(yyyymm) {
+    if (!yyyymm) return;
+    const [y, m] = yyyymm.split("-").map(Number);
+    const first = new Date(y, m - 1, 1);
+    const last  = new Date(y, m, 0); // day 0 of next month = last day of this month
+    document.getElementById("fromDate").value = y + "-" + String(m).padStart(2, "0") + "-01";
+    document.getElementById("toDate").value   = last.toISOString().slice(0, 10);
     setPeriodBadge();
 }
 
@@ -10713,6 +10755,12 @@ function wireEvents() {
         });
     }
 
+    document.getElementById("monthPicker").addEventListener("change", e => {
+        const v = e.target.value;
+        if (!v) return;
+        applyMonth(v);
+        rebuildFiltered(); renderCurrentTab();
+    });
     document.getElementById("quickRange").addEventListener("change", e => {
         if (e.target.value) applyQuickRange(e.target.value);
         if (state.invoices && state.invoices.length) { rebuildFiltered(); renderCurrentTab(); }
