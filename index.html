@@ -6162,10 +6162,21 @@ function renderEntityCharts(rows, opts) {
                     datasets: [{ data: top.map(e => e.sales),
                                  backgroundColor: top.map((_, i) => barShade(paletteBase || "#3949ab", i / 12)),
                                  borderRadius: 4 }] },
+            // Per-chart datalabels — paints the dollar value at the end
+            // of each bar so a tiny one-pixel-wide bar (like the \$2K
+            // branch next to a \$1M branch) still shows its real number.
+            plugins: [ChartDataLabels],
             options: chartBase({
                 indexAxis: "y",
                 plugins: { legend: { display: false },
-                           tooltip: { callbacks: { label: c => fmtMoneyFull(c.parsed.x) + " · GP " + fmtPct(top[c.dataIndex].gpPct) + " · " + fmtInt(top[c.dataIndex].invoiceCount) + " inv" } } },
+                           tooltip: { callbacks: { label: c => fmtMoneyFull(c.parsed.x) + " · GP " + fmtPct(top[c.dataIndex].gpPct) + " · " + fmtInt(top[c.dataIndex].invoiceCount) + " inv" } },
+                           datalabels: {
+                               anchor: "end", align: "end", clamp: true,
+                               formatter: v => fmtMoney(v),
+                               font: { size: 11, weight: 500 },
+                               color: Chart.defaults.color,
+                           } },
+                layout: { padding: { right: 80 } },
                 scales: { x: { ticks: { callback: v => fmtMoney(v) } } },
                 onClick: (_, els) => {
                     if (!els.length) return;
@@ -6231,18 +6242,6 @@ function renderBranch() {
     const totSales = rows.reduce((s, r) => s + r.sales, 0);
     const totGp    = rows.reduce((s, r) => s + r.gp, 0);
     const totQty   = rows.reduce((s, r) => s + r.qty, 0);
-    // Diagnostic: dump per-branch totals so we can see if any bucket
-    // is invisibly tiny / mis-keyed and explains a headline-vs-chart gap.
-    const perBranch = new Map();
-    for (const r of rows) {
-        const k = r.branch || "(empty string)";
-        perBranch.set(k, (perBranch.get(k) || 0) + r.sales);
-    }
-    const branchArr = [...perBranch.entries()].sort((a, b) => b[1] - a[1]);
-    console.log("[Branch tab] totSales=" + fmtMoneyFull(totSales) + " · " + branchArr.length + " unique branch buckets:");
-    for (const [k, v] of branchArr) console.log("  branch \"" + k + "\" → " + fmtMoneyFull(v));
-    const branchSum = branchArr.reduce((s, [, v]) => s + v, 0);
-    console.log("[Branch tab] sum of branch buckets = " + fmtMoneyFull(branchSum) + " · diff vs headline = " + fmtMoneyFull(totSales - branchSum));
     document.getElementById("brKpiSales").textContent = fmtMoneyFull(totSales);
     document.getElementById("brKpiQty").textContent   = fmtInt(totQty);
     document.getElementById("brKpiGp").textContent    = fmtMoneyFull(totGp);
