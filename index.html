@@ -5621,6 +5621,39 @@ function paintPipelineKpis() {
         ? "BC OData outstandingAmountLcy / shippedNotInvoicedLcy"
         : "v2.0 fallback amountExcludingTax/qty × ratio";
     console.log("[Pipeline calc] basis=" + basisSource + " · openAmt=" + fmtMoneyFull(openAmt) + " · sniAmt=" + fmtMoneyFull(sniAmt) + " · openCount=" + openCount + " · sniCount=" + sniCount);
+    // Date-field probe — log the Outstanding count + sum under each
+    // candidate date field on the order header. Whichever matches PBI
+    // is what we should be filtering by. Runs only when OData lines
+    // are available and the toolbar has a date range applied.
+    if (state.salesOrderOutstandingLines && state.salesOrderOutstandingLines.length) {
+        const fields = ["orderDate", "postingDate", "requestedDeliveryDate", "promisedDeliveryDate", "lastModifiedDateTime"];
+        const probe = {};
+        for (const f of fields) probe[f] = { docs: new Set(), amt: 0 };
+        const probeNoFilter = { docs: new Set(), amt: 0 };
+        const headerByNum = new Map();
+        for (const so of (state.salesOrders || [])) {
+            if (so.number) headerByNum.set(so.number, so);
+        }
+        for (const ln of state.salesOrderOutstandingLines) {
+            if (ln.outstandingQuantity <= 0) continue;
+            const h = headerByNum.get(ln.documentNumber);
+            if (!h) continue;
+            // No-filter baseline
+            if (ln.documentNumber) probeNoFilter.docs.add(ln.documentNumber);
+            probeNoFilter.amt += ln.outstandingAmountLcy;
+            // Per-field
+            for (const f of fields) {
+                const d = (h[f] || "").toString().slice(0, 10);
+                if (!inRange(d)) continue;
+                if (ln.documentNumber) probe[f].docs.add(ln.documentNumber);
+                probe[f].amt += ln.outstandingAmountLcy;
+            }
+        }
+        console.log("[Pipeline probe] no date filter at all: " + probeNoFilter.docs.size + " orders · " + fmtMoneyFull(probeNoFilter.amt));
+        for (const f of fields) {
+            console.log("[Pipeline probe] filtered by " + f + ": " + probe[f].docs.size + " orders · " + fmtMoneyFull(probe[f].amt));
+        }
+    }
     const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
     set("kpiPipeOpenAmt", fmtMoneyFull(openAmt));
     set("kpiPipeOpenSub", openCount + " orders · not fully shipped (in range)");
@@ -10410,14 +10443,17 @@ function populateMonthPicker() {
     }
 }
 
-// Set From / To to the first and last day of yyyy-mm.
+// Set From / To to the first and last day of yyyy-mm. Build the YYYY-
+// MM-DD strings directly — toISOString() converts to UTC and on AEST
+// (UTC+10) would slide the last-day-of-month back one day, e.g. May
+// 31 local → May 30 UTC.
 function applyMonth(yyyymm) {
     if (!yyyymm) return;
     const [y, m] = yyyymm.split("-").map(Number);
-    const first = new Date(y, m - 1, 1);
-    const last  = new Date(y, m, 0); // day 0 of next month = last day of this month
-    document.getElementById("fromDate").value = y + "-" + String(m).padStart(2, "0") + "-01";
-    document.getElementById("toDate").value   = last.toISOString().slice(0, 10);
+    const lastDay = new Date(y, m, 0).getDate(); // 28 / 29 / 30 / 31
+    const mm = String(m).padStart(2, "0");
+    document.getElementById("fromDate").value = y + "-" + mm + "-01";
+    document.getElementById("toDate").value   = y + "-" + mm + "-" + String(lastDay).padStart(2, "0");
     setPeriodBadge();
 }
 
