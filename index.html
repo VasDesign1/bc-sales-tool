@@ -3743,6 +3743,14 @@ async function fetchSalesOrderOutstandingLines() {
     // so the with-VAT field wins; fall through to no-VAT only if the
     // with-VAT one isn't published.
     const fSniLcy     = bcFindField(fields, [/^shipped.?not.?invoiced.?lcy$/i, /shippedNotInvoicedLcy/i, /^shipped.?not.?inv.?lcy.?no.?vat$/i, /shippedNotInvLcyNoVat/i]);
+    // Ex-GST variant for tenants that publish "shippedNotInvLcyNoVat"
+    // alongside the with-VAT field. We keep both around — pipeline UI
+    // can pick whichever matches the rest of the tool's tax treatment.
+    const fSniLcyNoVat = bcFindField(fields, [/^shipped.?not.?inv.?lcy.?no.?vat$/i, /shippedNotInvLcyNoVat/i]);
+    // BC's line "Amount" = ex-VAT line total in document currency. On a
+    // single-currency tenant (AUD = LCY) this is the right ex-GST basis
+    // for computing outstanding amount as (amount × outstandingQty / qty).
+    const fLineAmount  = bcFindField(fields, [/^amount$/i, /^line.?amount$/i]);
     const fSniQty     = bcFindField(fields, [/^qty.?shipped.?not.?invoiced$/i, /qtyShippedNotInvoiced/i]);
     // Per-line shipmentDate — PBI's "Outstanding Sales Orders" tile
     // filters on the line's Shipment Date (each line carries its own
@@ -3762,14 +3770,16 @@ async function fetchSalesOrderOutstandingLines() {
     let rows = [];
     try { rows = await bcFetchAll(url, "Sales order lines (OData outstanding)"); }
     catch (e) { console.warn("[SO outstanding] OData fetch failed:", e.message); return []; }
-    console.log("[SO outstanding] " + linesInfo.entity + " (documentType=Order) → " + rows.length + " rows · outAmtLcy=" + fOutAmtLcy + " · sniLcy=" + fSniLcy + " · shipDate=" + fShipDate);
+    console.log("[SO outstanding] " + linesInfo.entity + " (documentType=Order) → " + rows.length + " rows · outAmtLcy=" + fOutAmtLcy + " · lineAmount=" + fLineAmount + " · sniLcy=" + fSniLcy + " · sniLcyNoVat=" + fSniLcyNoVat + " · shipDate=" + fShipDate);
     return rows.map(r => ({
         documentNumber: fDocNo ? r[fDocNo] : "",
         quantity:       fQty ? num(r[fQty]) : 0,
         outstandingQuantity:  fOutQty ? num(r[fOutQty]) : 0,
         qtyShippedNotInvoiced: fSniQty ? num(r[fSniQty]) : 0,
         outstandingAmountLcy:  fOutAmtLcy ? num(r[fOutAmtLcy]) : (fOutAmt ? num(r[fOutAmt]) : 0),
+        lineAmount:            fLineAmount ? num(r[fLineAmount]) : 0,
         shippedNotInvLcy:      fSniLcy ? num(r[fSniLcy]) : 0,
+        shippedNotInvLcyExVat: fSniLcyNoVat ? num(r[fSniLcyNoVat]) : 0,
         shipmentDate:          fShipDate ? (r[fShipDate] || "").toString().slice(0, 10) : "",
     }));
 }
@@ -5580,19 +5590,20 @@ function paintPipelineKpis() {
     const inRange = getDateRangePredicate();
     let openCount = 0, openAmt = 0, sniCount = 0, sniAmt = 0;
     if (state.salesOrderOutstandingLines && state.salesOrderOutstandingLines.length) {
-        // Outstanding: filter by LINE's shipmentDate (future delivery
-        // in the picked period). SNI: do NOT filter — already-shipped
-        // lines have shipmentDate in the past, so a date filter zeros
-        // them out. SNI is inherently a current-state metric ("what's
-        // in shipped-but-unbilled limbo right now").
+        // EX-GST basis to match the rest of the page. Outstanding =
+        // line.amount (ex-VAT line total) × outstandingQty / qty. SNI
+        // = shippedNotInvLcyExVat directly from BC. Outstanding is
+        // filtered by line.shipmentDate (future delivery in range);
+        // SNI stays current-state since shipped lines have past dates.
         const openDocs = new Set(), sniDocs = new Set();
         for (const ln of state.salesOrderOutstandingLines) {
             if (ln.outstandingQuantity > 0 && inRange(ln.shipmentDate)) {
-                openAmt += ln.outstandingAmountLcy;
+                const exVatPerUnit = ln.quantity ? (ln.lineAmount / ln.quantity) : 0;
+                openAmt += ln.outstandingQuantity * exVatPerUnit;
                 if (ln.documentNumber) openDocs.add(ln.documentNumber);
             }
             if (ln.qtyShippedNotInvoiced > 0) {
-                sniAmt += ln.shippedNotInvLcy;
+                sniAmt += ln.shippedNotInvLcyExVat;
                 if (ln.documentNumber) sniDocs.add(ln.documentNumber);
             }
         }
@@ -5625,9 +5636,9 @@ function paintPipelineKpis() {
         oiAmt += num(inv.totalAmountExcludingTax);
     }
     const basisSource = (state.salesOrderOutstandingLines && state.salesOrderOutstandingLines.length)
-        ? "BC OData outstandingAmountLcy / shippedNotInvoicedLcy"
-        : "v2.0 fallback amountExcludingTax/qty × ratio";
-    console.log("[Pipeline calc] outstanding=line.shipmentDate-filter · sni=current-state · open=" + fmtMoneyFull(openAmt) + "/" + openCount + " · sni=" + fmtMoneyFull(sniAmt) + "/" + sniCount);
+        ? "BC OData line.amount (ex-GST) / shippedNotInvLcyNoVat (ex-GST)"
+        : "v2.0 fallback amountExcludingTax/qty × ratio (ex-GST)";
+    console.log("[Pipeline calc] basis=" + basisSource + " · outstanding=line.shipmentDate-filter · sni=current-state · open=" + fmtMoneyFull(openAmt) + "/" + openCount + " · sni=" + fmtMoneyFull(sniAmt) + "/" + sniCount);
     const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
     set("kpiPipeOpenAmt", fmtMoneyFull(openAmt));
     set("kpiPipeOpenSub", openCount + " orders · scheduled to ship in range");
