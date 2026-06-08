@@ -5629,6 +5629,25 @@ function paintPipelineKpis() {
         ? "BC OData outstandingAmountLcy / shippedNotInvoicedLcy"
         : "v2.0 fallback amountExcludingTax/qty × ratio";
     console.log("[Pipeline calc] basis=" + basisSource + " · filter=line.shipmentDate · openAmt=" + fmtMoneyFull(openAmt) + " · sniAmt=" + fmtMoneyFull(sniAmt) + " · openCount=" + openCount + " · sniCount=" + sniCount);
+    // Probe: filter at HEADER level — if ANY line of the order has
+    // shipmentDate in range, count the WHOLE order's outstanding
+    // amount (across all its lines). Standard PBI tile may use this
+    // shape; per-line filter under-counts.
+    if (state.salesOrderOutstandingLines && state.salesOrderOutstandingLines.length) {
+        const docsWithInRangeLine = new Set();
+        for (const ln of state.salesOrderOutstandingLines) {
+            if (inRange(ln.shipmentDate) && ln.documentNumber) docsWithInRangeLine.add(ln.documentNumber);
+        }
+        let hdrOpenAmt = 0;
+        const hdrOpenDocs = new Set();
+        for (const ln of state.salesOrderOutstandingLines) {
+            if (!docsWithInRangeLine.has(ln.documentNumber)) continue;
+            if (ln.outstandingQuantity <= 0) continue;
+            hdrOpenAmt += ln.outstandingAmountLcy;
+            hdrOpenDocs.add(ln.documentNumber);
+        }
+        console.log("[Pipeline probe] header-level filter (any-line-in-range, sum ALL outstanding): " + hdrOpenDocs.size + " orders · " + fmtMoneyFull(hdrOpenAmt));
+    }
     const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
     set("kpiPipeOpenAmt", fmtMoneyFull(openAmt));
     set("kpiPipeOpenSub", openCount + " orders · not fully shipped (in range)");
