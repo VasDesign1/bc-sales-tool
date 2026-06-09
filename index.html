@@ -2357,9 +2357,6 @@
                     <div class="panel-header">
                         <h2>Items</h2>
                         <input type="text" class="search" id="itemSearch" placeholder="Search item or description…">
-                        <button class="gp-filter-btn low"  id="itGpLowBtn"  type="button">GP &lt; 20%</button>
-                        <button class="gp-filter-btn high" id="itGpHighBtn" type="button">GP &gt; 90%</button>
-                        <button class="more-btn"           id="itExportBtn" type="button">Export to Excel</button>
                         <div class="meta" id="itemMeta"></div>
                     </div>
                     <div class="table-scroll">
@@ -4237,9 +4234,6 @@ const state = {
     sortEom: { key: "sales", dir: "desc" },
     sortReturns: { key: "postingDate", dir: "desc" },
     byItemCategoryFilter: "",
-    itGpLow: false,
-    itGpHigh: false,
-    itLastFilteredRows: [],
     eomGpLow: false,
     eomGpHigh: false,
     eomLastFilteredRows: [],
@@ -9637,16 +9631,6 @@ function renderByItem() {
         rows = rows.filter(r => (r.number || "").toLowerCase().includes(q) || (r.description || "").toLowerCase().includes(q));
     }
 
-    // GP % filter toggles — low (<20%) and/or high (>90%). When both on, show items in either band.
-    // Only consider rows with non-zero sales so $0/0% items don't dominate the "low" bucket.
-    if (state.itGpLow || state.itGpHigh) {
-        rows = rows.filter(r => {
-            if (!r.revenue) return false;
-            return (state.itGpLow && r.gpPct < 0.20) || (state.itGpHigh && r.gpPct > 0.90);
-        });
-    }
-    state.itLastFilteredRows = rows;
-
     const totSales = rows.reduce((s, r) => s + r.revenue, 0);
     const totGp    = rows.reduce((s, r) => s + r.gp, 0);
     const totQty   = rows.reduce((s, r) => s + r.qty, 0);
@@ -9849,60 +9833,6 @@ function downloadXLSX(rows, sheetName, baseName, opts) {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, sheetName || "Export");
     XLSX.writeFile(wb, baseName + ".xlsx");
-}
-
-// Export Sales-by-Item table as XLSX. One row per invoice line for items
-// currently passing all filters (category cross-filter, search, GP % bands).
-function exportItemsToCSV() {
-    const filteredRows = state.itLastFilteredRows || [];
-    if (!filteredRows.length) { alert("No items to export — adjust filters and try again."); return; }
-    const allowedItems = new Set(filteredRows.map(r => r.number).filter(Boolean));
-    const detail = [];
-    for (const inv of (state.filtered || [])) {
-        const invNo = inv.number || inv.id || "";
-        const custNo = inv.customerNumber || "";
-        const custName = inv.customerName || "";
-        const sp = inv.salesperson || "";
-        const pd = inv.postingDate || "";
-        for (const ln of (inv.salesInvoiceLines || [])) {
-            if (!lineMatchesFilters(ln)) continue;
-            const itemNo = ln.lineObjectNumber || ln.itemId || "";
-            if (!allowedItems.has(itemNo)) continue;
-            const qty   = num(ln.quantity);
-            const sales = lineNetAmount(ln);
-            const cost  = totalCostFromLine(ln, 1, pd, custNo, invNo);
-            const gp    = sales - cost;
-            const gpPct = sales ? gp / sales : 0;
-            detail.push({
-                "Item No":       itemNo,
-                "Description":   ln.description || "",
-                "Category":      state.itemCategory.get(itemNo) || "(no category)",
-                "Invoice No":    invNo,
-                "Posting Date":  (pd || "").toString().slice(0, 10),
-                "Customer No":   custNo,
-                "Customer Name": custName,
-                "Salesperson":   sp,
-                "Qty":           qty,
-                "Sales $":       sales,
-                "Cost $":        cost,
-                "GP $":          gp,
-                "GP %":          gpPct,
-            });
-        }
-    }
-    detail.sort((a, b) => {
-        const ai = a["Item No"] || "", bi = b["Item No"] || "";
-        if (ai < bi) return -1;
-        if (ai > bi) return 1;
-        return (a["Posting Date"] || "").localeCompare(b["Posting Date"] || "");
-    });
-    const tag = (state.itGpLow ? "_lt20" : "") + (state.itGpHigh ? "_gt90" : "");
-    const baseName = "items" + tag + "_" + new Date().toISOString().slice(0, 10);
-    downloadXLSX(detail, "Items", baseName, {
-        money:   ["Sales $", "Cost $", "GP $"],
-        percent: ["GP %"],
-        integer: [],
-    });
 }
 
 // ============================================================
@@ -13790,17 +13720,6 @@ function wireEvents() {
     document.getElementById("itCategoryFilterClear").addEventListener("click", e => {
         e.preventDefault(); state.byItemCategoryFilter = ""; renderByItem();
     });
-    document.getElementById("itGpLowBtn").addEventListener("click", () => {
-        state.itGpLow = !state.itGpLow;
-        document.getElementById("itGpLowBtn").classList.toggle("active", state.itGpLow);
-        renderByItem();
-    });
-    document.getElementById("itGpHighBtn").addEventListener("click", () => {
-        state.itGpHigh = !state.itGpHigh;
-        document.getElementById("itGpHighBtn").classList.toggle("active", state.itGpHigh);
-        renderByItem();
-    });
-    document.getElementById("itExportBtn").addEventListener("click", exportItemsToCSV);
 
     // Customer × Item tab controls
     document.getElementById("cxiView").addEventListener("change", e => {
