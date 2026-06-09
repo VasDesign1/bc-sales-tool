@@ -362,6 +362,14 @@
         }
         .card .head .more-btn:hover,
         .panel-header .more-btn:hover { background: #eef0fb; }
+        .panel-header .gp-filter-btn {
+            background: white; color: #3f51b5; border: 1px solid #d6d8eb;
+            padding: 4px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600;
+        }
+        .panel-header .gp-filter-btn:hover { background: #eef0fb; }
+        .panel-header .gp-filter-btn.active { background: #3f51b5; color: white; border-color: #3f51b5; }
+        .panel-header .gp-filter-btn.active.low { background: #c62828; border-color: #c62828; }
+        .panel-header .gp-filter-btn.active.high { background: #2e7d32; border-color: #2e7d32; }
 
         /* ---------- PROGRESS ---------- */
         .progress {
@@ -2341,6 +2349,9 @@
                     <div class="panel-header">
                         <h2>Items</h2>
                         <input type="text" class="search" id="itemSearch" placeholder="Search item or description…">
+                        <button class="gp-filter-btn low"  id="itGpLowBtn"  type="button">GP &lt; 20%</button>
+                        <button class="gp-filter-btn high" id="itGpHighBtn" type="button">GP &gt; 90%</button>
+                        <button class="more-btn"           id="itExportBtn" type="button">Export to Excel</button>
                         <div class="meta" id="itemMeta"></div>
                     </div>
                     <div class="table-scroll">
@@ -4195,6 +4206,9 @@ const state = {
     sortEom: { key: "sales", dir: "desc" },
     sortReturns: { key: "postingDate", dir: "desc" },
     byItemCategoryFilter: "",
+    itGpLow: false,
+    itGpHigh: false,
+    itLastFilteredRows: [],
     treeSort: { key: "sales", dir: "desc" },
     custFilter: "", itemFilter: "", eomFilter: "", customerItemFilter: "",
     filters: { location: "", salesperson: "", customer: "", customerName: "", item: "", itemDesc: "", status: "" },
@@ -9586,6 +9600,16 @@ function renderByItem() {
         rows = rows.filter(r => (r.number || "").toLowerCase().includes(q) || (r.description || "").toLowerCase().includes(q));
     }
 
+    // GP % filter toggles — low (<20%) and/or high (>90%). When both on, show items in either band.
+    // Only consider rows with non-zero sales so $0/0% items don't dominate the "low" bucket.
+    if (state.itGpLow || state.itGpHigh) {
+        rows = rows.filter(r => {
+            if (!r.revenue) return false;
+            return (state.itGpLow && r.gpPct < 0.20) || (state.itGpHigh && r.gpPct > 0.90);
+        });
+    }
+    state.itLastFilteredRows = rows;
+
     const totSales = rows.reduce((s, r) => s + r.revenue, 0);
     const totGp    = rows.reduce((s, r) => s + r.gp, 0);
     const totQty   = rows.reduce((s, r) => s + r.qty, 0);
@@ -9736,6 +9760,83 @@ function renderByItem() {
         if (th.dataset.sort === state.sortItems.key) th.classList.add(state.sortItems.dir === "asc" ? "sorted-asc" : "sorted-desc");
     });
     document.getElementById("itemMeta").textContent = rows.length + " items" + (rows.length > 1000 ? " (showing top 1000)" : "");
+}
+
+// Export Sales-by-Item table as CSV. One row per invoice line for items
+// currently passing all filters (category cross-filter, search, GP %
+// bands). Excel opens this directly (the BOM forces UTF-8 detection).
+function exportItemsToCSV() {
+    const filteredRows = state.itLastFilteredRows || [];
+    if (!filteredRows.length) { alert("No items to export — adjust filters and try again."); return; }
+    const allowedItems = new Set(filteredRows.map(r => r.number).filter(Boolean));
+    // (item, invoice, customer) grain. Each row carries the full per-line
+    // sales + cost computed the same way the headline KPIs are computed,
+    // so spreadsheet sums reconcile against the on-screen totals.
+    const detail = [];
+    for (const inv of (state.filtered || [])) {
+        const invNo = inv.number || inv.id || "";
+        const custNo = inv.customerNumber || "";
+        const custName = inv.customerName || "";
+        const sp = inv.salesperson || "";
+        const pd = inv.postingDate || "";
+        for (const ln of (inv.salesInvoiceLines || [])) {
+            if (!lineMatchesFilters(ln)) continue;
+            const itemNo = ln.lineObjectNumber || ln.itemId || "";
+            if (!allowedItems.has(itemNo)) continue;
+            const qty   = num(ln.quantity);
+            const sales = lineNetAmount(ln);
+            const cost  = totalCostFromLine(ln, 1, pd, custNo, invNo);
+            const gp    = sales - cost;
+            const gpPct = sales ? gp / sales : 0;
+            detail.push({
+                itemNo,
+                description: ln.description || "",
+                category: state.itemCategory.get(itemNo) || "(no category)",
+                invoiceNo: invNo,
+                postingDate: (pd || "").toString().slice(0, 10),
+                customerNo: custNo,
+                customerName: custName,
+                salesperson: sp,
+                qty, sales, cost, gp, gpPct,
+            });
+        }
+    }
+    detail.sort((a, b) => {
+        if (a.itemNo < b.itemNo) return -1;
+        if (a.itemNo > b.itemNo) return 1;
+        if (a.postingDate < b.postingDate) return -1;
+        if (a.postingDate > b.postingDate) return 1;
+        return 0;
+    });
+    const header = ["Item No","Description","Category","Invoice No","Posting Date","Customer No","Customer Name","Salesperson","Qty","Sales $","Cost $","GP $","GP %"];
+    const csvEscape = v => {
+        if (v == null) return "";
+        const s = String(v);
+        return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    };
+    const lines = [header.map(csvEscape).join(",")];
+    for (const d of detail) {
+        lines.push([
+            d.itemNo, d.description, d.category,
+            d.invoiceNo, d.postingDate, d.customerNo, d.customerName, d.salesperson,
+            d.qty.toFixed(2),
+            d.sales.toFixed(2),
+            d.cost.toFixed(2),
+            d.gp.toFixed(2),
+            (d.gpPct * 100).toFixed(2) + "%",
+        ].map(csvEscape).join(","));
+    }
+    const csv = "﻿" + lines.join("\r\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    const ts = new Date().toISOString().slice(0, 10);
+    const tag = (state.itGpLow ? "_lt20" : "") + (state.itGpHigh ? "_gt90" : "");
+    a.download = "items" + tag + "_" + ts + ".csv";
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
 }
 
 // ============================================================
@@ -13504,6 +13605,17 @@ function wireEvents() {
     document.getElementById("itCategoryFilterClear").addEventListener("click", e => {
         e.preventDefault(); state.byItemCategoryFilter = ""; renderByItem();
     });
+    document.getElementById("itGpLowBtn").addEventListener("click", () => {
+        state.itGpLow = !state.itGpLow;
+        document.getElementById("itGpLowBtn").classList.toggle("active", state.itGpLow);
+        renderByItem();
+    });
+    document.getElementById("itGpHighBtn").addEventListener("click", () => {
+        state.itGpHigh = !state.itGpHigh;
+        document.getElementById("itGpHighBtn").classList.toggle("active", state.itGpHigh);
+        renderByItem();
+    });
+    document.getElementById("itExportBtn").addEventListener("click", exportItemsToCSV);
 
     // Customer × Item tab controls
     document.getElementById("cxiView").addEventListener("change", e => {
