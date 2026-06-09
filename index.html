@@ -2569,6 +2569,7 @@
                     <strong>Win rate</strong> = Won ÷ (Won + Lost).
                 </div>
                 <div id="qExtrasDiagnostic" class="hint" style="background:#fff8e1; border-left-color:#ffca28; display:none;"></div>
+                <div id="qResidentialDiagnostic" class="hint" style="background:#fff8e1; border-left-color:#ffca28; display:none;"></div>
 
                 <div class="kpi-row">
                     <div class="kpi k-rev"><div class="label">Total Quote Value</div><div class="value" id="qKpiSales">—</div></div>
@@ -4142,6 +4143,83 @@ async function fetchBlanketSalesOrders(fromISO, toISO) {
         state.blanketOrdersDiagnostic = "OData " + info.entity + " fetch failed: " + e.message;
         return [];
     }
+}
+
+// BC v2.0 REST doesn't expose `Your Reference` or `Quote No.` on
+// salesOrders / salesInvoices. Discover the OData v4 sales-header
+// entities via $metadata, pull (No, Your_Reference, Quote_No) for every
+// document, and build two lookup maps consumed by getYourReference /
+// getOriginatingQuoteNumber.
+async function fetchResidentialDocLookup() {
+    state.docYourReference = new Map();
+    state.docQuoteLink     = new Map();
+    state.residentialDiagnostic = "";
+    let md;
+    try { md = await bcGetODataMetadata(); }
+    catch (e) {
+        state.residentialDiagnostic = "OData $metadata fetch failed: " + e.message;
+        console.warn("[Residential lookup] metadata fetch failed:", e.message);
+        return;
+    }
+    // Field-name patterns. BC uses underscores in OData v4 entity property
+    // names ("Your_Reference", "Quote_No") but some tenants flatten them.
+    const YOUR_REF = [/^your.?reference$/i, /yourReference/i];
+    const QUOTE_NO = [/^quote.?no$/i, /quoteNo$/i, /quoteNumber$/i];
+    const DOC_NO   = [/^no$/i, /^number$/i, /^document.?no$/i];
+    const candidates = [];
+    for (const [setName, typeName] of Object.entries(md.entitySets)) {
+        // Only scan sales-header entities; skip lines and unrelated tables.
+        if (!/sales|invoice|order|quote|document/i.test(setName)) continue;
+        if (/line|footer|comment|child|attachment|prepayment|archive/i.test(setName)) continue;
+        const fields = md.entityTypes[typeName] || [];
+        if (!fields.length) continue;
+        const fYourRef = bcFindField(fields, YOUR_REF);
+        const fNo      = bcFindField(fields, DOC_NO);
+        if (!fYourRef || !fNo) continue;
+        const fQuote   = bcFindField(fields, QUOTE_NO);
+        candidates.push({ entity: setName, fields, fYourRef, fNo, fQuote });
+    }
+    if (!candidates.length) {
+        state.residentialDiagnostic =
+            "No OData entity exposes 'Your Reference'. Ask BC admin to publish Sales Header (table 36) and Posted Sales Invoice Header (table 112) as Web Services.";
+        console.warn("[Residential lookup] no candidates in $metadata");
+        return;
+    }
+    const coName = encodeURIComponent(await bcGetCompanyInternalName());
+    let totalHits = 0;
+    for (const c of candidates) {
+        const selectCols = [c.fNo, c.fYourRef, c.fQuote].filter(Boolean).join(",");
+        const url = BC_ODATA_URL + "/Company('" + coName + "')/" + c.entity +
+            "?$select=" + selectCols + "&$top=20000";
+        try {
+            const rows = await bcFetchAll(url, "Residential lookup (" + c.entity + ")");
+            let entityHits = 0;
+            for (const r of rows) {
+                const docNo  = r[c.fNo];
+                const yourRef = c.fYourRef ? (r[c.fYourRef] || "") : "";
+                const quoteNo = c.fQuote ? (r[c.fQuote] || "") : "";
+                if (!docNo) continue;
+                if (yourRef) {
+                    state.docYourReference.set(docNo.toString(), yourRef.toString());
+                    entityHits++;
+                }
+                if (quoteNo) {
+                    state.docQuoteLink.set(docNo.toString(), quoteNo.toString());
+                }
+            }
+            totalHits += entityHits;
+            console.log("[Residential lookup] " + c.entity + " → " + rows.length + " rows · " + entityHits + " with Your_Reference");
+        } catch (e) {
+            console.warn("[Residential lookup] " + c.entity + " fetch failed:", e.message);
+        }
+    }
+    if (!totalHits) {
+        state.residentialDiagnostic =
+            "Found " + candidates.length + " entit" + (candidates.length === 1 ? "y" : "ies") + " with 'Your Reference' but no rows returned values. " +
+            "Ask BC admin to confirm the field is being populated.";
+    }
+    console.log("[Residential lookup] total docs with Your_Reference: " + state.docYourReference.size +
+        " · Quote_No links: " + state.docQuoteLink.size);
 }
 
 // BC v2.0 REST API doesn't expose Campaign No or Assigned User ID on
@@ -10070,17 +10148,24 @@ function filteredQuotes() {
 
 const RESIDENTIAL_YOUR_REF = "residential";
 
-// Read a doc's "Your Reference" from whatever field BC happens to expose
-// in v2.0 — usually `yourReference`, occasionally `externalDocumentNumber`
-// or `customerExternalReference`. Lowercased comparison so case typos
-// don't drop matches.
+// Read a doc's "Your Reference". v2.0 REST doesn't expose it on
+// salesOrders / salesInvoices (confirmed via console field-listing on
+// this tenant), so we look it up via the OData v4 lookup map populated
+// by fetchResidentialDocLookup(). Falls back to whichever v2.0 field
+// happens to carry it on quotes (some tenants expose it there).
 function getYourReference(doc) {
     if (!doc) return "";
-    const raw = doc.yourReference || doc.externalDocumentNumber || doc.customerExternalReference || doc.referenceNumber || "";
+    const docNo = doc.number || doc.id || "";
+    if (docNo && state.docYourReference && state.docYourReference.has(docNo.toString())) {
+        return state.docYourReference.get(docNo.toString()).toString().trim();
+    }
+    const raw = doc.yourReference || doc.customerExternalReference || doc.referenceNumber || "";
     return raw ? raw.toString().trim() : "";
 }
 function isResidentialDoc(doc) {
-    return getYourReference(doc).toLowerCase() === RESIDENTIAL_YOUR_REF;
+    // Match case-insensitively, allow startsWith for variants like "Residential AC"
+    const ref = getYourReference(doc).toLowerCase();
+    return ref === RESIDENTIAL_YOUR_REF || ref.startsWith(RESIDENTIAL_YOUR_REF);
 }
 // Pull the originating Quote No. off an order or invoice header. v2.0
 // REST sometimes exposes `quoteNumber`; when it doesn't, the same value
@@ -10229,6 +10314,21 @@ function renderQuotes() {
     // universe: active quotes + Residential sales orders + Residential
     // posted invoices, deduped by originating Quote No.
     const universe = filteredQuoteUniverse();
+    // Diagnostic banner if the OData v4 lookup for Your Reference came back empty
+    const resiDiag = document.getElementById("qResidentialDiagnostic");
+    if (resiDiag) {
+        const yrCount = state.docYourReference ? state.docYourReference.size : 0;
+        if (state.residentialDiagnostic) {
+            resiDiag.style.display = "block";
+            resiDiag.innerHTML = "<strong>Residential lookup:</strong> " + escapeHtml(state.residentialDiagnostic) +
+                "<br><span style='font-size:11px;'>Without this, only the active quotes feed into the totals — orders + invoices won't be counted as Won.</span>";
+        } else if (yrCount === 0) {
+            resiDiag.style.display = "block";
+            resiDiag.innerHTML = "<strong>Residential lookup:</strong> 0 documents tagged with 'Your Reference' so far. The tool can only show active quotes, not converted orders / invoices, until the OData v4 fetch returns data.";
+        } else {
+            resiDiag.style.display = "none";
+        }
+    }
     // Diagnostic banner if we couldn't fetch Campaign/Assigned User extras
     const diag = document.getElementById("qExtrasDiagnostic");
     if (diag) {
@@ -13487,7 +13587,7 @@ async function handleLoad() {
     const btn = document.getElementById("loadBtn");
     btn.disabled = true; btn.textContent = "Loading…";
     try {
-        const [locs, items, customers, invoices, iles, creditMemos, shipments, returnReceipts, quotes, quoteExtras, blanketOrders, valueEntries, salesOrders, salesOrderOutstanding] = await Promise.all([
+        const [locs, items, customers, invoices, iles, creditMemos, shipments, returnReceipts, quotes, quoteExtras, blanketOrders, valueEntries, salesOrders, salesOrderOutstanding, _residentialLookup] = await Promise.all([
             fetchLocations(),
             fetchItems(),
             fetchCustomers(),
@@ -13502,6 +13602,7 @@ async function handleLoad() {
             fetchValueEntries(from, to),
             fetchSalesOrders(),
             fetchSalesOrderOutstandingLines(),
+            fetchResidentialDocLookup(),
         ]);
         state.salesOrders = salesOrders || [];
         state.salesOrderOutstandingLines = salesOrderOutstanding || [];
