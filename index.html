@@ -7076,51 +7076,234 @@ const VIC_REGION_PATHS = {
     regional:          { name: "Regional Victoria",   path: "M 10 30 L 215 25 L 218 60 L 145 55 L 80 60 L 30 70 L 12 60 Z" },
 };
 
-// Victorian drill-down view — uses postcode prefix to group customers
-// into Melbourne metro regions + regional Vic. Hand-traced simplified
-// polygons (not authoritative LGA boundaries, but recognisable layout).
-function renderDiGeoVictoria(host) {
+// Postcode → LGA name mapping (simplified — covers main VIC postcodes).
+// Used to assign customers to specific LGA polygons in the drill view.
+const VIC_POSTCODE_LGA = (() => {
+    // Generate from compact range definitions
+    const ranges = [
+        [3000, 3010, "Melbourne"],
+        [3011, 3013, "Maribyrnong"],
+        [3014, 3019, "Hobsons Bay"],
+        [3020, 3025, "Brimbank"],
+        [3026, 3030, "Wyndham"],
+        [3031, 3032, "Moonee Valley"],
+        [3033, 3036, "Brimbank"],
+        [3037, 3038, "Melton"],
+        [3039, 3043, "Moonee Valley"],
+        [3044, 3049, "Hume"],
+        [3050, 3054, "Melbourne"],
+        [3055, 3061, "Moreland"],
+        [3062, 3064, "Hume"],
+        [3065, 3068, "Yarra"],
+        [3070, 3072, "Darebin"],
+        [3073, 3075, "Darebin"],
+        [3076, 3082, "Whittlesea"],
+        [3083, 3084, "Banyule"],
+        [3085, 3087, "Banyule"],
+        [3088, 3091, "Nillumbik"],
+        [3093, 3099, "Banyule"],
+        [3101, 3105, "Boroondara"],
+        [3106, 3108, "Manningham"],
+        [3109, 3111, "Manningham"],
+        [3113, 3115, "Manningham"],
+        [3116, 3117, "Yarra Ranges"],
+        [3121, 3122, "Yarra"],
+        [3123, 3124, "Boroondara"],
+        [3125, 3127, "Whitehorse"],
+        [3128, 3131, "Whitehorse"],
+        [3132, 3135, "Maroondah"],
+        [3136, 3138, "Maroondah"],
+        [3140, 3147, "Stonnington"],
+        [3148, 3149, "Monash"],
+        [3150, 3152, "Monash"],
+        [3153, 3155, "Knox"],
+        [3156, 3160, "Knox"],
+        [3161, 3163, "Glen Eira"],
+        [3165, 3167, "Glen Eira"],
+        [3168, 3170, "Monash"],
+        [3171, 3179, "Greater Dandenong"],
+        [3180, 3185, "Glen Eira"],
+        [3186, 3188, "Bayside"],
+        [3189, 3199, "Kingston"],
+        [3200, 3204, "Kingston"],
+        [3205, 3207, "Port Phillip"],
+        [3911, 3944, "Mornington Peninsula"],
+        [3220, 3232, "Greater Geelong"],
+        [3233, 3240, "Surf Coast"],
+        [3300, 3340, "Glenelg"],
+        [3350, 3380, "Ballarat"],
+        [3400, 3490, "Horsham"],
+        [3500, 3580, "Mildura"],
+        [3550, 3559, "Greater Bendigo"],
+        [3690, 3699, "Wodonga"],
+        [3825, 3870, "Latrobe"],
+    ];
+    const map = {};
+    for (const [a, b, name] of ranges) for (let p = a; p <= b; p++) map[p] = name;
+    return map;
+})();
+
+function diVicLgaForPostcode(pc) {
+    return VIC_POSTCODE_LGA[parseInt((pc || "").toString().slice(0, 4), 10)] || null;
+}
+
+// Decode TopoJSON arcs to lon/lat polygons. Each arc is delta-encoded
+// from the previous point; negative indices in feature.arcs mean
+// "traverse this arc in reverse".
+function diTopoDecode(topo) {
+    const { scale, translate } = topo.transform;
+    const decoded = topo.arcs.map(arc => {
+        let x = 0, y = 0;
+        return arc.map(([dx, dy]) => {
+            x += dx; y += dy;
+            return [x * scale[0] + translate[0], y * scale[1] + translate[1]];
+        });
+    });
+    return decoded;
+}
+
+function diArcRing(arcIdxs, decoded) {
+    const ring = [];
+    for (let i = 0; i < arcIdxs.length; i++) {
+        let idx = arcIdxs[i];
+        let arc = decoded[idx >= 0 ? idx : ~idx];
+        if (idx < 0) arc = arc.slice().reverse();
+        // Skip the first point of every arc except the first (it duplicates
+        // the previous arc's last point — TopoJSON ring stitching rule).
+        if (i > 0) arc = arc.slice(1);
+        for (const p of arc) ring.push(p);
+    }
+    return ring;
+}
+
+function diFeatureToRings(geom, decoded) {
+    if (geom.type === "Polygon") {
+        return geom.arcs.map(r => diArcRing(r, decoded));
+    }
+    if (geom.type === "MultiPolygon") {
+        const rings = [];
+        for (const poly of geom.arcs) for (const r of poly) rings.push(diArcRing(r, decoded));
+        return rings;
+    }
+    return [];
+}
+
+// Async fetch + cache. Falls back to the hand-traced simple view if
+// the network is unavailable.
+async function diLoadVicTopo() {
+    if (state.di.vicTopo) return state.di.vicTopo;
+    if (state.di.vicTopoLoading) return state.di.vicTopoLoading;
+    state.di.vicTopoLoading = (async () => {
+        const url = "https://gist.githubusercontent.com/MichaelByrneAU/5d6e5ed6aa8cbb7078b017c7eeaec7e2/raw/lga_state.json";
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error("VIC topo fetch failed: " + resp.status);
+        const topo = await resp.json();
+        const decoded = diTopoDecode(topo);
+        const vicFeatures = (topo.objects.lga.geometries || []).filter(g =>
+            (g.properties.State || g.properties.STE_NAME || "") === "Victoria");
+        const features = vicFeatures.map(g => ({
+            name: (g.properties.LGA || "").replace(/\s*\([A-Z]\)\s*$/, "").trim(),
+            rings: diFeatureToRings(g, decoded),
+        })).filter(f => f.name && f.rings.length);
+        state.di.vicTopo = { features };
+        return state.di.vicTopo;
+    })();
+    return state.di.vicTopoLoading;
+}
+
+// Victorian drill-down view — pulls real LGA boundaries from the
+// MichaelByrne TopoJSON gist (ABS CC-BY 4.0). 80 actual Victorian
+// LGAs, projected with simple cos(lat) compensation and rendered
+// as individual SVG paths.
+async function renderDiGeoVictoria(host) {
     state.di = state.di || {};
-    // Customer → region via postcode (try multiple field names)
-    const custRegion = new Map();
+    // Show loading state then fetch real LGA boundaries
+    host.innerHTML =
+        '<div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">' +
+            '<button class="theme-btn" id="diGeoBack">← Back to Australia</button>' +
+            '<div style="font-size:12px; opacity:0.7;">Loading Victorian LGAs from ABS open data…</div>' +
+        '</div>' +
+        '<div class="empty" style="padding:32px; text-align:center;">Fetching map…</div>';
+    document.getElementById("diGeoBack").addEventListener("click", () => {
+        state.di.geoDrillState = null;
+        renderDiGeo();
+    });
+    let topo;
+    try { topo = await diLoadVicTopo(); }
+    catch (e) {
+        console.warn("[diGeoVictoria] TopoJSON load failed:", e.message);
+        host.innerHTML =
+            '<div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">' +
+                '<button class="theme-btn" id="diGeoBack2">← Back to Australia</button>' +
+                '<div style="font-size:12px; opacity:0.7;">Map unavailable — network blocked.</div>' +
+            '</div>' +
+            '<div class="hint" style="margin:12px 0;">Could not fetch Victorian LGA boundaries from the open-data gist. Check the network tab for blocked requests, then click back and re-drill.</div>';
+        const back = document.getElementById("diGeoBack2");
+        if (back) back.addEventListener("click", () => { state.di.geoDrillState = null; renderDiGeo(); });
+        return;
+    }
+    // Customer → LGA via postcode
+    const custLga = new Map();
     for (const c of (state.customers || [])) {
         const p = c.postalCode || c.postCode || c.sellToPostCode || c.billToPostCode || c.shipToPostCode || c.zipCode;
-        const r = diMelbourneRegion(p);
-        if (r) custRegion.set(c.number, r);
+        const lga = diVicLgaForPostcode(p);
+        if (lga) custLga.set(c.number, lga);
     }
     const agg = new Map();
     for (const inv of (state.filtered || [])) {
-        const region = custRegion.get(inv.customerNumber);
-        if (!region) continue;
-        const e = agg.get(region) || { sales: 0, cost: 0, count: 0, custs: new Set() };
+        const lga = custLga.get(inv.customerNumber);
+        if (!lga) continue;
+        const e = agg.get(lga) || { sales: 0, cost: 0, count: 0, custs: new Set() };
         const s = invoiceSalesAmount(inv); e.sales += s;
         for (const ln of (inv.salesInvoiceLines || [])) e.cost += totalCostFromLine(ln, 1, inv.postingDate, inv.customerNumber, inv.number);
         e.count++;
         if (inv.customerNumber) e.custs.add(inv.customerNumber);
-        agg.set(region, e);
+        agg.set(lga, e);
     }
     const maxSales = [...agg.values()].reduce((m, e) => Math.max(m, e.sales), 0) || 1;
-    const W = Math.max(280, host.clientWidth - 32), H = Math.round(W * (260 / 220));
-    let svg = '<svg width="' + W + '" height="' + H + '" viewBox="0 0 220 260" preserveAspectRatio="xMidYMid meet" style="font-family:Inter,sans-serif;font-size:6px;">';
-    // Port Phillip Bay water hint (stylised)
-    svg += '<rect x="0" y="200" width="220" height="60" fill="rgba(120,160,210,0.10)"/>';
-    svg += '<text x="110" y="252" text-anchor="middle" fill="currentColor" opacity="0.4" font-size="5">Port Phillip Bay</text>';
-    Object.entries(VIC_REGION_PATHS).forEach(([key, def]) => {
-        const e = agg.get(key) || { sales: 0, cost: 0, count: 0, custs: new Set() };
-        let fill = "rgba(46,40,30,0.08)";
+    // Compute bbox over all VIC features so we can project to SVG.
+    let minLon = Infinity, maxLon = -Infinity, minLat = Infinity, maxLat = -Infinity;
+    for (const f of topo.features) for (const ring of f.rings) for (const [lon, lat] of ring) {
+        if (lon < minLon) minLon = lon; if (lon > maxLon) maxLon = lon;
+        if (lat < minLat) minLat = lat; if (lat > maxLat) maxLat = lat;
+    }
+    // Simple equirectangular projection with cos(lat) longitude correction.
+    const W = Math.max(380, host.clientWidth - 32);
+    const midLat = (minLat + maxLat) / 2;
+    const cosLat = Math.cos(midLat * Math.PI / 180);
+    const dataW = (maxLon - minLon) * cosLat;
+    const dataH = (maxLat - minLat);
+    const H = Math.round(W * dataH / dataW);
+    const project = ([lon, lat]) => [
+        (lon - minLon) * cosLat / dataW * W,
+        (maxLat - lat) / dataH * H,
+    ];
+    // Build per-LGA SVG paths
+    const lgaPaths = topo.features.map(f => {
+        const d = f.rings.map(ring => {
+            return "M " + ring.map(p => {
+                const [x, y] = project(p);
+                return x.toFixed(2) + " " + y.toFixed(2);
+            }).join(" L ") + " Z";
+        }).join(" ");
+        return { name: f.name, d };
+    });
+    let svg = '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" style="font-family:Inter,sans-serif;">';
+    lgaPaths.forEach(p => {
+        const e = agg.get(p.name) || { sales: 0, cost: 0, count: 0, custs: new Set() };
+        let fill = "rgba(46,40,30,0.07)";
         if (e.sales > 0) {
             const t = e.sales / maxSales;
             fill = "rgba(57,73,171," + (0.22 + Math.sqrt(t) * 0.62) + ")";
         }
-        svg += '<path class="di-vic-region" data-region="' + key + '" d="' + def.path + '" fill="' + fill + '" stroke="rgba(0,0,0,0.35)" stroke-width="0.4" style="cursor:pointer;"></path>';
+        svg += '<path class="di-vic-lga" data-lga="' + escapeAttr(p.name) + '" d="' + p.d + '" fill="' + fill + '" stroke="rgba(0,0,0,0.32)" stroke-width="0.6" style="cursor:pointer;"></path>';
     });
     svg += '</svg>';
-    const renderInfo = key => {
-        const def = VIC_REGION_PATHS[key];
-        if (!def) return '<div style="opacity:0.6;">Hover a region to see its breakdown.</div>';
-        const e = agg.get(key) || { sales: 0, cost: 0, count: 0, custs: new Set() };
+    const renderInfo = name => {
+        if (!name) return '<div style="opacity:0.6;">Hover an LGA to see its breakdown.</div>';
+        const e = agg.get(name) || { sales: 0, cost: 0, count: 0, custs: new Set() };
         const gpPct = e.sales ? (e.sales - e.cost) / e.sales : 0;
-        return '<div style="font-weight:700; font-size:14px; margin-bottom:4px;">' + def.name + '</div>' +
+        return '<div style="font-weight:700; font-size:14px; margin-bottom:4px;">' + escapeHtml(name) + '</div>' +
             '<div style="font-size:11px; opacity:0.75; margin-bottom:8px;">Revenue · GP · activity</div>' +
             '<div style="font-size:18px; font-weight:700;">' + fmtMoneyFull(e.sales) + '</div>' +
             '<div style="font-size:12px;">GP ' + fmtPct(gpPct) + ' · ' + fmtInt(e.count) + ' invoices · ' + fmtInt(e.custs.size) + ' customers</div>';
@@ -7130,22 +7313,22 @@ function renderDiGeoVictoria(host) {
     host.innerHTML =
         '<div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">' +
             '<button class="theme-btn" id="diGeoBack">← Back to Australia</button>' +
-            '<div style="font-size:12px; opacity:0.7;">VIC · ' + sorted.length + ' regions with sales · grouped by customer postcode</div>' +
+            '<div style="font-size:12px; opacity:0.7;">VIC · ' + topo.features.length + ' LGAs · ' + sorted.length + ' with sales · ABS boundaries (CC-BY 4.0)</div>' +
         '</div>' +
         '<div style="position:relative; color:' + (Chart.defaults.color || "#2c2f4a") + ';">' +
             '<div>' + svg + '</div>' +
-            '<div id="diGeoInfo" style="position:absolute; bottom:8px; left:8px; width:200px; padding:10px 12px; border-radius:8px; background:rgba(0,0,0,0.06); font-size:13px;">' + renderInfo(initial) + '</div>' +
+            '<div id="diGeoInfo" style="position:absolute; bottom:8px; left:8px; width:200px; padding:10px 12px; border-radius:8px; background:rgba(0,0,0,0.06); backdrop-filter: blur(4px); font-size:13px;">' + renderInfo(initial) + '</div>' +
         '</div>';
     const infoEl = document.getElementById("diGeoInfo");
-    host.querySelectorAll("path.di-vic-region").forEach(p => {
-        p.addEventListener("mouseenter", () => { if (infoEl) infoEl.innerHTML = renderInfo(p.dataset.region); });
+    host.querySelectorAll("path.di-vic-lga").forEach(p => {
+        p.addEventListener("mouseenter", () => { if (infoEl) infoEl.innerHTML = renderInfo(p.dataset.lga); });
     });
     document.getElementById("diGeoBack").addEventListener("click", () => {
         state.di.geoDrillState = null;
         renderDiGeo();
     });
-    if (!custRegion.size) {
-        console.log("[diGeoVictoria] No customer postcodes matched a Melbourne region. Sample customer fields:",
+    if (!custLga.size) {
+        console.log("[diGeoVictoria] No customer postcodes mapped to LGAs. Sample customer postcode fields:",
             (state.customers || []).slice(0, 3).map(c => Object.keys(c).filter(k => /postal|postcode|zip/i.test(k)).join(",")));
     }
 }
