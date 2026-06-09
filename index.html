@@ -7032,12 +7032,155 @@ function renderDiLifecycle() {
     });
 }
 
-// Chart #18 — Geographic Australia map with real-ish state outlines.
-// Each state path is a hand-traced approximation — recognisable shapes
-// without the storage cost of a full GeoJSON. Click any state to filter
-// the toolbar customer list to customers whose address state matches.
+// Postcode → Melbourne region grouping. Hand-built from common ABS
+// postcode ranges. Customers outside Melbourne metro fall into the
+// "Regional VIC" bucket.
+function diMelbourneRegion(postcode) {
+    const p = parseInt((postcode || "").toString().slice(0, 4), 10);
+    if (!Number.isFinite(p)) return null;
+    if (p >= 3000 && p <= 3010) return "cbd";
+    if (p >= 3011 && p <= 3019) return "innerWest";
+    if (p >= 3020 && p <= 3038) return "west";
+    if (p >= 3040 && p <= 3049) return "northWest";
+    if (p >= 3050 && p <= 3079) return "innerNorth";
+    if (p >= 3081 && p <= 3099) return "north";
+    if (p >= 3101 && p <= 3127) return "innerEast";
+    if (p >= 3128 && p <= 3139) return "east";
+    if (p >= 3140 && p <= 3147) return "innerSouth";
+    if (p >= 3148 && p <= 3169) return "southBayside";
+    if (p >= 3170 && p <= 3185) return "southEast";
+    if (p >= 3186 && p <= 3199) return "bayside";
+    if (p >= 3200 && p <= 3240) return "morningtonGeelong";
+    if (p >= 3241 && p <= 3999) return "regional";
+    return null;
+}
+
+// Hand-traced simplified Melbourne metro region polygons on a 220×260
+// viewBox. Layout is stylised but recognisable: Port Phillip Bay at
+// south, CBD in middle, regions fanning outward, Mornington Peninsula
+// extending south-east. Not pixel-accurate; designed for drill clarity.
+const VIC_REGION_PATHS = {
+    cbd:               { name: "Melbourne CBD",       path: "M 102 122 L 117 122 L 119 134 L 105 136 Z" },
+    innerNorth:        { name: "Inner North",         path: "M 90 102 L 132 102 L 132 122 L 102 122 L 102 122 L 90 120 Z" },
+    innerEast:         { name: "Inner East",          path: "M 132 102 L 175 100 L 178 124 L 132 122 Z" },
+    innerSouth:        { name: "Inner South",         path: "M 105 136 L 119 134 L 130 150 L 100 152 Z" },
+    innerWest:         { name: "Inner West",          path: "M 60 110 L 90 102 L 102 122 L 95 138 L 60 138 Z" },
+    north:             { name: "North",               path: "M 80 60 L 145 55 L 152 100 L 132 102 L 90 102 L 78 90 Z" },
+    northWest:         { name: "North-West",          path: "M 30 70 L 80 60 L 78 90 L 90 102 L 60 110 L 30 100 Z" },
+    east:              { name: "East",                path: "M 175 100 L 205 95 L 210 130 L 178 124 Z" },
+    southEast:         { name: "South-East",          path: "M 130 150 L 178 124 L 210 130 L 200 175 L 138 178 Z" },
+    southBayside:      { name: "South / Bayside",     path: "M 100 152 L 130 150 L 138 178 L 105 180 L 95 168 Z" },
+    bayside:           { name: "Outer Bayside",       path: "M 95 168 L 105 180 L 138 178 L 140 200 L 100 198 Z" },
+    west:              { name: "West (Werribee, Sunshine)", path: "M 30 100 L 60 110 L 60 138 L 30 140 L 12 120 Z" },
+    morningtonGeelong: { name: "Mornington / Geelong", path: "M 138 178 L 200 175 L 195 220 L 165 235 L 130 215 L 140 200 Z" },
+    regional:          { name: "Regional Victoria",   path: "M 10 30 L 215 25 L 218 60 L 145 55 L 80 60 L 30 70 L 12 60 Z" },
+};
+
+// Victorian drill-down view — uses postcode prefix to group customers
+// into Melbourne metro regions + regional Vic. Hand-traced simplified
+// polygons (not authoritative LGA boundaries, but recognisable layout).
+function renderDiGeoVictoria(host) {
+    state.di = state.di || {};
+    // Customer → region via postcode (try multiple field names)
+    const custRegion = new Map();
+    for (const c of (state.customers || [])) {
+        const p = c.postalCode || c.postCode || c.sellToPostCode || c.billToPostCode || c.shipToPostCode || c.zipCode;
+        const r = diMelbourneRegion(p);
+        if (r) custRegion.set(c.number, r);
+    }
+    const agg = new Map();
+    for (const inv of (state.filtered || [])) {
+        const region = custRegion.get(inv.customerNumber);
+        if (!region) continue;
+        const e = agg.get(region) || { sales: 0, cost: 0, count: 0, custs: new Set() };
+        const s = invoiceSalesAmount(inv); e.sales += s;
+        for (const ln of (inv.salesInvoiceLines || [])) e.cost += totalCostFromLine(ln, 1, inv.postingDate, inv.customerNumber, inv.number);
+        e.count++;
+        if (inv.customerNumber) e.custs.add(inv.customerNumber);
+        agg.set(region, e);
+    }
+    const maxSales = [...agg.values()].reduce((m, e) => Math.max(m, e.sales), 0) || 1;
+    const W = Math.max(280, host.clientWidth - 32), H = Math.round(W * (260 / 220));
+    let svg = '<svg width="' + W + '" height="' + H + '" viewBox="0 0 220 260" preserveAspectRatio="xMidYMid meet" style="font-family:Inter,sans-serif;font-size:6px;">';
+    // Port Phillip Bay water hint (stylised)
+    svg += '<rect x="0" y="200" width="220" height="60" fill="rgba(120,160,210,0.10)"/>';
+    svg += '<text x="110" y="252" text-anchor="middle" fill="currentColor" opacity="0.4" font-size="5">Port Phillip Bay</text>';
+    Object.entries(VIC_REGION_PATHS).forEach(([key, def]) => {
+        const e = agg.get(key) || { sales: 0, cost: 0, count: 0, custs: new Set() };
+        let fill = "rgba(46,40,30,0.08)";
+        if (e.sales > 0) {
+            const t = e.sales / maxSales;
+            fill = "rgba(57,73,171," + (0.22 + Math.sqrt(t) * 0.62) + ")";
+        }
+        svg += '<path class="di-vic-region" data-region="' + key + '" d="' + def.path + '" fill="' + fill + '" stroke="rgba(0,0,0,0.35)" stroke-width="0.4" style="cursor:pointer;"></path>';
+    });
+    svg += '</svg>';
+    const renderInfo = key => {
+        const def = VIC_REGION_PATHS[key];
+        if (!def) return '<div style="opacity:0.6;">Hover a region to see its breakdown.</div>';
+        const e = agg.get(key) || { sales: 0, cost: 0, count: 0, custs: new Set() };
+        const gpPct = e.sales ? (e.sales - e.cost) / e.sales : 0;
+        return '<div style="font-weight:700; font-size:14px; margin-bottom:4px;">' + def.name + '</div>' +
+            '<div style="font-size:11px; opacity:0.75; margin-bottom:8px;">Revenue · GP · activity</div>' +
+            '<div style="font-size:18px; font-weight:700;">' + fmtMoneyFull(e.sales) + '</div>' +
+            '<div style="font-size:12px;">GP ' + fmtPct(gpPct) + ' · ' + fmtInt(e.count) + ' invoices · ' + fmtInt(e.custs.size) + ' customers</div>';
+    };
+    const sorted = [...agg.entries()].sort((a, b) => b[1].sales - a[1].sales);
+    const initial = sorted[0] && sorted[0][0];
+    host.innerHTML =
+        '<div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">' +
+            '<button class="theme-btn" id="diGeoBack">← Back to Australia</button>' +
+            '<div style="font-size:12px; opacity:0.7;">VIC · ' + sorted.length + ' regions with sales · grouped by customer postcode</div>' +
+        '</div>' +
+        '<div style="position:relative; color:' + (Chart.defaults.color || "#2c2f4a") + ';">' +
+            '<div>' + svg + '</div>' +
+            '<div id="diGeoInfo" style="position:absolute; bottom:8px; left:8px; width:200px; padding:10px 12px; border-radius:8px; background:rgba(0,0,0,0.06); font-size:13px;">' + renderInfo(initial) + '</div>' +
+        '</div>';
+    const infoEl = document.getElementById("diGeoInfo");
+    host.querySelectorAll("path.di-vic-region").forEach(p => {
+        p.addEventListener("mouseenter", () => { if (infoEl) infoEl.innerHTML = renderInfo(p.dataset.region); });
+    });
+    document.getElementById("diGeoBack").addEventListener("click", () => {
+        state.di.geoDrillState = null;
+        renderDiGeo();
+    });
+    if (!custRegion.size) {
+        console.log("[diGeoVictoria] No customer postcodes matched a Melbourne region. Sample customer fields:",
+            (state.customers || []).slice(0, 3).map(c => Object.keys(c).filter(k => /postal|postcode|zip/i.test(k)).join(",")));
+    }
+}
+
+// Stub view for states whose region drill isn't built yet.
+function renderDiGeoStub(host, code) {
+    state.di = state.di || {};
+    const names = { NSW: "New South Wales", QLD: "Queensland", SA: "South Australia", WA: "Western Australia", TAS: "Tasmania", NT: "Northern Territory", ACT: "Australian Capital Territory" };
+    host.innerHTML =
+        '<div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">' +
+            '<button class="theme-btn" id="diGeoBack">← Back to Australia</button>' +
+            '<div style="font-size:12px; opacity:0.7;">' + code + ' detail view</div>' +
+        '</div>' +
+        '<div class="hint" style="margin: 12px 0;">' +
+            '<strong>Region-level breakdown coming for ' + (names[code] || code) + '.</strong> ' +
+            'For now, only Victoria has a metro-region drill view (grouped by customer postcode). ' +
+            'Adding NSW (Sydney metro), QLD (Brisbane / Gold Coast / Sunshine Coast) and the rest is on the roadmap.' +
+        '</div>';
+    document.getElementById("diGeoBack").addEventListener("click", () => {
+        state.di.geoDrillState = null;
+        renderDiGeo();
+    });
+}
+
+// Chart #18 — Geographic Australia map with drill-down.
+// Top level: 8 Australian states (Wikimedia paths). Click any state to
+// drill into a state-detail view; the only state with a regional
+// breakdown right now is Victoria (Melbourne metro grouped by postcode
+// prefix into ~10 regions). Other states' drill view shows a friendly
+// "coming soon" message.
 function renderDiGeo() {
     const host = document.getElementById("diGeo"); if (!host) return;
+    state.di = state.di || {};
+    if (state.di.geoDrillState === "VIC") { renderDiGeoVictoria(host); return; }
+    if (state.di.geoDrillState) { renderDiGeoStub(host, state.di.geoDrillState); return; }
     const custState = new Map();
     // v2.0 customers endpoint exposes c.state directly; BC also sometimes
     // populates sellToState / billToState / shipToState. Try all of them.
@@ -7124,10 +7267,13 @@ function renderDiGeo() {
             '<div style="font-size:18px; font-weight:700;">' + fmtMoneyFull(e.sales) + '</div>' +
             '<div style="font-size:12px;">GP ' + fmtPct(gpPct) + ' · ' + fmtInt(e.count) + ' invoices · ' + fmtInt(e.custs.size) + ' customers</div>';
     };
+    // Info panel anchored to the bottom-left of the SVG (over the
+    // empty ocean area south-west of WA) so it never overlaps the
+    // continent itself.
     host.innerHTML =
-        '<div style="display:flex; gap:14px; align-items:flex-start; color:' + (Chart.defaults.color || "#2c2f4a") + ';">' +
-            '<div style="flex:1; min-width:0;">' + svg + '</div>' +
-            '<div id="diGeoInfo" style="width:200px; padding:10px 12px; border-radius:8px; background:rgba(0,0,0,0.04); font-size:13px; min-height:120px;">' + renderInfo(initial) + '</div>' +
+        '<div style="position:relative; color:' + (Chart.defaults.color || "#2c2f4a") + ';">' +
+            '<div>' + svg + '</div>' +
+            '<div id="diGeoInfo" style="position:absolute; bottom:8px; left:8px; width:200px; padding:10px 12px; border-radius:8px; background:rgba(0,0,0,0.06); backdrop-filter:blur(4px); font-size:13px;">' + renderInfo(initial) + '</div>' +
         '</div>' +
         (activeState ? '<div style="font-size:11px; margin-top:8px;">Highlight on <strong>' + activeState + '</strong> · <a href="#" id="diGeoClear" style="color:inherit;">clear</a></div>' : '');
     const infoEl = document.getElementById("diGeoInfo");
@@ -7136,7 +7282,8 @@ function renderDiGeo() {
         p.addEventListener("mouseenter", () => { if (infoEl) infoEl.innerHTML = renderInfo(p.dataset.state); });
         p.addEventListener("click", () => {
             const code = p.dataset.state;
-            state.di.geoActive = (state.di.geoActive === code) ? null : code;
+            state.di.geoDrillState = code;
+            state.di.geoActive = null;
             renderDiGeo();
         });
     });
