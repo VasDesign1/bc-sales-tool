@@ -362,6 +362,13 @@
         }
         .card .head .more-btn:hover,
         .panel-header .more-btn:hover { background: #eef0fb; }
+        /* EOM panel header stays glued to the top of its panel while the
+           table scrolls beneath it. Inherit the panel's background so it
+           works across every theme without per-theme overrides. */
+        #eomPanel .panel-header {
+            position: sticky; top: 0; z-index: 5;
+            background-color: inherit;
+        }
         .panel-header .gp-filter-btn {
             background: white; color: #3f51b5; border: 1px solid #d6d8eb;
             padding: 4px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600;
@@ -2505,10 +2512,10 @@
                     <div class="kpi k-cust"><div class="label">Adjusted Profit</div><div class="value" id="eomKpiAdjGp">—</div><div class="sub" id="eomKpiAdjGpSub">net of returns</div></div>
                     <div class="kpi k-avg"><div class="label">Adjusted Profit Margin</div><div class="value" id="eomKpiAdjGpp">—</div><div class="sub" id="eomKpiAdjGppSub">after credit memos</div></div>
                 </div>
-                <div class="panel">
+                <div class="panel" id="eomPanel">
                     <div class="panel-header">
                         <h2>EOM Report · line-level detail</h2>
-                        <input type="text" class="search" id="eomSearch" placeholder="Search customer/item/salesperson…">
+                        <input type="text" class="search" id="eomSearch" placeholder="Search customer/invoice/item/salesperson…">
                         <button class="gp-filter-btn low"  id="eomGpLowBtn"  type="button">GP &lt; 20%</button>
                         <button class="gp-filter-btn high" id="eomGpHighBtn" type="button">GP &gt; 90%</button>
                         <button class="more-btn"           id="eomExportBtn" type="button">Export to Excel</button>
@@ -2518,6 +2525,7 @@
                         <table id="eomTable">
                             <thead><tr>
                                 <th data-sort="customer">Customer</th>
+                                <th data-sort="invoiceNumber">Invoice No</th>
                                 <th data-sort="salesperson">Salesperson</th>
                                 <th data-sort="branch">Branch</th>
                                 <th data-sort="itemCategory">Item Category</th>
@@ -9856,7 +9864,7 @@ function renderEOM() {
     let rows = buildEOMRows(state.filtered);
     if (state.eomFilter) {
         const q = state.eomFilter.toLowerCase();
-        rows = rows.filter(r => (r.customer + " " + r.salesperson + " " + r.itemNumber + " " + r.description + " " + r.branch + " " + r.itemCategory).toLowerCase().includes(q));
+        rows = rows.filter(r => (r.customer + " " + r.invoiceNumber + " " + r.salesperson + " " + r.itemNumber + " " + r.description + " " + r.branch + " " + r.itemCategory).toLowerCase().includes(q));
     }
     // GP % filter toggles — low (<20%) and/or high (>90%). Both on = union.
     // Exclude $0 sales lines so they don't dominate the low bucket.
@@ -9882,6 +9890,7 @@ function renderEOM() {
     tbody.innerHTML = rows.slice(0, 2000).map(r => `
         <tr>
             <td>${escapeHtml(r.customer)}</td>
+            <td>${escapeHtml(r.invoiceNumber)}</td>
             <td>${escapeHtml(r.salesperson)}</td>
             <td>${escapeHtml(r.branch)}</td>
             <td>${escapeHtml(r.itemCategory)}</td>
@@ -9892,7 +9901,7 @@ function renderEOM() {
             <td>${escapeHtml(r.month)}</td>
             <td class="num">${r.fy}</td>
         </tr>
-    `).join("") || '<tr><td colspan="10" class="empty">No rows.</td></tr>';
+    `).join("") || '<tr><td colspan="11" class="empty">No rows.</td></tr>';
     document.getElementById("eomMeta").textContent = rows.length + " line" + (rows.length === 1 ? "" : "s") + (rows.length > 2000 ? " (showing top 2000 — narrow with filters)" : "");
 }
 
