@@ -5711,9 +5711,44 @@ function paintPipelineKpis() {
 function renderDeepInsights() {
     renderFilterChips();
     renderDiCalendarHeatmap();
-    // Charts 2-10 will be implemented incrementally; the placeholders
-    // already exist in the markup and will simply stay empty until
-    // their renderer is added.
+    renderDiTreemap();
+    renderDiLorenz();
+    renderDiSankey();
+    renderDiWaterfall();
+    renderDiSlope();
+    renderDiCohort();
+    renderDiBubble();
+    renderDiPolar();
+    renderDiHistogram();
+}
+
+// Period helpers shared by waterfall + slope: previous comparable
+// period is the same duration shifted back one day before From.
+function diPrevPeriod() {
+    const fromISO = document.getElementById("fromDate").value;
+    const toISO   = document.getElementById("toDate").value;
+    if (!fromISO || !toISO) return null;
+    const from = new Date(fromISO), to = new Date(toISO);
+    const durMs = to - from;
+    if (durMs < 0) return null;
+    const prevTo   = new Date(from.getTime() - 86400000);
+    const prevFrom = new Date(prevTo.getTime() - durMs);
+    return {
+        prevFromISO: prevFrom.toISOString().slice(0, 10),
+        prevToISO:   prevTo.toISOString().slice(0, 10),
+        fromISO, toISO,
+    };
+}
+function diAddMonths(yyyymm, n) {
+    const [y, m] = yyyymm.split("-").map(Number);
+    const d = new Date(y, m - 1 + n, 1);
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
+}
+function diMonthDiff(a, b) {
+    if (!a || !b) return 0;
+    const [ay, am] = a.split("-").map(Number);
+    const [by, bm] = b.split("-").map(Number);
+    return (by - ay) * 12 + (bm - am);
 }
 
 // Chart #1 — Daily sales calendar heatmap (GitHub-style grid).
@@ -5845,6 +5880,504 @@ function renderDiCalendarHeatmap() {
             rebuildFiltered();
             renderCurrentTab();
         });
+    });
+}
+
+// Chart #5 — Treemap of sales by Item Category (slice-and-dice).
+function renderDiTreemap() {
+    const canvas = document.getElementById("diTreemap");
+    if (!canvas) return;
+    destroyChart("diTreemap");
+    const ctx = canvas.getContext("2d");
+    const wrap = canvas.parentElement;
+    const W = wrap.clientWidth || 600;
+    const H = 380;
+    canvas.width = W; canvas.height = H;
+    ctx.clearRect(0, 0, W, H);
+    // Aggregate per category from filtered lines
+    const cats = new Map();
+    for (const inv of (state.filtered || [])) {
+        for (const ln of (inv.salesInvoiceLines || [])) {
+            const it = ln.lineObjectNumber || ln.itemId || "";
+            const cat = (state.itemCategory && state.itemCategory.get(it)) || "(uncat)";
+            const v = lineNetAmount(ln);
+            const c = cats.get(cat) || { name: cat, value: 0, cost: 0 };
+            c.value += v;
+            c.cost  += totalCostFromLine(ln, 1, inv.postingDate, inv.customerNumber, inv.number);
+            cats.set(cat, c);
+        }
+    }
+    const rows = [...cats.values()].filter(c => c.value > 0).sort((a, b) => b.value - a.value).slice(0, 30);
+    const total = rows.reduce((s, r) => s + r.value, 0);
+    if (!total) {
+        ctx.fillStyle = Chart.defaults.color || "#888";
+        ctx.font = "12px Inter, sans-serif";
+        ctx.fillText("No data in range.", 12, 24);
+        return;
+    }
+    // Slice-and-dice: alternate horizontal and vertical splits, biggest first.
+    const rects = [];
+    const place = (items, x, y, w, h, horizontal) => {
+        if (!items.length) return;
+        if (items.length === 1) { rects.push({ ...items[0], x, y, w, h }); return; }
+        const sum = items.reduce((s, i) => s + i.value, 0);
+        const head = items[0];
+        const tail = items.slice(1);
+        const ratio = head.value / sum;
+        if (horizontal) {
+            const hW = w * ratio;
+            rects.push({ ...head, x, y, w: hW, h });
+            place(tail, x + hW, y, w - hW, h, !horizontal);
+        } else {
+            const hH = h * ratio;
+            rects.push({ ...head, x, y, w, h: hH });
+            place(tail, x, y + hH, w, h - hH, !horizontal);
+        }
+    };
+    place(rows, 0, 0, W, H, W > H);
+    // Colour by GP% (deep red below 0, amber low, green high)
+    const colourByGp = (gp, sales) => {
+        const pct = sales ? gp / sales : 0;
+        if (pct < 0)    return "#b71c1c";
+        if (pct < 0.10) return "#ef6c00";
+        if (pct < 0.20) return "#fbc02d";
+        if (pct < 0.30) return "#7cb342";
+        return "#2e7d32";
+    };
+    for (const r of rects) {
+        const gp = r.value - r.cost;
+        ctx.fillStyle = colourByGp(gp, r.value);
+        ctx.fillRect(r.x + 1, r.y + 1, Math.max(0, r.w - 2), Math.max(0, r.h - 2));
+        ctx.strokeStyle = "rgba(255,255,255,0.4)";
+        ctx.lineWidth = 1;
+        ctx.strokeRect(r.x + 1, r.y + 1, Math.max(0, r.w - 2), Math.max(0, r.h - 2));
+        if (r.w > 60 && r.h > 28) {
+            ctx.fillStyle = "#fff";
+            ctx.font = "bold 11px Inter, sans-serif";
+            ctx.textBaseline = "top";
+            ctx.fillText(truncate(r.name, Math.max(4, Math.floor(r.w / 7))), r.x + 6, r.y + 6);
+            ctx.font = "10px Inter, sans-serif";
+            ctx.fillStyle = "rgba(255,255,255,0.85)";
+            ctx.fillText(fmtMoney(r.value), r.x + 6, r.y + 20);
+            if (r.h > 44) {
+                ctx.fillText("GP " + fmtPct(r.value ? gp / r.value : 0), r.x + 6, r.y + 34);
+            }
+        }
+    }
+    // Click to filter category in the byItem tab
+    canvas.onclick = e => {
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left, y = e.clientY - rect.top;
+        const hit = rects.find(r => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h);
+        if (!hit) return;
+        state.byItemCategoryFilter = (state.byItemCategoryFilter === hit.name) ? "" : hit.name;
+        setActiveTab("byItem");
+    };
+}
+
+// Chart #8 — Customer Lorenz curve + Gini coefficient.
+function renderDiLorenz() {
+    destroyChart("diLorenz");
+    const canvas = document.getElementById("diLorenz");
+    if (!canvas) return;
+    const groups = [...(state.byCustomer || new Map()).values()]
+        .map(g => g.revenue).filter(v => v > 0).sort((a, b) => a - b);
+    if (!groups.length) return;
+    const total = groups.reduce((s, v) => s + v, 0);
+    const n = groups.length;
+    const labels = [0], curve = [0];
+    let cum = 0;
+    for (let i = 0; i < n; i++) {
+        cum += groups[i];
+        labels.push(((i + 1) / n * 100).toFixed(1));
+        curve.push((cum / total) * 100);
+    }
+    // Gini = 1 - 2 * area under curve (trapezoidal)
+    let area = 0;
+    for (let i = 1; i < curve.length; i++) {
+        area += (curve[i] + curve[i - 1]) / 2 * (1 / n * 100);
+    }
+    const gini = (1 - area / 5000); // /5000 = / (100*50) trapezoidal integration normalization
+    const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+    set("diGini", gini.toFixed(3));
+    set("diGiniSub", gini > 0.7 ? "very concentrated — top customers carry most of the business"
+        : gini > 0.5 ? "moderately concentrated"
+        : gini > 0.3 ? "fairly even spread"
+        : "very even spread");
+    state.charts.diLorenz = new Chart(canvas.getContext("2d"), {
+        type: "line",
+        data: { labels, datasets: [
+            { label: "Lorenz", data: curve, borderColor: "#3f51b5", backgroundColor: "rgba(63,81,181,0.18)", fill: true, tension: 0.15, pointRadius: 0, borderWidth: 2 },
+            { label: "Even line", data: labels.map(l => parseFloat(l)), borderColor: "#bdbdbd", borderDash: [4,4], backgroundColor: "transparent", fill: false, pointRadius: 0, borderWidth: 1 },
+        ] },
+        options: chartBase({
+            plugins: { legend: { display: false },
+                       tooltip: { callbacks: { label: c => "x = " + c.label + "% customers · y = " + c.parsed.y.toFixed(1) + "% revenue" } } },
+            scales: {
+                x: { ticks: { callback: v => v + "%", maxTicksLimit: 5 }, title: { display: true, text: "Cumulative % of customers", font: { size: 10 } } },
+                y: { ticks: { callback: v => v + "%" }, title: { display: true, text: "Cumulative % of revenue", font: { size: 10 } } },
+            }
+        })
+    });
+}
+
+// Chart #4 — Sankey (raw SVG, 2-tier: Salesperson → Item Category).
+function renderDiSankey() {
+    const canvas = document.getElementById("diSankey");
+    if (!canvas) return;
+    destroyChart("diSankey");
+    const wrap = canvas.parentElement;
+    // Use a sibling SVG instead of the canvas (cleaner for paths).
+    let svg = wrap.querySelector("svg.di-sankey");
+    if (svg) svg.remove();
+    canvas.style.display = "none";
+    const W = wrap.clientWidth - 24, H = 440;
+    const flows = new Map(); // "sp||cat" → $
+    const spTot = new Map(), catTot = new Map();
+    for (const inv of (state.filtered || [])) {
+        const sp = inv.salesperson || "(unassigned)";
+        for (const ln of (inv.salesInvoiceLines || [])) {
+            const it = ln.lineObjectNumber || ln.itemId || "";
+            const cat = (state.itemCategory && state.itemCategory.get(it)) || "(uncat)";
+            const v = lineNetAmount(ln);
+            if (v <= 0) continue;
+            const k = sp + "||" + cat;
+            flows.set(k, (flows.get(k) || 0) + v);
+            spTot.set(sp, (spTot.get(sp) || 0) + v);
+            catTot.set(cat, (catTot.get(cat) || 0) + v);
+        }
+    }
+    const topNodes = (m, n, otherName = "Other") => {
+        const sorted = [...m.entries()].sort((a, b) => b[1] - a[1]);
+        if (sorted.length <= n) return sorted;
+        const top = sorted.slice(0, n);
+        const otherSum = sorted.slice(n).reduce((s, [, v]) => s + v, 0);
+        return [...top, [otherName, otherSum]];
+    };
+    const spNodes = topNodes(spTot, 8);
+    const catNodes = topNodes(catTot, 10);
+    const spIndex = new Map(spNodes.map(([k], i) => [k, i]));
+    const catIndex = new Map(catNodes.map(([k], i) => [k, i]));
+    const PAD = 6;
+    const colW = 180;
+    const leftX = 10, rightX = W - colW - 10;
+    const spTotalSum = spNodes.reduce((s, [, v]) => s + v, 0);
+    const scale = (H - PAD * (spNodes.length - 1)) / Math.max(spTotalSum, 1);
+    const layoutCol = (nodes) => {
+        const totalH = nodes.reduce((s, [, v]) => s + v * scale, 0) + PAD * (nodes.length - 1);
+        let y = (H - totalH) / 2;
+        return nodes.map(([k, v]) => { const h = v * scale; const r = { name: k, value: v, y, h }; y += h + PAD; return r; });
+    };
+    const spLay  = layoutCol(spNodes);
+    const catLay = layoutCol(catNodes);
+    const palette = ["#3949ab","#00897b","#fb8c00","#e53935","#8e24aa","#039be5","#6d4c41","#43a047","#5e35b1","#00acc1","#c0ca33","#d81b60"];
+    // Track per-node consumed offset (left edge of node where next flow can attach)
+    const spUsed = spLay.map(n => 0);
+    const catUsed = catLay.map(n => 0);
+    const flowList = [];
+    for (const [k, v] of flows) {
+        const [spName, catName] = k.split("||");
+        const sp = spIndex.has(spName) ? spName : "Other";
+        const cat = catIndex.has(catName) ? catName : "Other";
+        flowList.push({ sp, cat, v });
+    }
+    flowList.sort((a, b) => b.v - a.v);
+    let svgStr = '<svg class="di-sankey" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" style="font-family:Inter,sans-serif;font-size:11px;">';
+    // Flows first so node rectangles overlay them
+    for (const f of flowList) {
+        const si = spIndex.get(f.sp), ci = catIndex.get(f.cat);
+        if (si == null || ci == null) continue;
+        const sn = spLay[si], cn = catLay[ci];
+        const h = f.v * scale;
+        if (h < 0.5) continue;
+        const x0 = leftX + colW, x1 = rightX;
+        const y0 = sn.y + spUsed[si];
+        const y1 = cn.y + catUsed[ci];
+        spUsed[si]  += h;
+        catUsed[ci] += h;
+        const cx0 = x0 + (x1 - x0) * 0.5;
+        const path = "M " + x0 + " " + y0 + " C " + cx0 + " " + y0 + " " + cx0 + " " + y1 + " " + x1 + " " + y1
+                   + " L " + x1 + " " + (y1 + h) + " C " + cx0 + " " + (y1 + h) + " " + cx0 + " " + (y0 + h) + " " + x0 + " " + (y0 + h) + " Z";
+        const color = palette[si % palette.length];
+        svgStr += '<path d="' + path + '" fill="' + color + '" opacity="0.32"><title>' + escapeHtml(f.sp + " → " + f.cat + ": " + fmtMoneyFull(f.v)) + '</title></path>';
+    }
+    // Node rectangles + labels
+    spLay.forEach((n, i) => {
+        svgStr += '<rect x="' + leftX + '" y="' + n.y + '" width="' + colW + '" height="' + n.h + '" fill="' + palette[i % palette.length] + '" rx="2"><title>' + escapeHtml(n.name + ": " + fmtMoneyFull(n.value)) + '</title></rect>';
+        if (n.h > 12) svgStr += '<text x="' + (leftX + 6) + '" y="' + (n.y + n.h / 2 + 4) + '" fill="#fff">' + escapeHtml(truncate(n.name, 20)) + '</text>';
+    });
+    catLay.forEach((n, i) => {
+        svgStr += '<rect x="' + rightX + '" y="' + n.y + '" width="' + colW + '" height="' + n.h + '" fill="#5c6bc0" rx="2"><title>' + escapeHtml(n.name + ": " + fmtMoneyFull(n.value)) + '</title></rect>';
+        if (n.h > 12) svgStr += '<text x="' + (rightX + colW - 6) + '" y="' + (n.y + n.h / 2 + 4) + '" text-anchor="end" fill="#fff">' + escapeHtml(truncate(n.name, 20)) + '</text>';
+    });
+    svgStr += '</svg>';
+    canvas.insertAdjacentHTML("afterend", svgStr);
+}
+
+// Chart #2 — Sales waterfall (prior period → current period).
+function renderDiWaterfall() {
+    destroyChart("diWaterfall");
+    const canvas = document.getElementById("diWaterfall");
+    if (!canvas) return;
+    const p = diPrevPeriod(); if (!p) return;
+    const prior = new Map(), current = new Map();
+    for (const inv of (state.invoices || [])) {
+        const d = (inv.postingDate || "").toString().slice(0, 10);
+        if (!d || !inv.customerNumber) continue;
+        const s = invoiceSalesAmount(inv);
+        if (d >= p.prevFromISO && d <= p.prevToISO) prior.set(inv.customerNumber, (prior.get(inv.customerNumber) || 0) + s);
+        if (d >= p.fromISO     && d <= p.toISO)     current.set(inv.customerNumber, (current.get(inv.customerNumber) || 0) + s);
+    }
+    let priorTot = 0, curTot = 0, newAmt = 0, lostAmt = 0, growthAmt = 0, declineAmt = 0;
+    const all = new Set([...prior.keys(), ...current.keys()]);
+    for (const c of all) {
+        const pp = prior.get(c) || 0;
+        const cc = current.get(c) || 0;
+        priorTot += pp; curTot += cc;
+        if (pp === 0 && cc > 0)      newAmt += cc;
+        else if (pp > 0 && cc === 0) lostAmt += pp;
+        else if (cc > pp)            growthAmt += cc - pp;
+        else if (cc < pp)            declineAmt += pp - cc;
+    }
+    // Floating bars [from, to]
+    let running = priorTot;
+    const steps = [
+        { label: "Prior",   from: 0, to: priorTot,           color: "#9e9e9e" },
+        { label: "+ New",   from: running, to: running + newAmt,     color: "#43a047", delta: newAmt },
+        { label: "+ Growth", from: (running += newAmt), to: running + growthAmt, color: "#2e7d32", delta: growthAmt },
+        { label: "− Lost",  from: (running += growthAmt) - lostAmt, to: running, color: "#e53935", delta: -lostAmt },
+        { label: "− Decline", from: (running -= lostAmt) - declineAmt, to: running, color: "#b71c1c", delta: -declineAmt },
+        { label: "Current", from: 0, to: curTot, color: "#3949ab" },
+    ];
+    state.charts.diWaterfall = new Chart(canvas.getContext("2d"), {
+        type: "bar",
+        data: { labels: steps.map(s => s.label),
+                datasets: [{ data: steps.map(s => [s.from, s.to]), backgroundColor: steps.map(s => s.color), borderRadius: 3 }] },
+        options: chartBase({
+            plugins: { legend: { display: false },
+                       tooltip: { callbacks: { label: c => {
+                           const s = steps[c.dataIndex];
+                           if (s.delta == null) return s.label + " period: " + fmtMoneyFull(s.to);
+                           return s.label + ": " + (s.delta >= 0 ? "+" : "−") + fmtMoneyFull(Math.abs(s.delta));
+                       } } } },
+            scales: { y: { ticks: { callback: v => fmtMoney(v) } } },
+        })
+    });
+}
+
+// Chart #9 — Top-customer slope chart, prior vs current.
+function renderDiSlope() {
+    destroyChart("diSlope");
+    const canvas = document.getElementById("diSlope");
+    if (!canvas) return;
+    const p = diPrevPeriod(); if (!p) return;
+    const prior = new Map(), current = new Map(), names = new Map();
+    for (const inv of (state.invoices || [])) {
+        const d = (inv.postingDate || "").toString().slice(0, 10);
+        if (!d || !inv.customerNumber) continue;
+        const s = invoiceSalesAmount(inv);
+        names.set(inv.customerNumber, inv.customerName || inv.customerNumber);
+        if (d >= p.prevFromISO && d <= p.prevToISO) prior.set(inv.customerNumber, (prior.get(inv.customerNumber) || 0) + s);
+        if (d >= p.fromISO     && d <= p.toISO)     current.set(inv.customerNumber, (current.get(inv.customerNumber) || 0) + s);
+    }
+    const allKeys = new Set([...prior.keys(), ...current.keys()]);
+    const rows = [...allKeys].map(c => ({ c, name: names.get(c) || c, prior: prior.get(c) || 0, current: current.get(c) || 0 }))
+        .sort((a, b) => (b.prior + b.current) - (a.prior + a.current)).slice(0, 20);
+    const palette = ["#3949ab","#00897b","#fb8c00","#e53935","#8e24aa","#039be5","#6d4c41","#43a047","#5e35b1","#00acc1"];
+    const datasets = rows.map((r, i) => {
+        const grew = r.current > r.prior;
+        return {
+            label: truncate(r.name, 20),
+            data: [{ x: 0, y: r.prior }, { x: 1, y: r.current }],
+            borderColor: grew ? "#2e7d32" : "#c62828",
+            backgroundColor: grew ? "#2e7d32" : "#c62828",
+            borderWidth: 1.5, pointRadius: 3, fill: false, tension: 0,
+        };
+    });
+    state.charts.diSlope = new Chart(canvas.getContext("2d"), {
+        type: "line",
+        data: { datasets },
+        options: chartBase({
+            plugins: { legend: { display: false },
+                       tooltip: { callbacks: { label: c => c.dataset.label + ": " + fmtMoneyFull(c.parsed.y) } } },
+            scales: {
+                x: { type: "linear", min: -0.1, max: 1.1, ticks: { stepSize: 1, callback: v => v === 0 ? "Prior period" : v === 1 ? "Current period" : "" } },
+                y: { ticks: { callback: v => fmtMoney(v) } }
+            }
+        })
+    });
+}
+
+// Chart #3 — Customer cohort retention triangle.
+function renderDiCohort() {
+    const host = document.getElementById("diCohort");
+    if (!host) return;
+    // First-purchase month per customer (from all loaded data).
+    const firstMonth = new Map(), monthsByCust = new Map();
+    for (const inv of (state.invoices || [])) {
+        if (!inv.customerNumber) continue;
+        const m = monthKey(inv.postingDate); if (!m) continue;
+        if (!firstMonth.has(inv.customerNumber) || m < firstMonth.get(inv.customerNumber)) firstMonth.set(inv.customerNumber, m);
+        if (!monthsByCust.has(inv.customerNumber)) monthsByCust.set(inv.customerNumber, new Set());
+        monthsByCust.get(inv.customerNumber).add(m);
+    }
+    const cohortMembers = new Map();
+    for (const [cust, m] of firstMonth) {
+        if (!cohortMembers.has(m)) cohortMembers.set(m, new Set());
+        cohortMembers.get(m).add(cust);
+    }
+    const cohortMonths = [...cohortMembers.keys()].sort();
+    if (cohortMonths.length < 2) { host.innerHTML = '<div class="empty" style="padding:18px;">Not enough months loaded for cohorts.</div>'; return; }
+    const maxOffset = diMonthDiff(cohortMonths[0], cohortMonths[cohortMonths.length - 1]) + 1;
+    const CELL_W = 32, CELL_H = 22, labelW = 90;
+    const width  = labelW + maxOffset * CELL_W + 24;
+    const height = 28 + cohortMonths.length * CELL_H + 14;
+    let svg = '<svg width="' + width + '" height="' + height + '" viewBox="0 0 ' + width + ' ' + height + '" style="font-family:Inter,sans-serif;font-size:10px;">';
+    for (let off = 0; off < maxOffset; off++) {
+        svg += '<text x="' + (labelW + off * CELL_W + CELL_W / 2) + '" y="16" text-anchor="middle" fill="currentColor" opacity="0.65">+' + off + '</text>';
+    }
+    cohortMonths.forEach((cm, ri) => {
+        const size = cohortMembers.get(cm).size;
+        svg += '<text x="' + (labelW - 6) + '" y="' + (28 + ri * CELL_H + CELL_H / 2 + 3) + '" text-anchor="end" fill="currentColor" opacity="0.65">' + cm + ' · ' + size + '</text>';
+        const maxOff = diMonthDiff(cm, cohortMonths[cohortMonths.length - 1]) + 1;
+        for (let off = 0; off < maxOff; off++) {
+            const tgt = diAddMonths(cm, off);
+            let r = 0;
+            for (const c of cohortMembers.get(cm)) if (monthsByCust.get(c).has(tgt)) r++;
+            const pct = r / size;
+            const x = labelW + off * CELL_W, y = 28 + ri * CELL_H;
+            const color = "rgba(30,58,95," + (0.08 + pct * 0.85).toFixed(2) + ")";
+            svg += '<rect x="' + x + '" y="' + y + '" width="' + (CELL_W - 2) + '" height="' + (CELL_H - 2) + '" rx="2" fill="' + color + '"><title>' + cm + ' cohort · +' + off + ' mo · ' + (pct * 100).toFixed(0) + '% retained (' + r + ' of ' + size + ')</title></rect>';
+            if (pct >= 0.15) {
+                svg += '<text x="' + (x + (CELL_W - 2) / 2) + '" y="' + (y + CELL_H / 2 + 3) + '" text-anchor="middle" fill="' + (pct > 0.55 ? '#fff' : '#1a1a1a') + '" font-size="9">' + (pct * 100).toFixed(0) + '</text>';
+            }
+        }
+    });
+    svg += '</svg>';
+    host.innerHTML = '<div style="overflow-x:auto;color:' + (Chart.defaults.color || "#2c2f4a") + ';">' + svg + '</div>';
+}
+
+// Chart #7 — Item bubble matrix (qty × avg-price × revenue × category).
+function renderDiBubble() {
+    destroyChart("diBubble");
+    const canvas = document.getElementById("diBubble");
+    if (!canvas) return;
+    const items = [...(state.byItem || new Map()).values()]
+        .filter(it => it.revenue > 0 && it.qty > 0)
+        .map(it => {
+            const cat = (state.itemCategory && state.itemCategory.get(it.number)) || "(uncat)";
+            return { ...it, category: cat, avgPrice: it.revenue / it.qty };
+        });
+    if (!items.length) return;
+    // Group items by category for colouring
+    const cats = [...new Set(items.map(i => i.category))].slice(0, 12);
+    const palette = ["#3949ab","#00897b","#fb8c00","#e53935","#8e24aa","#039be5","#6d4c41","#43a047","#5e35b1","#00acc1","#c0ca33","#d81b60"];
+    const maxR = items.reduce((m, i) => Math.max(m, i.revenue), 0);
+    const datasets = cats.map((cat, ci) => ({
+        label: cat,
+        data: items.filter(i => i.category === cat).map(i => ({
+            x: i.qty, y: i.avgPrice, r: 3 + Math.sqrt(i.revenue / maxR) * 22, item: i,
+        })),
+        backgroundColor: palette[ci % palette.length] + "cc",
+        borderColor: palette[ci % palette.length],
+        borderWidth: 1,
+    }));
+    state.charts.diBubble = new Chart(canvas.getContext("2d"), {
+        type: "bubble",
+        data: { datasets },
+        options: chartBase({
+            plugins: { legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 10 } } },
+                       tooltip: { callbacks: { label: c => {
+                           const it = c.raw.item;
+                           return (it.number ? it.number + " — " : "") + (it.description || "") + " · qty " + fmtInt(it.qty) + " · " + fmtMoney(it.avgPrice) + "/unit · total " + fmtMoneyFull(it.revenue);
+                       } } } },
+            scales: {
+                x: { type: "logarithmic", title: { display: true, text: "Qty (log)", font: { size: 10 } } },
+                y: { type: "logarithmic", title: { display: true, text: "Avg unit price (log)", font: { size: 10 } }, ticks: { callback: v => fmtMoney(v) } }
+            }
+        })
+    });
+}
+
+// Chart #6 — Seasonality polar chart (12-axis radar, one ring per year).
+function renderDiPolar() {
+    destroyChart("diPolar");
+    const canvas = document.getElementById("diPolar");
+    if (!canvas) return;
+    const byYearMonth = new Map(); // year → array of 12 sums
+    for (const inv of (state.invoices || [])) {
+        const d = inv.postingDate; if (!d) continue;
+        const dt = new Date(d);
+        const y = dt.getFullYear(); const m = dt.getMonth();
+        if (!byYearMonth.has(y)) byYearMonth.set(y, new Array(12).fill(0));
+        byYearMonth.get(y)[m] += invoiceSalesAmount(inv);
+    }
+    const years = [...byYearMonth.keys()].sort();
+    if (!years.length) return;
+    const palette = ["#3949ab","#00897b","#fb8c00","#e53935","#8e24aa"];
+    state.charts.diPolar = new Chart(canvas.getContext("2d"), {
+        type: "radar",
+        data: {
+            labels: ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"],
+            datasets: years.map((y, i) => ({
+                label: String(y),
+                data: byYearMonth.get(y),
+                borderColor: palette[i % palette.length],
+                backgroundColor: palette[i % palette.length] + "22",
+                pointRadius: 2,
+                borderWidth: 2,
+                fill: true,
+            }))
+        },
+        options: chartBase({
+            plugins: { legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 10 } } },
+                       tooltip: { callbacks: { label: c => c.dataset.label + " · " + c.label + ": " + fmtMoneyFull(c.parsed.r) } } },
+            scales: { r: { ticks: { display: false }, grid: { color: "rgba(0,0,0,0.06)" } } }
+        })
+    });
+}
+
+// Chart #10 — Invoice value histogram with median / mean / P90.
+function renderDiHistogram() {
+    destroyChart("diHistogram");
+    const canvas = document.getElementById("diHistogram");
+    if (!canvas) return;
+    const vals = (state.filtered || [])
+        .map(inv => invoiceSalesAmount(inv))
+        .filter(v => v > 0)
+        .sort((a, b) => a - b);
+    if (!vals.length) return;
+    const max = vals[vals.length - 1];
+    const min = vals[0];
+    const NBINS = 30;
+    // Log-scale buckets to handle the long tail
+    const logMin = Math.log10(Math.max(min, 1));
+    const logMax = Math.log10(max);
+    const step = (logMax - logMin) / NBINS;
+    const counts = new Array(NBINS).fill(0);
+    const lows  = new Array(NBINS), highs = new Array(NBINS);
+    for (let i = 0; i < NBINS; i++) {
+        lows[i]  = Math.pow(10, logMin + i * step);
+        highs[i] = Math.pow(10, logMin + (i + 1) * step);
+    }
+    for (const v of vals) {
+        let b = Math.floor((Math.log10(v) - logMin) / step);
+        if (b < 0) b = 0; if (b >= NBINS) b = NBINS - 1;
+        counts[b]++;
+    }
+    const median = vals[Math.floor(vals.length / 2)];
+    const mean = vals.reduce((s, v) => s + v, 0) / vals.length;
+    const p90 = vals[Math.floor(vals.length * 0.9)];
+    const labels = lows.map((l, i) => fmtMoney(l) + "–" + fmtMoney(highs[i]));
+    state.charts.diHistogram = new Chart(canvas.getContext("2d"), {
+        type: "bar",
+        data: { labels, datasets: [{ data: counts, backgroundColor: "#3949ab", borderRadius: 2 }] },
+        options: chartBase({
+            plugins: { legend: { display: false },
+                       title: { display: true, text: "median " + fmtMoney(median) + " · mean " + fmtMoney(mean) + " · P90 " + fmtMoney(p90), font: { size: 11, weight: 500 } },
+                       tooltip: { callbacks: { label: c => counts[c.dataIndex] + " invoices in " + fmtMoney(lows[c.dataIndex]) + "–" + fmtMoney(highs[c.dataIndex]) } } },
+            scales: { x: { ticks: { display: false } }, y: { title: { display: true, text: "# invoices", font: { size: 10 } } } }
+        })
     });
 }
 
