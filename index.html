@@ -5590,14 +5590,16 @@ function paintPipelineKpis() {
     const inRange = getDateRangePredicate();
     let openCount = 0, openAmt = 0, sniCount = 0, sniAmt = 0;
     if (state.salesOrderOutstandingLines && state.salesOrderOutstandingLines.length) {
-        // EX-GST basis to match the rest of the page. Outstanding =
-        // line.amount (ex-VAT line total) × outstandingQty / qty. SNI
-        // = shippedNotInvLcyExVat directly from BC. Outstanding is
-        // filtered by line.shipmentDate (future delivery in range);
-        // SNI stays current-state since shipped lines have past dates.
+        // EX-GST basis. Outstanding and SNI both filter by the line's
+        // shipmentDate against the toolbar range — consistent with
+        // Outstanding Invoices (which is also date-scoped) and matches
+        // the user's expectation that all three pipeline tiles react
+        // to date selection. Shipped-but-not-invoiced lines whose
+        // scheduled shipmentDate falls outside the range won't appear.
         const openDocs = new Set(), sniDocs = new Set();
         for (const ln of state.salesOrderOutstandingLines) {
-            if (ln.outstandingQuantity > 0 && inRange(ln.shipmentDate)) {
+            if (!inRange(ln.shipmentDate)) continue;
+            if (ln.outstandingQuantity > 0) {
                 const exVatPerUnit = ln.quantity ? (ln.lineAmount / ln.quantity) : 0;
                 openAmt += ln.outstandingQuantity * exVatPerUnit;
                 if (ln.documentNumber) openDocs.add(ln.documentNumber);
@@ -5610,18 +5612,19 @@ function paintPipelineKpis() {
         openCount = openDocs.size;
         sniCount = sniDocs.size;
     } else {
-        // v2.0 fallback — Outstanding filtered by line.shipmentDate,
-        // SNI unfiltered (current-state metric).
+        // v2.0 fallback — both Outstanding and SNI filtered by line.
+        // shipmentDate against the toolbar range.
         for (const so of (state.salesOrders || [])) {
             let openLines = 0, sniLines = 0, soOpen = 0, soSni = 0;
             for (const ln of (so.salesOrderLines || [])) {
+                const lineShipDate = (ln.shipmentDate || "").toString().slice(0, 10);
+                if (!inRange(lineShipDate)) continue;
                 const q   = num(ln.quantity);
                 if (q <= 0) continue;
                 const qsh = pick(ln, ["quantityShipped", "shippedQuantity", "qtyShipped"]);
                 const qin = pick(ln, ["quantityInvoiced", "invoicedQuantity", "qtyInvoiced"]);
                 const grossPerUnit = num(ln.amountExcludingTax) / q;
-                const lineShipDate = (ln.shipmentDate || "").toString().slice(0, 10);
-                const openQ = q - qsh; if (openQ > 0 && inRange(lineShipDate)) { openLines++; soOpen += openQ * grossPerUnit; }
+                const openQ = q - qsh; if (openQ > 0) { openLines++; soOpen += openQ * grossPerUnit; }
                 const sniQ  = qsh - qin; if (sniQ > 0) { sniLines++; soSni += sniQ * grossPerUnit; }
             }
             if (openLines) { openCount++; openAmt += soOpen; }
@@ -5638,12 +5641,12 @@ function paintPipelineKpis() {
     const basisSource = (state.salesOrderOutstandingLines && state.salesOrderOutstandingLines.length)
         ? "BC OData line.amount (ex-GST) / shippedNotInvLcyNoVat (ex-GST)"
         : "v2.0 fallback amountExcludingTax/qty × ratio (ex-GST)";
-    console.log("[Pipeline calc] basis=" + basisSource + " · outstanding=line.shipmentDate-filter · sni=current-state · open=" + fmtMoneyFull(openAmt) + "/" + openCount + " · sni=" + fmtMoneyFull(sniAmt) + "/" + sniCount);
+    console.log("[Pipeline calc] basis=" + basisSource + " · both tiles filtered by line.shipmentDate · open=" + fmtMoneyFull(openAmt) + "/" + openCount + " · sni=" + fmtMoneyFull(sniAmt) + "/" + sniCount);
     const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
     set("kpiPipeOpenAmt", fmtMoneyFull(openAmt));
     set("kpiPipeOpenSub", openCount + " orders · scheduled to ship in range");
     set("kpiPipeSniAmt",  fmtMoneyFull(sniAmt));
-    set("kpiPipeSniSub",  sniCount + " orders · awaiting invoice (current state)");
+    set("kpiPipeSniSub",  sniCount + " orders · scheduled-to-ship in range");
     set("kpiPipeOiAmt",   fmtMoneyFull(oiAmt));
     set("kpiPipeOiSub",   oiCount + " invoices · unpaid in range");
 }
