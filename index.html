@@ -2540,6 +2540,25 @@
                         </table>
                     </div>
                 </div>
+
+                <div class="panel">
+                    <div class="panel-header"><h2>Drill-down · Customer → Invoice → Item line</h2><div class="meta">click ▸ to expand</div></div>
+                    <div class="table-scroll">
+                        <table id="eomDrillTable">
+                            <thead><tr>
+                                <th>Customer / Invoice / Item</th>
+                                <th class="num" data-tree-sort="sales">Sales (LCY)</th>
+                                <th class="num" data-tree-sort="qty">Qty</th>
+                                <th class="num" data-tree-sort="cost">Adj Cost</th>
+                                <th class="num" data-tree-sort="costNonInv">Cost Non-Inv</th>
+                                <th class="num" data-tree-sort="gp">Adj Profit</th>
+                                <th class="num" data-tree-sort="gpPct">Margin %</th>
+                                <th class="num" data-tree-sort="pctGT">% of GT</th>
+                            </tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
             </section>
 
             <!-- TAB: Sales Quote Overview -->
@@ -9903,6 +9922,7 @@ function renderEOM() {
         </tr>
     `).join("") || '<tr><td colspan="11" class="empty">No rows.</td></tr>';
     document.getElementById("eomMeta").textContent = rows.length + " line" + (rows.length === 1 ? "" : "s") + (rows.length > 2000 ? " (showing top 2000 — narrow with filters)" : "");
+    renderEOMDrillTree();
 }
 
 // Export EOM Report at its native invoice-line grain. The rows on screen
@@ -12958,6 +12978,69 @@ function buildCustomerDrillTree(customer) {
     return roots;
 }
 
+// EOM tab drill tree — Customer → Invoice → Item line. Built off the same
+// allPostedDocs() feed as the other drill trees so the numbers reconcile.
+// Honours the GP-band filters by pruning out customers/docs whose lines
+// don't survive the per-line GP test.
+function buildEOMDrillTree() {
+    const custMap = new Map();
+    const docByCust = new Map();
+    const docs = allPostedDocs().filter(docMatchesFilters);
+    // Apply the same GP-band filter the table uses (low <20% and/or high >90%)
+    // — line-level so we keep just the matching item lines under each invoice.
+    const gpFilterActive = state.eomGpLow || state.eomGpHigh;
+    const gpMatches = (sales, cost) => {
+        if (!sales) return false;
+        const gpPct = (sales - cost) / sales;
+        return (state.eomGpLow && gpPct < 0.20) || (state.eomGpHigh && gpPct > 0.90);
+    };
+    for (const d of docs) {
+        const custKey = d.customerNumber || "(unknown)";
+        const custLabel = d.customerName || custKey;
+        let custNode = custMap.get(custKey);
+        if (!custNode) {
+            custNode = _newNode("et-cust-" + custKey, custLabel);
+            custMap.set(custKey, custNode);
+            docByCust.set(custKey, new Map());
+        }
+        const docMap = docByCust.get(custKey);
+        let docNode = docMap.get(d.id);
+        if (!docNode) {
+            const prefix = d.type === "Posted Sales CR/Adj Note" ? "CR " : "";
+            docNode = _newNode("et-doc-" + custKey + "-" + d.id, prefix + (d.number || "(no number)"));
+            docMap.set(d.id, docNode);
+            custNode.children.push(docNode);
+        }
+        for (const ln of d.lines) {
+            if (!lineMatchesFilters(ln)) continue;
+            const itemNo = ln.lineObjectNumber || ln.itemId || "";
+            const mult = d.countsTotal ? 1 : 0;
+            const s = lineNetAmount(ln) * d.sign * mult;
+            const q = num(ln.quantity) * d.sign * mult;
+            const c = costFromLine(ln, d.sign, d.postingDate, d.customerNumber, d.number) * mult;
+            const cn = costNonInvFromLine(ln, d.sign, d.postingDate, d.customerNumber, d.number) * mult;
+            if (gpFilterActive && !gpMatches(s, c + cn)) continue;
+            const leaf = _newNode("et-line-" + custKey + "-" + d.id + "-" + (ln.id || ln.sequence || itemNo),
+                (itemNo || "(non-item)") + (ln.description ? " · " + ln.description : ""));
+            leaf.children = null;
+            leaf.sales = s; leaf.qty = q; leaf.cost = c; leaf.costNonInv = cn;
+            docNode.children.push(leaf);
+            _accumLine([docNode, custNode], s, q, c, cn);
+        }
+    }
+    // Drop empty branches that no longer contain any leaves (happens when
+    // GP-band filtering wipes out every line under a doc / customer).
+    const roots = [...custMap.values()]
+        .map(cust => {
+            cust.children = cust.children.filter(doc => doc.children.length > 0);
+            return cust;
+        })
+        .filter(cust => cust.children.length > 0)
+        .sort((a, b) => b.sales - a.sales);
+    _finalizeTree(roots, _grandTotalSales());
+    return roots;
+}
+
 function buildBranchDrillTree(_invoices) {
     const locMap = new Map();
     const dtByLoc = new Map();
@@ -13120,6 +13203,9 @@ function renderCustomerDrillTree() {
 }
 function renderBranchDrillTree() {
     renderDrillTree(buildBranchDrillTree(state.filtered), "#branchDrillTable");
+}
+function renderEOMDrillTree() {
+    renderDrillTree(buildEOMDrillTree(), "#eomDrillTable");
 }
 function renderSalespersonDrillTree() {
     renderDrillTree(buildSalespersonDrillTree(state.filtered), "#salespersonDrillTable");
@@ -13888,6 +13974,7 @@ function wireEvents() {
     wireTreeClicks("#customerDrillTable",    renderCustomerDrillTree);
     wireTreeClicks("#branchDrillTable",      renderBranchDrillTree);
     wireTreeClicks("#salespersonDrillTable", renderSalespersonDrillTree);
+    wireTreeClicks("#eomDrillTable",         renderEOMDrillTree);
 
     // Sort headers in drill trees
     const wireTreeSort = (tableSelector, rerender) => {
@@ -13908,6 +13995,7 @@ function wireEvents() {
     wireTreeSort("#customerDrillTable",    renderCustomerDrillTree);
     wireTreeSort("#branchDrillTable",      renderBranchDrillTree);
     wireTreeSort("#salespersonDrillTable", renderSalespersonDrillTree);
+    wireTreeSort("#eomDrillTable",         renderEOMDrillTree);
 
     // Top N modal — "Show more…" buttons on chart cards
     document.querySelectorAll("[data-topn]").forEach(btn => {
