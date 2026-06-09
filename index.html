@@ -7257,6 +7257,100 @@ function diBuildHoverTooltip(host) {
     };
 }
 
+// State code → name (matches TopoJSON properties.State / STE_NAME)
+const STATE_FULL_NAMES = {
+    NSW: "New South Wales",
+    VIC: "Victoria",
+    QLD: "Queensland",
+    WA:  "Western Australia",
+    SA:  "South Australia",
+    TAS: "Tasmania",
+    NT:  "Northern Territory",
+    ACT: "Australian Capital Territory",
+};
+// State code → suburb GeoJSON URL (tonywr71/GeoJson-Data simplified files)
+const STATE_SUBURB_URLS = {
+    NSW: "https://raw.githubusercontent.com/tonywr71/GeoJson-Data/master/suburb-2-nsw.geojson",
+    VIC: "https://raw.githubusercontent.com/tonywr71/GeoJson-Data/master/suburb-2-vic.geojson",
+    QLD: "https://raw.githubusercontent.com/tonywr71/GeoJson-Data/master/suburb-2-qld.geojson",
+    WA:  "https://raw.githubusercontent.com/tonywr71/GeoJson-Data/master/suburb-2-wa.geojson",
+    SA:  "https://raw.githubusercontent.com/tonywr71/GeoJson-Data/master/suburb-2-sa.geojson",
+    TAS: "https://raw.githubusercontent.com/tonywr71/GeoJson-Data/master/suburb-2-tas.geojson",
+    NT:  "https://raw.githubusercontent.com/tonywr71/GeoJson-Data/master/suburb-2-nt.geojson",
+    ACT: "https://raw.githubusercontent.com/tonywr71/GeoJson-Data/master/suburb-2-act.geojson",
+};
+// Property keys to look at for suburb name across the per-state files
+const SUBURB_NAME_KEYS = ["vic_loca_2", "nsw_loca_2", "qld_loca_2", "wa_loca_2", "sa_loca_2", "tas_loca_2", "nt_loca_2", "act_loca_2", "loc_name", "name"];
+
+// City-name → LGA name fallback. Customer addresses often have the
+// suburb in `city`, which on the metro fringes matches the LGA name
+// directly (e.g., city "Yarra" → LGA "Yarra"). Fast string match,
+// case-folded. Returns null if no LGA's name matches.
+function diLgaForCustomerCity(c, lgaNamesUpper) {
+    const city = (c.city || c.sellToCity || c.billToCity || c.shipToCity || "").toString().trim().toUpperCase();
+    if (!city || !lgaNamesUpper.has(city)) return null;
+    return city;
+}
+
+// Generic per-state TopoJSON fetch — same gist but filtered to a
+// different state name. Cached per state on state.di.lgaTopoByState.
+async function diLoadStateTopo(stateCode) {
+    state.di = state.di || {};
+    state.di.lgaTopoByState = state.di.lgaTopoByState || {};
+    if (state.di.lgaTopoByState[stateCode]) return state.di.lgaTopoByState[stateCode];
+    if (state.di.lgaTopoLoading) await state.di.lgaTopoLoading;
+    if (state.di.lgaTopoByState[stateCode]) return state.di.lgaTopoByState[stateCode];
+    state.di.lgaTopoLoading = (async () => {
+        const url = "https://gist.githubusercontent.com/MichaelByrneAU/5d6e5ed6aa8cbb7078b017c7eeaec7e2/raw/lga_state.json";
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error("LGA topo fetch failed: " + resp.status);
+        const topo = await resp.json();
+        const decoded = diTopoDecode(topo);
+        // Index every state's features at once
+        for (const [code, fullName] of Object.entries(STATE_FULL_NAMES)) {
+            const features = (topo.objects.lga.geometries || [])
+                .filter(g => (g.properties.State || g.properties.STE_NAME || "") === fullName)
+                .map(g => ({
+                    name: (g.properties.LGA || "").replace(/\s*\([A-Z]+\)\s*$/, "").trim(),
+                    rings: diFeatureToRings(g, decoded),
+                }))
+                .filter(f => f.name && f.rings.length);
+            state.di.lgaTopoByState[code] = { features };
+        }
+    })();
+    await state.di.lgaTopoLoading;
+    return state.di.lgaTopoByState[stateCode];
+}
+
+// Per-state suburb cache
+async function diLoadStateSuburbs(stateCode) {
+    state.di = state.di || {};
+    state.di.suburbsByState = state.di.suburbsByState || {};
+    if (state.di.suburbsByState[stateCode]) return state.di.suburbsByState[stateCode];
+    const url = STATE_SUBURB_URLS[stateCode];
+    if (!url) throw new Error("No suburb data URL for " + stateCode);
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error("Suburb fetch failed: " + resp.status);
+    const geo = await resp.json();
+    const features = geo.features.map(f => {
+        const props = f.properties || {};
+        let name = "";
+        for (const k of SUBURB_NAME_KEYS) if (props[k]) { name = props[k]; break; }
+        name = (name || "").toString().trim();
+        const rings = [];
+        if (f.geometry.type === "Polygon") rings.push(...f.geometry.coordinates);
+        else if (f.geometry.type === "MultiPolygon") for (const poly of f.geometry.coordinates) rings.push(...poly);
+        let minLon = Infinity, maxLon = -Infinity, minLat = Infinity, maxLat = -Infinity;
+        for (const ring of rings) for (const [lon, lat] of ring) {
+            if (lon < minLon) minLon = lon; if (lon > maxLon) maxLon = lon;
+            if (lat < minLat) minLat = lat; if (lat > maxLat) maxLat = lat;
+        }
+        return { name, rings, bbox: { minLon, maxLon, minLat, maxLat } };
+    });
+    state.di.suburbsByState[stateCode] = { features };
+    return state.di.suburbsByState[stateCode];
+}
+
 // Async fetch + cache. Falls back to the hand-traced simple view if
 // the network is unavailable.
 async function diLoadVicTopo() {
@@ -7322,30 +7416,30 @@ function diPointInRing(point, ring) {
     return inside;
 }
 
-// Victorian LGA → Suburb drill view (3rd level).
-async function renderDiGeoVicSuburb(host, lgaName) {
+// Generic LGA → Suburb drill view (3rd level) — works for any state.
+async function renderDiGeoStateSuburb(host, stateCode, lgaName) {
     state.di = state.di || {};
     host.innerHTML =
         '<div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">' +
-            '<button class="theme-btn" id="diGeoBackVic">← Back to VIC LGAs</button>' +
+            '<button class="theme-btn" id="diGeoBackState">← Back to ' + stateCode + ' LGAs</button>' +
             '<button class="theme-btn" id="diGeoBackAU2">← AU</button>' +
             '<div style="font-size:12px; opacity:0.7;">Loading suburbs in <strong>' + escapeHtml(lgaName) + '</strong>…</div>' +
         '</div>' +
         '<div class="empty" style="padding:32px; text-align:center;">Fetching suburb map…</div>';
-    const backVic = document.getElementById("diGeoBackVic");
-    if (backVic) backVic.addEventListener("click", () => { state.di.geoDrillLga = null; renderDiGeo(); });
+    const backState = document.getElementById("diGeoBackState");
+    if (backState) backState.addEventListener("click", () => { state.di.geoDrillLga = null; renderDiGeo(); });
     const backAU = document.getElementById("diGeoBackAU2");
     if (backAU) backAU.addEventListener("click", () => { state.di.geoDrillLga = null; state.di.geoDrillState = null; renderDiGeo(); });
-    let suburbs, vicTopo;
+    let suburbs, stateTopo;
     try {
-        [suburbs, vicTopo] = await Promise.all([diLoadVicSuburbs(), diLoadVicTopo()]);
+        [suburbs, stateTopo] = await Promise.all([diLoadStateSuburbs(stateCode), diLoadStateTopo(stateCode)]);
     } catch (e) {
-        console.warn("[diGeoVicSuburb] load failed:", e.message);
-        host.innerHTML += '<div class="hint" style="margin:12px 0;">Could not fetch suburb data — check console.</div>';
+        console.warn("[diGeoStateSuburb] load failed:", e.message);
+        host.innerHTML += '<div class="hint" style="margin:12px 0;">Could not fetch suburb data for ' + stateCode + ' — check console.</div>';
         return;
     }
     // Find the clicked LGA's polygon for filtering
-    const lgaFeature = vicTopo.features.find(f => f.name === lgaName);
+    const lgaFeature = stateTopo.features.find(f => f.name === lgaName);
     if (!lgaFeature) { host.innerHTML += '<div class="hint" style="margin:12px 0;">LGA "' + escapeHtml(lgaName) + '" not found in topo data.</div>'; return; }
     // Filter suburbs whose centroid falls inside the LGA's largest ring
     const lgaRings = lgaFeature.rings.filter(r => r.length > 3);
@@ -7386,12 +7480,14 @@ async function renderDiGeoVicSuburb(host, lgaName) {
     const maxSales = [...agg.values()].reduce((m, e) => Math.max(m, e.sales), 0) || 1;
     // Project + render
     const bbox = lgaBbox;
-    const W = Math.max(420, host.clientWidth - 32);
+    const MAX_H = 360;
     const midLat = (bbox.minLat + bbox.maxLat) / 2;
     const cosLat = Math.cos(midLat * Math.PI / 180);
     const dataW = (bbox.maxLon - bbox.minLon) * cosLat;
     const dataH = (bbox.maxLat - bbox.minLat);
-    const H = Math.round(W * dataH / dataW);
+    const hostW = host.clientWidth - 32;
+    let W = Math.max(380, hostW), H = Math.round(W * dataH / dataW);
+    if (H > MAX_H) { H = MAX_H; W = Math.round(H * dataW / dataH); }
     const project = ([lon, lat]) => [(lon - bbox.minLon) * cosLat / dataW * W, (bbox.maxLat - lat) / dataH * H];
     let svg = '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" style="font-family:Inter,sans-serif;">';
     // Outline of LGA in faint
@@ -7412,14 +7508,14 @@ async function renderDiGeoVicSuburb(host, lgaName) {
     });
     svg += '</svg>';
     host.innerHTML =
-        '<div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">' +
-            '<button class="theme-btn" id="diGeoBackVic">← Back to VIC LGAs</button>' +
+        '<div style="display:flex; align-items:center; gap:10px; margin-bottom:8px; flex-wrap:wrap;">' +
+            '<button class="theme-btn" id="diGeoBackState">← Back to ' + stateCode + ' LGAs</button>' +
             '<button class="theme-btn" id="diGeoBackAU2">← AU</button>' +
             '<button class="theme-btn" id="diGeoReset">Reset zoom</button>' +
-            '<div style="font-size:12px; opacity:0.7;">' + escapeHtml(lgaName) + ' · ' + filtered.length + ' suburbs · scroll to zoom · drag to pan</div>' +
+            '<div style="font-size:11px; opacity:0.7;">' + escapeHtml(lgaName) + ' · ' + filtered.length + ' suburbs · scroll to zoom · drag to pan</div>' +
         '</div>' +
         '<div style="color:' + (Chart.defaults.color || "#2c2f4a") + '; overflow:hidden;">' + svg + '</div>';
-    document.getElementById("diGeoBackVic").addEventListener("click", () => { state.di.geoDrillLga = null; renderDiGeo(); });
+    document.getElementById("diGeoBackState").addEventListener("click", () => { state.di.geoDrillLga = null; renderDiGeo(); });
     document.getElementById("diGeoBackAU2").addEventListener("click", () => { state.di.geoDrillLga = null; state.di.geoDrillState = null; renderDiGeo(); });
     const svgEl = host.querySelector("svg");
     const tooltip = diBuildHoverTooltip(host);
@@ -7438,17 +7534,18 @@ async function renderDiGeoVicSuburb(host, lgaName) {
     });
 }
 
-// Victorian drill-down view — pulls real LGA boundaries from the
-// MichaelByrne TopoJSON gist (ABS CC-BY 4.0). 80 actual Victorian
-// LGAs, projected with simple cos(lat) compensation and rendered
-// as individual SVG paths.
-async function renderDiGeoVictoria(host) {
+// Generic per-state LGA drill — works for any of the 8 Australian
+// states/territories. Uses the same MichaelByrne TopoJSON gist filtered
+// to the requested state. Customer → LGA matching: VIC uses the
+// detailed postcode lookup; other states fall back to matching
+// customer.city against LGA names directly (city "Sydney" → LGA "Sydney").
+async function renderDiGeoStateLGAs(host, stateCode) {
     state.di = state.di || {};
-    // Show loading state then fetch real LGA boundaries
+    const fullName = STATE_FULL_NAMES[stateCode] || stateCode;
     host.innerHTML =
         '<div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">' +
             '<button class="theme-btn" id="diGeoBack">← Back to Australia</button>' +
-            '<div style="font-size:12px; opacity:0.7;">Loading Victorian LGAs from ABS open data…</div>' +
+            '<div style="font-size:12px; opacity:0.7;">Loading ' + escapeHtml(fullName) + ' LGAs from ABS open data…</div>' +
         '</div>' +
         '<div class="empty" style="padding:32px; text-align:center;">Fetching map…</div>';
     document.getElementById("diGeoBack").addEventListener("click", () => {
@@ -7456,24 +7553,33 @@ async function renderDiGeoVictoria(host) {
         renderDiGeo();
     });
     let topo;
-    try { topo = await diLoadVicTopo(); }
+    try { topo = await diLoadStateTopo(stateCode); }
     catch (e) {
-        console.warn("[diGeoVictoria] TopoJSON load failed:", e.message);
+        console.warn("[diGeoStateLGAs] TopoJSON load failed:", e.message);
         host.innerHTML =
             '<div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">' +
                 '<button class="theme-btn" id="diGeoBack2">← Back to Australia</button>' +
                 '<div style="font-size:12px; opacity:0.7;">Map unavailable — network blocked.</div>' +
             '</div>' +
-            '<div class="hint" style="margin:12px 0;">Could not fetch Victorian LGA boundaries from the open-data gist. Check the network tab for blocked requests, then click back and re-drill.</div>';
+            '<div class="hint" style="margin:12px 0;">Could not fetch ' + escapeHtml(fullName) + ' LGA boundaries from the open-data gist. Check the network tab for blocked requests, then click back and re-drill.</div>';
         const back = document.getElementById("diGeoBack2");
         if (back) back.addEventListener("click", () => { state.di.geoDrillState = null; renderDiGeo(); });
         return;
     }
-    // Customer → LGA via postcode
+    if (!topo || !topo.features.length) {
+        host.innerHTML += '<div class="hint" style="margin:12px 0;">No LGAs found for ' + escapeHtml(fullName) + ' in the open-data file.</div>';
+        return;
+    }
+    // Customer → LGA. VIC: detailed postcode lookup. All states: city-name match.
+    const lgaNamesUpper = new Set(topo.features.map(f => f.name.toUpperCase()));
     const custLga = new Map();
     for (const c of (state.customers || [])) {
-        const p = c.postalCode || c.postCode || c.sellToPostCode || c.billToPostCode || c.shipToPostCode || c.zipCode;
-        const lga = diVicLgaForPostcode(p);
+        let lga = null;
+        if (stateCode === "VIC") {
+            const p = c.postalCode || c.postCode || c.sellToPostCode || c.billToPostCode || c.shipToPostCode || c.zipCode;
+            lga = diVicLgaForPostcode(p);
+        }
+        if (!lga) lga = diLgaForCustomerCity(c, lgaNamesUpper);
         if (lga) custLga.set(c.number, lga);
     }
     const agg = new Map();
@@ -7494,13 +7600,17 @@ async function renderDiGeoVictoria(host) {
         if (lon < minLon) minLon = lon; if (lon > maxLon) maxLon = lon;
         if (lat < minLat) minLat = lat; if (lat > maxLat) maxLat = lat;
     }
-    // Simple equirectangular projection with cos(lat) longitude correction.
-    const W = Math.max(380, host.clientWidth - 32);
+    // Equirectangular projection. CAP HEIGHT to ~360 so the card stays
+    // the same height as Customer Lifecycle alongside it. Width scales
+    // down to match aspect ratio.
+    const MAX_H = 360;
     const midLat = (minLat + maxLat) / 2;
     const cosLat = Math.cos(midLat * Math.PI / 180);
     const dataW = (maxLon - minLon) * cosLat;
     const dataH = (maxLat - minLat);
-    const H = Math.round(W * dataH / dataW);
+    const hostW = host.clientWidth - 32;
+    let W = hostW, H = Math.round(W * dataH / dataW);
+    if (H > MAX_H) { H = MAX_H; W = Math.round(H * dataW / dataH); }
     const project = ([lon, lat]) => [
         (lon - minLon) * cosLat / dataW * W,
         (maxLat - lat) / dataH * H,
@@ -7538,12 +7648,12 @@ async function renderDiGeoVictoria(host) {
     const sorted = [...agg.entries()].sort((a, b) => b[1].sales - a[1].sales);
     const initial = sorted[0] && sorted[0][0];
     host.innerHTML =
-        '<div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">' +
+        '<div style="display:flex; align-items:center; gap:10px; margin-bottom:8px; flex-wrap:wrap;">' +
             '<button class="theme-btn" id="diGeoBack">← Back to Australia</button>' +
             '<button class="theme-btn" id="diGeoReset">Reset zoom</button>' +
-            '<div style="font-size:12px; opacity:0.7;">VIC · ' + topo.features.length + ' LGAs · ' + sorted.length + ' with sales · scroll to zoom · drag to pan · click any LGA to drill into suburbs · ABS (CC-BY 4.0)</div>' +
+            '<div style="font-size:11px; opacity:0.7;">' + stateCode + ' · ' + topo.features.length + ' LGAs · ' + sorted.length + ' with sales · scroll to zoom · click any LGA to drill</div>' +
         '</div>' +
-        '<div style="color:' + (Chart.defaults.color || "#2c2f4a") + '; overflow:hidden;">' + svg + '</div>';
+        '<div style="color:' + (Chart.defaults.color || "#2c2f4a") + '; overflow:hidden; display:flex; justify-content:center;">' + svg + '</div>';
     document.getElementById("diGeoBack").addEventListener("click", () => {
         state.di.geoDrillState = null; renderDiGeo();
     });
@@ -7565,26 +7675,6 @@ async function renderDiGeoVictoria(host) {
     }
 }
 
-// Stub view for states whose region drill isn't built yet.
-function renderDiGeoStub(host, code) {
-    state.di = state.di || {};
-    const names = { NSW: "New South Wales", QLD: "Queensland", SA: "South Australia", WA: "Western Australia", TAS: "Tasmania", NT: "Northern Territory", ACT: "Australian Capital Territory" };
-    host.innerHTML =
-        '<div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">' +
-            '<button class="theme-btn" id="diGeoBack">← Back to Australia</button>' +
-            '<div style="font-size:12px; opacity:0.7;">' + code + ' detail view</div>' +
-        '</div>' +
-        '<div class="hint" style="margin: 12px 0;">' +
-            '<strong>Region-level breakdown coming for ' + (names[code] || code) + '.</strong> ' +
-            'For now, only Victoria has a metro-region drill view (grouped by customer postcode). ' +
-            'Adding NSW (Sydney metro), QLD (Brisbane / Gold Coast / Sunshine Coast) and the rest is on the roadmap.' +
-        '</div>';
-    document.getElementById("diGeoBack").addEventListener("click", () => {
-        state.di.geoDrillState = null;
-        renderDiGeo();
-    });
-}
-
 // Chart #18 — Geographic Australia map with drill-down.
 // Top level: 8 Australian states (Wikimedia paths). Click any state to
 // drill into a state-detail view; the only state with a regional
@@ -7594,9 +7684,8 @@ function renderDiGeoStub(host, code) {
 function renderDiGeo() {
     const host = document.getElementById("diGeo"); if (!host) return;
     state.di = state.di || {};
-    if (state.di.geoDrillLga && state.di.geoDrillState === "VIC") { renderDiGeoVicSuburb(host, state.di.geoDrillLga); return; }
-    if (state.di.geoDrillState === "VIC") { renderDiGeoVictoria(host); return; }
-    if (state.di.geoDrillState) { renderDiGeoStub(host, state.di.geoDrillState); return; }
+    if (state.di.geoDrillLga && state.di.geoDrillState) { renderDiGeoStateSuburb(host, state.di.geoDrillState, state.di.geoDrillLga); return; }
+    if (state.di.geoDrillState) { renderDiGeoStateLGAs(host, state.di.geoDrillState); return; }
     const custState = new Map();
     // v2.0 customers endpoint exposes c.state directly; BC also sometimes
     // populates sellToState / billToState / shipToState. Try all of them.
