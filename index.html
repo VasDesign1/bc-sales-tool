@@ -2001,32 +2001,8 @@
                         <div class="chart-wrap" style="min-height:440px;"><canvas id="diSankey"></canvas></div>
                     </div>
                     <div class="card span-12">
-                        <div class="head"><h3>Sales treemap · category → item</h3><div class="meta">area = sales · colour = GP% · click to drill into Sales by Item</div></div>
+                        <div class="head"><h3>Sales treemap · category → item</h3><div class="meta">area = sales · colour = GP% (red < 0% · orange 0–10% · amber 10–20% · light green 20–30% · dark green 30%+) · click to drill into Sales by Item</div></div>
                         <div class="chart-wrap" style="min-height:560px;"><canvas id="diTreemap"></canvas></div>
-                    </div>
-                    <div class="card span-6">
-                        <div class="head"><h3>Daily sales calendar heatmap</h3><div class="meta">click a day to drill in · use the back button to restore the previous range · dark cells = high revenue</div></div>
-                        <div id="diCalendarHeatmap" style="padding: 14px 18px 18px;"></div>
-                    </div>
-                    <div class="card span-6">
-                        <div class="head"><h3>Customer cohort retention</h3><div class="meta">how well each batch of new customers keeps buying · rows that stay dark moving right = sticky cohorts · rows that fade = customers churning</div></div>
-                        <div id="diCohort" style="padding: 14px 18px 18px;"></div>
-                    </div>
-                    <div class="card span-6">
-                        <div class="head"><h3 id="diWaterfallTitle">Period-over-period waterfall</h3><div class="meta" id="diWaterfallMeta">left bar = prior period total · floating bars show what added (green) or subtracted (red) · right bar = current period</div></div>
-                        <div class="chart-wrap" style="min-height:340px;"><canvas id="diWaterfall"></canvas></div>
-                    </div>
-                    <div class="card span-6">
-                        <div class="head"><h3>Top customers · slope chart</h3><div class="meta">prior period (left) vs current (right) · slope = growth direction</div></div>
-                        <div class="chart-wrap" style="min-height:340px;"><canvas id="diSlope"></canvas></div>
-                    </div>
-                    <div class="card span-6">
-                        <div class="head"><h3>Item bubble matrix</h3><div class="meta">X = qty · Y = avg unit price · size = revenue · colour = category</div></div>
-                        <div class="chart-wrap" style="min-height:380px;"><canvas id="diBubble"></canvas></div>
-                    </div>
-                    <div class="card span-6">
-                        <div class="head"><h3>Seasonality polar chart</h3><div class="meta">each ring = one year · spikes show busy months · rings overlapping = consistent seasonal pattern · rings diverging = year-over-year drift</div></div>
-                        <div class="chart-wrap" style="min-height:380px;"><canvas id="diPolar"></canvas></div>
                     </div>
                     <div class="card span-4">
                         <div class="head"><h3>Customer concentration</h3><div class="meta">how lopsided your customer base is — a few big fish vs many small ones</div></div>
@@ -2037,8 +2013,32 @@
                         <div class="meta" style="padding: 0 18px 12px; font-size: 11px; opacity: 0.7;">Curve bowed below the dashed line = concentrated. Straight diagonal = perfectly even spread across all customers.</div>
                     </div>
                     <div class="card span-8">
+                        <div class="head"><h3>Item bubble matrix</h3><div class="meta">X = qty · Y = avg unit price · size = revenue · colour = category</div></div>
+                        <div class="chart-wrap" style="min-height:380px;"><canvas id="diBubble"></canvas></div>
+                    </div>
+                    <div class="card span-6">
+                        <div class="head"><h3 id="diWaterfallTitle">Period-over-period waterfall</h3><div class="meta" id="diWaterfallMeta">left bar = prior period total · floating bars show what added (green) or subtracted (red) · right bar = current period</div></div>
+                        <div class="chart-wrap" style="min-height:340px;"><canvas id="diWaterfall"></canvas></div>
+                    </div>
+                    <div class="card span-6">
+                        <div class="head"><h3>Top customers · slope chart</h3><div class="meta">prior period (left) vs current (right) · slope = growth direction</div></div>
+                        <div class="chart-wrap" style="min-height:340px;"><canvas id="diSlope"></canvas></div>
+                    </div>
+                    <div class="card span-6">
+                        <div class="head"><h3>Seasonality polar chart</h3><div class="meta">each ring = one year · spikes show busy months · rings overlapping = consistent seasonal pattern · rings diverging = year-over-year drift</div></div>
+                        <div class="chart-wrap" style="min-height:380px;"><canvas id="diPolar"></canvas></div>
+                    </div>
+                    <div class="card span-6">
                         <div class="head"><h3>Invoice value distribution</h3><div class="meta">how big are your typical invoices · X-axis = invoice $ (log scale) · bar height = number of invoices in that $ band · title shows median / mean / P90</div></div>
                         <div class="chart-wrap" style="min-height:300px;"><canvas id="diHistogram"></canvas></div>
+                    </div>
+                    <div class="card span-6">
+                        <div class="head"><h3>Daily sales calendar heatmap</h3><div class="meta">click a day to drill in · use the back button to restore the previous range · dark cells = high revenue · view scrolled to most-recent end</div></div>
+                        <div id="diCalendarHeatmap" style="padding: 14px 18px 18px;"></div>
+                    </div>
+                    <div class="card span-6">
+                        <div class="head"><h3>Customer cohort retention</h3><div class="meta">how well each batch of new customers keeps buying · rows that stay dark moving right = sticky cohorts · rows that fade = customers churning</div></div>
+                        <div id="diCohort" style="padding: 14px 18px 18px;"></div>
                     </div>
                 </div>
             </section>
@@ -5876,7 +5876,12 @@ function renderDiCalendarHeatmap() {
         backBtn = '<button class="theme-btn" id="diCalendarBack" style="margin-bottom: 10px;">← Back to ' + pr.from + ' → ' + pr.to + '</button>';
     }
     host.innerHTML = backBtn +
-        '<div style="overflow-x:auto; color:' + (Chart.defaults.color || "#2c2f4a") + ';">' + svg + '</div>' + legend;
+        '<div class="di-cal-scroll" style="overflow-x:auto; color:' + (Chart.defaults.color || "#2c2f4a") + ';">' + svg + '</div>' + legend;
+    // Scroll the horizontal calendar to the right-hand end so the most
+    // recent days are visible by default (otherwise the user opens the
+    // tab and sees the oldest months only).
+    const scrollWrap = host.querySelector(".di-cal-scroll");
+    if (scrollWrap) scrollWrap.scrollLeft = scrollWrap.scrollWidth;
     const backEl = document.getElementById("diCalendarBack");
     if (backEl) {
         backEl.addEventListener("click", () => {
