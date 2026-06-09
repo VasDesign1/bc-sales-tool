@@ -2000,6 +2000,10 @@
                         <div class="head"><h3>Sales flow · salesperson → category</h3><div class="meta">click a salesperson on the left to highlight only their flows · click a category on the right to drill into Sales by Item · click again to clear</div></div>
                         <div class="chart-wrap" style="min-height:440px;"><canvas id="diSankey"></canvas></div>
                     </div>
+                    <div class="card span-12">
+                        <div class="head"><h3>Sales treemap · category → item</h3><div class="meta">area = sales · colour = GP% · click to drill into Sales by Item</div></div>
+                        <div class="chart-wrap" style="min-height:560px;"><canvas id="diTreemap"></canvas></div>
+                    </div>
                     <div class="card span-6">
                         <div class="head"><h3>Daily sales calendar heatmap</h3><div class="meta">click a day to drill in · use the back button to restore the previous range · dark cells = high revenue</div></div>
                         <div id="diCalendarHeatmap" style="padding: 14px 18px 18px;"></div>
@@ -2007,10 +2011,6 @@
                     <div class="card span-6">
                         <div class="head"><h3>Customer cohort retention</h3><div class="meta">how well each batch of new customers keeps buying · rows that stay dark moving right = sticky cohorts · rows that fade = customers churning</div></div>
                         <div id="diCohort" style="padding: 14px 18px 18px;"></div>
-                    </div>
-                    <div class="card span-12">
-                        <div class="head"><h3>Sales treemap · category → item</h3><div class="meta">area = sales · colour = GP% · click to drill into Sales by Item</div></div>
-                        <div class="chart-wrap" style="min-height:560px;"><canvas id="diTreemap"></canvas></div>
                     </div>
                     <div class="card span-6">
                         <div class="head"><h3 id="diWaterfallTitle">Period-over-period waterfall</h3><div class="meta" id="diWaterfallMeta">left bar = prior period total · floating bars show what added (green) or subtracted (red) · right bar = current period</div></div>
@@ -5953,27 +5953,31 @@ function renderDiTreemap() {
     } else {
         rows = allRows;
     }
-    // Aspect-aware slice-and-dice. Choose the longer dimension as the
-    // current split direction, which keeps each rect's aspect close to 1.
+    // Slice-and-dice with alternating split direction. The previous
+    // aspect-aware variant kept choosing vertical because the canvas
+    // is consistently wider than tall — that produced 21 same-shape
+    // columns. Alternating horizontal/vertical gives a much more
+    // interesting visual rhythm where some blocks are wide, some
+    // tall, some chunky.
     const rects = [];
-    const place = (items, x, y, w, h) => {
+    const place = (items, x, y, w, h, horizontal) => {
         if (!items.length) return;
         if (items.length === 1) { rects.push({ ...items[0], x, y, w, h }); return; }
         const sum = items.reduce((s, i) => s + i.value, 0);
         const head = items[0];
         const tail = items.slice(1);
         const ratio = head.value / sum;
-        if (w >= h) {
+        if (horizontal) {
             const hW = w * ratio;
             rects.push({ ...head, x, y, w: hW, h });
-            place(tail, x + hW, y, w - hW, h);
+            place(tail, x + hW, y, w - hW, h, !horizontal);
         } else {
             const hH = h * ratio;
             rects.push({ ...head, x, y, w, h: hH });
-            place(tail, x, y + hH, w, h - hH);
+            place(tail, x, y + hH, w, h - hH, !horizontal);
         }
     };
-    place(rows, 0, 0, W, H);
+    place(rows, 0, 0, W, H, W > H);
     const colourByGp = (gp, sales) => {
         const pct = sales ? gp / sales : 0;
         if (pct < 0)    return "#b71c1c";
