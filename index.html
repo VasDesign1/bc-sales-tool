@@ -4167,9 +4167,16 @@ async function fetchResidentialDocLookup() {
     const QUOTE_NO = [/^quote.?no$/i, /quoteNo$/i, /quoteNumber$/i];
     const DOC_NO   = [/^no$/i, /^number$/i, /^document.?no$/i];
     const candidates = [];
+    // Track which (typeName, field-shape) combinations we've already
+    // accepted so we don't fetch the same dataset twice (Wiise tenants
+    // commonly publish `salesDocuments` + `workflowSalesDocuments`,
+    // `SalesOrder` + `Sales_Order_Excel` etc. with identical content).
+    const seenShapes = new Set();
     for (const [setName, typeName] of Object.entries(md.entitySets)) {
-        // Only scan sales-header entities; skip lines and unrelated tables.
+        // Sales-only — explicitly drop purchase entities even when their
+        // name contains "document".
         if (!/sales|invoice|order|quote|document/i.test(setName)) continue;
+        if (/purchase|vendor|payable|requisition/i.test(setName)) continue;
         if (/line|footer|comment|child|attachment|prepayment|archive/i.test(setName)) continue;
         const fields = md.entityTypes[typeName] || [];
         if (!fields.length) continue;
@@ -4177,6 +4184,14 @@ async function fetchResidentialDocLookup() {
         const fNo      = bcFindField(fields, DOC_NO);
         if (!fYourRef || !fNo) continue;
         const fQuote   = bcFindField(fields, QUOTE_NO);
+        // Same EntityType (i.e. same underlying BC page/table) →
+        // skip subsequent EntitySets pointing at it.
+        const shapeKey = typeName + "|" + fNo + "|" + fYourRef + "|" + (fQuote || "");
+        if (seenShapes.has(shapeKey)) {
+            console.log("[Residential lookup] skipping duplicate-shape entity " + setName + " (already covered by " + typeName + ")");
+            continue;
+        }
+        seenShapes.add(shapeKey);
         candidates.push({ entity: setName, fields, fYourRef, fNo, fQuote });
     }
     if (!candidates.length) {
@@ -10201,6 +10216,22 @@ function salesOrderQty(so) {
     return q;
 }
 
+// Visible from the browser console — handy when reconciling against PBI.
+function logResidentialUniverseStats() {
+    const u = buildResidentialQuoteUniverse();
+    const bySource = u.reduce((m, r) => (m[r._source] = (m[r._source] || 0) + 1, m), {});
+    const byBucket = u.reduce((m, r) => (m[r._bucket] = (m[r._bucket] || 0) + 1, m), {});
+    console.log("[Residential universe] " + u.length + " rows · by source:", bySource, "· by bucket:", byBucket);
+    console.log("[Residential universe] orders flagged Residential:",
+        (state.salesOrders || []).filter(isResidentialDoc).length,
+        " / " + (state.salesOrders || []).length + " total orders");
+    console.log("[Residential universe] invoices flagged Residential:",
+        (state.invoices || []).filter(isResidentialDoc).length,
+        " / " + (state.invoices || []).length + " total invoices " +
+        "(invoices live in Sales Invoice Header table 112 which isn't published on this tenant's OData feed; posted invoices will only count if the BC admin publishes that page).");
+}
+window.logResidentialUniverseStats = logResidentialUniverseStats;
+
 // Build the deduped residential quote universe.
 // Priority when the same quote number appears in multiple sources:
 //   Invoice > Order > Quote
@@ -10314,17 +10345,30 @@ function renderQuotes() {
     // universe: active quotes + Residential sales orders + Residential
     // posted invoices, deduped by originating Quote No.
     const universe = filteredQuoteUniverse();
-    // Diagnostic banner if the OData v4 lookup for Your Reference came back empty
+    // Diagnostic banner: distinguish the lookup-missing case from the
+    // posted-invoice-gap case so the user knows exactly what's missing.
     const resiDiag = document.getElementById("qResidentialDiagnostic");
     if (resiDiag) {
         const yrCount = state.docYourReference ? state.docYourReference.size : 0;
+        const orderHits   = (state.salesOrders || []).filter(isResidentialDoc).length;
+        const invoiceHits = (state.invoices    || []).filter(isResidentialDoc).length;
+        const totalInvoices = (state.invoices || []).length;
         if (state.residentialDiagnostic) {
             resiDiag.style.display = "block";
-            resiDiag.innerHTML = "<strong>Residential lookup:</strong> " + escapeHtml(state.residentialDiagnostic) +
-                "<br><span style='font-size:11px;'>Without this, only the active quotes feed into the totals — orders + invoices won't be counted as Won.</span>";
+            resiDiag.innerHTML = "<strong>Residential lookup:</strong> " + escapeHtml(state.residentialDiagnostic);
         } else if (yrCount === 0) {
             resiDiag.style.display = "block";
-            resiDiag.innerHTML = "<strong>Residential lookup:</strong> 0 documents tagged with 'Your Reference' so far. The tool can only show active quotes, not converted orders / invoices, until the OData v4 fetch returns data.";
+            resiDiag.innerHTML = "<strong>Residential lookup:</strong> 0 documents tagged with 'Your Reference' yet. The tool can only show active quotes until the OData v4 fetch returns data.";
+        } else if (totalInvoices > 0 && invoiceHits === 0) {
+            // Most common state on this tenant: open-document side is fine,
+            // but Sales Invoice Header isn't published so posted invoices
+            // can't be tagged Residential.
+            resiDiag.style.display = "block";
+            resiDiag.innerHTML =
+                "<strong>Partial coverage:</strong> " + fmtInt(orderHits) + " open Residential orders are counted, but <strong>0 of " + fmtInt(totalInvoices) + " posted invoices</strong> could be tagged " +
+                "(BC's Posted Sales Invoice Header — table 112 — isn't published as an OData Web Service on this tenant). " +
+                "Ask your BC admin to publish it so fully-invoiced Residential quotes feed into the Won total. " +
+                "<br><span style='font-size:11px;'>Until then the Sales Quote Overview will under-count Won relative to PBI for any quote whose order has been fully invoiced.</span>";
         } else {
             resiDiag.style.display = "none";
         }
