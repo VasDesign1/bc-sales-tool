@@ -25,6 +25,7 @@
     <script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -2542,11 +2543,11 @@
                 </div>
 
                 <div class="panel">
-                    <div class="panel-header"><h2>Drill-down · Customer → Invoice → Item line</h2><div class="meta">click ▸ to expand</div></div>
+                    <div class="panel-header"><h2>Drill-down · Customer → Document Type → Document No → Item line</h2><div class="meta">click ▸ to expand</div></div>
                     <div class="table-scroll">
                         <table id="eomDrillTable">
                             <thead><tr>
-                                <th>Customer / Invoice / Item</th>
+                                <th>Customer / Doc Type / Doc / Item</th>
                                 <th class="num" data-tree-sort="sales">Sales (LCY)</th>
                                 <th class="num" data-tree-sort="qty">Qty</th>
                                 <th class="num" data-tree-sort="cost">Adj Cost</th>
@@ -9798,16 +9799,64 @@ function renderByItem() {
     document.getElementById("itemMeta").textContent = rows.length + " items" + (rows.length > 1000 ? " (showing top 1000)" : "");
 }
 
-// Export Sales-by-Item table as CSV. One row per invoice line for items
-// currently passing all filters (category cross-filter, search, GP %
-// bands). Excel opens this directly (the BOM forces UTF-8 detection).
+// Shared XLSX writer — turns an array of plain objects into a real .xlsx
+// with an Excel autofilter on the header row, columns auto-sized to fit
+// content, top row frozen, and currency / percent number formats applied.
+// Uses SheetJS Community (Apache 2.0) loaded via CDN in <head>.
+function downloadXLSX(rows, sheetName, baseName, opts) {
+    if (typeof XLSX === "undefined") { alert("Excel library hasn't loaded yet — check your connection and try again."); return; }
+    if (!rows.length) { alert("Nothing to export."); return; }
+    opts = opts || {};
+    const moneyCols = new Set(opts.money || []);
+    const pctCols   = new Set(opts.percent || []);
+    const intCols   = new Set(opts.integer || []);
+    const headers   = Object.keys(rows[0]);
+    const ws = XLSX.utils.json_to_sheet(rows, { header: headers });
+    const range = XLSX.utils.decode_range(ws['!ref'] || "A1");
+    ws['!autofilter'] = { ref: XLSX.utils.encode_range(range) };
+    // Freeze the header row so the filter dropdowns stay visible while scrolling.
+    ws['!views'] = [{ state: 'frozen', ySplit: 1 }];
+    // Auto-fit column widths: measure header + every data row's rendered length.
+    // Clamp between 8 and 60 chars so the file opens with sensible defaults.
+    ws['!cols'] = headers.map(h => {
+        let maxLen = h.length;
+        for (const r of rows) {
+            const v = r[h];
+            let s;
+            if (v == null) s = "";
+            else if (typeof v === "number") {
+                if (moneyCols.has(h))      s = "$" + Math.abs(v).toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                else if (pctCols.has(h))   s = (v * 100).toFixed(2) + "%";
+                else if (intCols.has(h))   s = v.toLocaleString("en-AU");
+                else                       s = v.toString();
+            } else s = String(v);
+            if (s.length > maxLen) maxLen = s.length;
+        }
+        return { wch: Math.min(Math.max(maxLen + 2, 8), 60) };
+    });
+    // Apply Excel number formats per column so $ and % render natively
+    // (they stay sortable / sum-able because the underlying values are still numeric).
+    for (let R = 1; R <= range.e.r; ++R) {
+        for (let C = 0; C <= range.e.c; ++C) {
+            const cell = ws[XLSX.utils.encode_cell({ r: R, c: C })];
+            if (!cell || cell.t !== "n") continue;
+            const h = headers[C];
+            if      (moneyCols.has(h)) cell.z = '"$"#,##0.00;[Red]"-$"#,##0.00';
+            else if (pctCols.has(h))   cell.z = '0.00%';
+            else if (intCols.has(h))   cell.z = '#,##0';
+        }
+    }
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, sheetName || "Export");
+    XLSX.writeFile(wb, baseName + ".xlsx");
+}
+
+// Export Sales-by-Item table as XLSX. One row per invoice line for items
+// currently passing all filters (category cross-filter, search, GP % bands).
 function exportItemsToCSV() {
     const filteredRows = state.itLastFilteredRows || [];
     if (!filteredRows.length) { alert("No items to export — adjust filters and try again."); return; }
     const allowedItems = new Set(filteredRows.map(r => r.number).filter(Boolean));
-    // (item, invoice, customer) grain. Each row carries the full per-line
-    // sales + cost computed the same way the headline KPIs are computed,
-    // so spreadsheet sums reconcile against the on-screen totals.
     const detail = [];
     for (const inv of (state.filtered || [])) {
         const invNo = inv.number || inv.id || "";
@@ -9825,54 +9874,35 @@ function exportItemsToCSV() {
             const gp    = sales - cost;
             const gpPct = sales ? gp / sales : 0;
             detail.push({
-                itemNo,
-                description: ln.description || "",
-                category: state.itemCategory.get(itemNo) || "(no category)",
-                invoiceNo: invNo,
-                postingDate: (pd || "").toString().slice(0, 10),
-                customerNo: custNo,
-                customerName: custName,
-                salesperson: sp,
-                qty, sales, cost, gp, gpPct,
+                "Item No":       itemNo,
+                "Description":   ln.description || "",
+                "Category":      state.itemCategory.get(itemNo) || "(no category)",
+                "Invoice No":    invNo,
+                "Posting Date":  (pd || "").toString().slice(0, 10),
+                "Customer No":   custNo,
+                "Customer Name": custName,
+                "Salesperson":   sp,
+                "Qty":           qty,
+                "Sales $":       sales,
+                "Cost $":        cost,
+                "GP $":          gp,
+                "GP %":          gpPct,
             });
         }
     }
     detail.sort((a, b) => {
-        if (a.itemNo < b.itemNo) return -1;
-        if (a.itemNo > b.itemNo) return 1;
-        if (a.postingDate < b.postingDate) return -1;
-        if (a.postingDate > b.postingDate) return 1;
-        return 0;
+        const ai = a["Item No"] || "", bi = b["Item No"] || "";
+        if (ai < bi) return -1;
+        if (ai > bi) return 1;
+        return (a["Posting Date"] || "").localeCompare(b["Posting Date"] || "");
     });
-    const header = ["Item No","Description","Category","Invoice No","Posting Date","Customer No","Customer Name","Salesperson","Qty","Sales $","Cost $","GP $","GP %"];
-    const csvEscape = v => {
-        if (v == null) return "";
-        const s = String(v);
-        return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
-    };
-    const lines = [header.map(csvEscape).join(",")];
-    for (const d of detail) {
-        lines.push([
-            d.itemNo, d.description, d.category,
-            d.invoiceNo, d.postingDate, d.customerNo, d.customerName, d.salesperson,
-            d.qty.toFixed(2),
-            d.sales.toFixed(2),
-            d.cost.toFixed(2),
-            d.gp.toFixed(2),
-            (d.gpPct * 100).toFixed(2) + "%",
-        ].map(csvEscape).join(","));
-    }
-    const csv = "﻿" + lines.join("\r\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    const ts = new Date().toISOString().slice(0, 10);
     const tag = (state.itGpLow ? "_lt20" : "") + (state.itGpHigh ? "_gt90" : "");
-    a.download = "items" + tag + "_" + ts + ".csv";
-    document.body.appendChild(a); a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    const baseName = "items" + tag + "_" + new Date().toISOString().slice(0, 10);
+    downloadXLSX(detail, "Items", baseName, {
+        money:   ["Sales $", "Cost $", "GP $"],
+        percent: ["GP %"],
+        integer: [],
+    });
 }
 
 // ============================================================
@@ -9925,51 +9955,35 @@ function renderEOM() {
     renderEOMDrillTree();
 }
 
-// Export EOM Report at its native invoice-line grain. The rows on screen
-// are already line-level so this is a direct serialisation of whatever
-// passes the search + GP % filters — keeps the exported numbers exactly
-// equal to the totals the user is staring at.
+// Export EOM Report at its native invoice-line grain.
 function exportEomToCSV() {
     const rows = state.eomLastFilteredRows || [];
     if (!rows.length) { alert("No rows to export — adjust filters and try again."); return; }
-    const header = ["Customer No","Customer","Invoice No","Posting Date","Salesperson","Branch","Item Category","Item No","Description","Qty","Sales $","Cost $","GP $","GP %","Month","FY"];
-    const csvEscape = v => {
-        if (v == null) return "";
-        const s = String(v);
-        return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
-    };
-    const lines = [header.map(csvEscape).join(",")];
-    for (const r of rows) {
-        lines.push([
-            r.customerNumber || "",
-            r.customer || "",
-            r.invoiceNumber || "",
-            (r.postingDate || "").toString().slice(0, 10),
-            r.salesperson || "",
-            r.branch || "",
-            r.itemCategory || "",
-            r.itemNumber || "",
-            r.description || "",
-            (r.qty != null ? r.qty : 0).toFixed(2),
-            (r.sales || 0).toFixed(2),
-            (r.cost  || 0).toFixed(2),
-            (r.gp    || 0).toFixed(2),
-            ((r.gpPct || 0) * 100).toFixed(2) + "%",
-            r.month || "",
-            r.fy != null ? r.fy : "",
-        ].map(csvEscape).join(","));
-    }
-    const csv = "﻿" + lines.join("\r\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    const ts = new Date().toISOString().slice(0, 10);
+    const detail = rows.map(r => ({
+        "Customer No":   r.customerNumber || "",
+        "Customer":      r.customer || "",
+        "Invoice No":    r.invoiceNumber || "",
+        "Posting Date":  (r.postingDate || "").toString().slice(0, 10),
+        "Salesperson":   r.salesperson || "",
+        "Branch":        r.branch || "",
+        "Item Category": r.itemCategory || "",
+        "Item No":       r.itemNumber || "",
+        "Description":   r.description || "",
+        "Qty":           r.qty != null ? r.qty : 0,
+        "Sales $":       r.sales || 0,
+        "Cost $":        r.cost || 0,
+        "GP $":          r.gp || 0,
+        "GP %":          r.gpPct || 0,
+        "Month":         r.month || "",
+        "FY":            r.fy != null ? r.fy : "",
+    }));
     const tag = (state.eomGpLow ? "_lt20" : "") + (state.eomGpHigh ? "_gt90" : "");
-    a.download = "eom" + tag + "_" + ts + ".csv";
-    document.body.appendChild(a); a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    const baseName = "eom" + tag + "_" + new Date().toISOString().slice(0, 10);
+    downloadXLSX(detail, "EOM", baseName, {
+        money:   ["Sales $", "Cost $", "GP $"],
+        percent: ["GP %"],
+        integer: ["FY"],
+    });
 }
 
 // ============================================================
@@ -12978,16 +12992,16 @@ function buildCustomerDrillTree(customer) {
     return roots;
 }
 
-// EOM tab drill tree — Customer → Invoice → Item line. Built off the same
-// allPostedDocs() feed as the other drill trees so the numbers reconcile.
-// Honours the GP-band filters by pruning out customers/docs whose lines
-// don't survive the per-line GP test.
+// EOM tab drill tree — Customer → Doc Type → Document No → Item line.
+// Doc Type sub-grouping mirrors Overview's customer drill so users can
+// expand "Posted Sales Invoice" / "Posted Sales CR/Adj Note" separately
+// rather than having every doc number jumbled under the customer.
+// Built off allPostedDocs() so numbers reconcile with the other trees.
 function buildEOMDrillTree() {
     const custMap = new Map();
-    const docByCust = new Map();
+    const dtByCust = new Map();           // custKey -> Map<docType, dtNode>
+    const docByCustDt = new Map();        // custKey|docType -> Map<docId, docNode>
     const docs = allPostedDocs().filter(docMatchesFilters);
-    // Apply the same GP-band filter the table uses (low <20% and/or high >90%)
-    // — line-level so we keep just the matching item lines under each invoice.
     const gpFilterActive = state.eomGpLow || state.eomGpHigh;
     const gpMatches = (sales, cost) => {
         if (!sales) return false;
@@ -13001,15 +13015,21 @@ function buildEOMDrillTree() {
         if (!custNode) {
             custNode = _newNode("et-cust-" + custKey, custLabel);
             custMap.set(custKey, custNode);
-            docByCust.set(custKey, new Map());
+            dtByCust.set(custKey, new Map());
         }
-        const docMap = docByCust.get(custKey);
+        let dtNode = dtByCust.get(custKey).get(d.type);
+        if (!dtNode) {
+            dtNode = _newNode("et-cust-" + custKey + "-dt-" + d.type, d.type);
+            dtByCust.get(custKey).set(d.type, dtNode);
+            custNode.children.push(dtNode);
+            docByCustDt.set(custKey + "|" + d.type, new Map());
+        }
+        const docMap = docByCustDt.get(custKey + "|" + d.type);
         let docNode = docMap.get(d.id);
         if (!docNode) {
-            const prefix = d.type === "Posted Sales CR/Adj Note" ? "CR " : "";
-            docNode = _newNode("et-doc-" + custKey + "-" + d.id, prefix + (d.number || "(no number)"));
+            docNode = _newNode("et-doc-" + custKey + "-" + d.type + "-" + d.id, d.number || "(no number)");
             docMap.set(d.id, docNode);
-            custNode.children.push(docNode);
+            dtNode.children.push(docNode);
         }
         for (const ln of d.lines) {
             if (!lineMatchesFilters(ln)) continue;
@@ -13020,19 +13040,23 @@ function buildEOMDrillTree() {
             const c = costFromLine(ln, d.sign, d.postingDate, d.customerNumber, d.number) * mult;
             const cn = costNonInvFromLine(ln, d.sign, d.postingDate, d.customerNumber, d.number) * mult;
             if (gpFilterActive && !gpMatches(s, c + cn)) continue;
-            const leaf = _newNode("et-line-" + custKey + "-" + d.id + "-" + (ln.id || ln.sequence || itemNo),
+            const leaf = _newNode("et-line-" + custKey + "-" + d.type + "-" + d.id + "-" + (ln.id || ln.sequence || itemNo),
                 (itemNo || "(non-item)") + (ln.description ? " · " + ln.description : ""));
             leaf.children = null;
             leaf.sales = s; leaf.qty = q; leaf.cost = c; leaf.costNonInv = cn;
             docNode.children.push(leaf);
-            _accumLine([docNode, custNode], s, q, c, cn);
+            _accumLine([docNode, dtNode, custNode], s, q, c, cn);
         }
     }
-    // Drop empty branches that no longer contain any leaves (happens when
-    // GP-band filtering wipes out every line under a doc / customer).
+    // Prune empty branches (Doc-types/docs/customers with no surviving lines after GP filter).
     const roots = [...custMap.values()]
         .map(cust => {
-            cust.children = cust.children.filter(doc => doc.children.length > 0);
+            cust.children = cust.children
+                .map(dt => {
+                    dt.children = dt.children.filter(doc => doc.children.length > 0);
+                    return dt;
+                })
+                .filter(dt => dt.children.length > 0);
             return cust;
         })
         .filter(cust => cust.children.length > 0)
