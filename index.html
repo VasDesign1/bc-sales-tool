@@ -2509,6 +2509,9 @@
                     <div class="panel-header">
                         <h2>EOM Report · line-level detail</h2>
                         <input type="text" class="search" id="eomSearch" placeholder="Search customer/item/salesperson…">
+                        <button class="gp-filter-btn low"  id="eomGpLowBtn"  type="button">GP &lt; 20%</button>
+                        <button class="gp-filter-btn high" id="eomGpHighBtn" type="button">GP &gt; 90%</button>
+                        <button class="more-btn"           id="eomExportBtn" type="button">Export to Excel</button>
                         <div class="meta" id="eomMeta"></div>
                     </div>
                     <div class="table-scroll">
@@ -4209,6 +4212,9 @@ const state = {
     itGpLow: false,
     itGpHigh: false,
     itLastFilteredRows: [],
+    eomGpLow: false,
+    eomGpHigh: false,
+    eomLastFilteredRows: [],
     treeSort: { key: "sales", dir: "desc" },
     custFilter: "", itemFilter: "", eomFilter: "", customerItemFilter: "",
     filters: { location: "", salesperson: "", customer: "", customerName: "", item: "", itemDesc: "", status: "" },
@@ -4947,11 +4953,14 @@ function buildEOMRows(invoices) {
             const cost  = totalCostFromLine(ln, 1, inv.postingDate, inv.customerNumber, inv.number);
             rows.push({
                 customer:    inv.customerName || inv.customerNumber || "(unknown)",
+                customerNumber: inv.customerNumber || "",
+                invoiceNumber: inv.number || inv.id || "",
                 salesperson: inv.salesperson || "(unassigned)",
                 branch:      locationCode(ln.locationId),
                 itemCategory: state.itemCategory.get(itemNo) || "—",
                 itemNumber:  itemNo,
                 description: ln.description || "",
+                qty:         num(ln.quantity),
                 sales, cost,
                 gp: sales - cost,
                 gpPct: sales ? (sales - cost) / sales : 0,
@@ -9849,6 +9858,16 @@ function renderEOM() {
         const q = state.eomFilter.toLowerCase();
         rows = rows.filter(r => (r.customer + " " + r.salesperson + " " + r.itemNumber + " " + r.description + " " + r.branch + " " + r.itemCategory).toLowerCase().includes(q));
     }
+    // GP % filter toggles — low (<20%) and/or high (>90%). Both on = union.
+    // Exclude $0 sales lines so they don't dominate the low bucket.
+    if (state.eomGpLow || state.eomGpHigh) {
+        rows = rows.filter(r => {
+            if (!r.sales) return false;
+            return (state.eomGpLow && r.gpPct < 0.20) || (state.eomGpHigh && r.gpPct > 0.90);
+        });
+    }
+    state.eomLastFilteredRows = rows;
+
     const totSales = rows.reduce((s, r) => s + r.sales, 0);
     const totGp    = rows.reduce((s, r) => s + r.gp, 0);
     document.getElementById("eomKpiSales").textContent = fmtMoneyFull(totSales);
@@ -9875,6 +9894,53 @@ function renderEOM() {
         </tr>
     `).join("") || '<tr><td colspan="10" class="empty">No rows.</td></tr>';
     document.getElementById("eomMeta").textContent = rows.length + " line" + (rows.length === 1 ? "" : "s") + (rows.length > 2000 ? " (showing top 2000 — narrow with filters)" : "");
+}
+
+// Export EOM Report at its native invoice-line grain. The rows on screen
+// are already line-level so this is a direct serialisation of whatever
+// passes the search + GP % filters — keeps the exported numbers exactly
+// equal to the totals the user is staring at.
+function exportEomToCSV() {
+    const rows = state.eomLastFilteredRows || [];
+    if (!rows.length) { alert("No rows to export — adjust filters and try again."); return; }
+    const header = ["Customer No","Customer","Invoice No","Posting Date","Salesperson","Branch","Item Category","Item No","Description","Qty","Sales $","Cost $","GP $","GP %","Month","FY"];
+    const csvEscape = v => {
+        if (v == null) return "";
+        const s = String(v);
+        return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    };
+    const lines = [header.map(csvEscape).join(",")];
+    for (const r of rows) {
+        lines.push([
+            r.customerNumber || "",
+            r.customer || "",
+            r.invoiceNumber || "",
+            (r.postingDate || "").toString().slice(0, 10),
+            r.salesperson || "",
+            r.branch || "",
+            r.itemCategory || "",
+            r.itemNumber || "",
+            r.description || "",
+            (r.qty != null ? r.qty : 0).toFixed(2),
+            (r.sales || 0).toFixed(2),
+            (r.cost  || 0).toFixed(2),
+            (r.gp    || 0).toFixed(2),
+            ((r.gpPct || 0) * 100).toFixed(2) + "%",
+            r.month || "",
+            r.fy != null ? r.fy : "",
+        ].map(csvEscape).join(","));
+    }
+    const csv = "﻿" + lines.join("\r\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    const ts = new Date().toISOString().slice(0, 10);
+    const tag = (state.eomGpLow ? "_lt20" : "") + (state.eomGpHigh ? "_gt90" : "");
+    a.download = "eom" + tag + "_" + ts + ".csv";
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
 }
 
 // ============================================================
@@ -13683,6 +13749,17 @@ function wireEvents() {
 
     // EOM search
     document.getElementById("eomSearch").addEventListener("input", e => { state.eomFilter = e.target.value; renderEOM(); });
+    document.getElementById("eomGpLowBtn").addEventListener("click", () => {
+        state.eomGpLow = !state.eomGpLow;
+        document.getElementById("eomGpLowBtn").classList.toggle("active", state.eomGpLow);
+        renderEOM();
+    });
+    document.getElementById("eomGpHighBtn").addEventListener("click", () => {
+        state.eomGpHigh = !state.eomGpHigh;
+        document.getElementById("eomGpHighBtn").classList.toggle("active", state.eomGpHigh);
+        renderEOM();
+    });
+    document.getElementById("eomExportBtn").addEventListener("click", exportEomToCSV);
 
     // Sortable column headers on Branch / Salesperson / EOM / Returns tables
     const textKeys = new Set(["fy", "monthKey", "branch", "salesperson", "customer", "itemCategory", "itemNumber", "month", "number", "postingDate"]);
