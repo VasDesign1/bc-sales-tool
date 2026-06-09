@@ -7461,7 +7461,9 @@ async function renderDiGeoStateSuburb(host, stateCode, lgaName) {
         host.innerHTML += '<div class="hint" style="margin:12px 0;">No suburbs matched within ' + escapeHtml(lgaName) + ' — bbox + PIP filter empty. The suburb file may cover only a subset of VIC.</div>';
         return;
     }
-    // Customer → suburb via locality name match in city/locality field
+    // Customer → suburb via locality name match. Suburb names in the
+    // GeoJSON are already uppercase ("MELBOURNE", "PRAHRAN", etc.) so
+    // we case-fold both sides. Aggregate keyed by uppercase suburb.
     const custSuburb = new Map();
     for (const c of (state.customers || [])) {
         const city = (c.city || c.sellToCity || c.billToCity || c.shipToCity || "").toString().trim().toUpperCase();
@@ -7480,24 +7482,24 @@ async function renderDiGeoStateSuburb(host, stateCode, lgaName) {
     const maxSales = [...agg.values()].reduce((m, e) => Math.max(m, e.sales), 0) || 1;
     // Project + render
     const bbox = lgaBbox;
-    const MAX_H = 360;
     const midLat = (bbox.minLat + bbox.maxLat) / 2;
     const cosLat = Math.cos(midLat * Math.PI / 180);
     const dataW = (bbox.maxLon - bbox.minLon) * cosLat;
     const dataH = (bbox.maxLat - bbox.minLat);
-    const hostW = host.clientWidth - 32;
-    let W = Math.max(380, hostW), H = Math.round(W * dataH / dataW);
-    if (H > MAX_H) { H = MAX_H; W = Math.round(H * dataW / dataH); }
-    const project = ([lon, lat]) => [(lon - bbox.minLon) * cosLat / dataW * W, (bbox.maxLat - lat) / dataH * H];
-    let svg = '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" style="font-family:Inter,sans-serif;">';
+    const PROJ_W = 1000;
+    const PROJ_H = Math.round(PROJ_W * dataH / dataW);
+    const project = ([lon, lat]) => [(lon - bbox.minLon) * cosLat / dataW * PROJ_W, (bbox.maxLat - lat) / dataH * PROJ_H];
+    let svg = '<svg viewBox="0 0 ' + PROJ_W + ' ' + PROJ_H + '" preserveAspectRatio="xMidYMid meet" style="width:100%; height:100%; font-family:Inter,sans-serif;">';
     // Outline of LGA in faint
     lgaRings.forEach(ring => {
         const d = "M " + ring.map(p => project(p).map(n => n.toFixed(2)).join(" ")).join(" L ") + " Z";
         svg += '<path d="' + d + '" fill="rgba(0,0,0,0.02)" stroke="rgba(0,0,0,0.5)" stroke-width="1.2"/>';
     });
-    // Suburbs
+    // Suburbs — look up agg by UPPERCASE name since customer.city is
+    // upper-cased to match. Some state files store suburb names mixed-
+    // case ("Toorak" vs "TOORAK") so always fold for comparison.
     filtered.forEach(s => {
-        const e = agg.get(s.name) || { sales: 0, cost: 0, count: 0, custs: new Set() };
+        const e = agg.get((s.name || "").toUpperCase()) || { sales: 0, cost: 0, count: 0, custs: new Set() };
         let fill = "rgba(46,40,30,0.06)";
         if (e.sales > 0) {
             const t = e.sales / maxSales;
@@ -7514,7 +7516,7 @@ async function renderDiGeoStateSuburb(host, stateCode, lgaName) {
             '<button class="theme-btn" id="diGeoReset">Reset zoom</button>' +
             '<div style="font-size:11px; opacity:0.7;">' + escapeHtml(lgaName) + ' · ' + filtered.length + ' suburbs · scroll to zoom · drag to pan</div>' +
         '</div>' +
-        '<div style="color:' + (Chart.defaults.color || "#2c2f4a") + '; overflow:hidden;">' + svg + '</div>';
+        '<div style="color:' + (Chart.defaults.color || "#2c2f4a") + '; overflow:hidden; height:360px; display:flex; align-items:center; justify-content:center;">' + svg + '</div>';
     document.getElementById("diGeoBackState").addEventListener("click", () => { state.di.geoDrillLga = null; renderDiGeo(); });
     document.getElementById("diGeoBackAU2").addEventListener("click", () => { state.di.geoDrillLga = null; state.di.geoDrillState = null; renderDiGeo(); });
     const svgEl = host.querySelector("svg");
@@ -7522,7 +7524,7 @@ async function renderDiGeoStateSuburb(host, stateCode, lgaName) {
     const zoom = diAttachZoom(svgEl);
     document.getElementById("diGeoReset").addEventListener("click", () => zoom && zoom.reset());
     const renderTip = name => {
-        const e = agg.get(name) || { sales: 0, cost: 0, count: 0, custs: new Set() };
+        const e = agg.get((name || "").toUpperCase()) || { sales: 0, cost: 0, count: 0, custs: new Set() };
         const gpPct = e.sales ? (e.sales - e.cost) / e.sales : 0;
         return '<div style="font-weight:700; font-size:13px;">' + escapeHtml(name) + '</div>' +
             '<div style="font-size:15px; font-weight:700; margin-top:4px;">' + fmtMoneyFull(e.sales) + '</div>' +
@@ -7532,6 +7534,10 @@ async function renderDiGeoStateSuburb(host, stateCode, lgaName) {
         p.addEventListener("mousemove", e => tooltip.show(e.clientX, e.clientY, renderTip(p.dataset.sub)));
         p.addEventListener("mouseleave", () => tooltip.hide());
     });
+    if (!agg.size) {
+        console.log("[diGeoStateSuburb] No suburb→customer matches for", stateCode, lgaName, "· sample customer city fields:",
+            (state.customers || []).slice(0, 3).map(c => Object.keys(c).filter(k => /city|town|suburb|locality/i.test(k)).join(",")));
+    }
 }
 
 // Generic per-state LGA drill — works for any of the 8 Australian
@@ -7600,22 +7606,19 @@ async function renderDiGeoStateLGAs(host, stateCode) {
         if (lon < minLon) minLon = lon; if (lon > maxLon) maxLon = lon;
         if (lat < minLat) minLat = lat; if (lat > maxLat) maxLat = lat;
     }
-    // Equirectangular projection. CAP HEIGHT to ~360 so the card stays
-    // the same height as Customer Lifecycle alongside it. Width scales
-    // down to match aspect ratio.
-    const MAX_H = 360;
+    // Project to a normalised viewBox so the SVG can resize to fit any
+    // card height/width via CSS. Card height is targeted at ~400 px to
+    // match the Customer Lifecycle chart-wrap min-height alongside it.
+    const PROJ_W = 1000;
     const midLat = (minLat + maxLat) / 2;
     const cosLat = Math.cos(midLat * Math.PI / 180);
     const dataW = (maxLon - minLon) * cosLat;
     const dataH = (maxLat - minLat);
-    const hostW = host.clientWidth - 32;
-    let W = hostW, H = Math.round(W * dataH / dataW);
-    if (H > MAX_H) { H = MAX_H; W = Math.round(H * dataW / dataH); }
+    const PROJ_H = Math.round(PROJ_W * dataH / dataW);
     const project = ([lon, lat]) => [
-        (lon - minLon) * cosLat / dataW * W,
-        (maxLat - lat) / dataH * H,
+        (lon - minLon) * cosLat / dataW * PROJ_W,
+        (maxLat - lat) / dataH * PROJ_H,
     ];
-    // Build per-LGA SVG paths
     const lgaPaths = topo.features.map(f => {
         const d = f.rings.map(ring => {
             return "M " + ring.map(p => {
@@ -7625,7 +7628,7 @@ async function renderDiGeoStateLGAs(host, stateCode) {
         }).join(" ");
         return { name: f.name, d };
     });
-    let svg = '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" style="font-family:Inter,sans-serif;">';
+    let svg = '<svg viewBox="0 0 ' + PROJ_W + ' ' + PROJ_H + '" preserveAspectRatio="xMidYMid meet" style="width:100%; height:100%; font-family:Inter,sans-serif;">';
     lgaPaths.forEach(p => {
         const e = agg.get(p.name) || { sales: 0, cost: 0, count: 0, custs: new Set() };
         let fill = "rgba(46,40,30,0.07)";
@@ -7653,7 +7656,7 @@ async function renderDiGeoStateLGAs(host, stateCode) {
             '<button class="theme-btn" id="diGeoReset">Reset zoom</button>' +
             '<div style="font-size:11px; opacity:0.7;">' + stateCode + ' · ' + topo.features.length + ' LGAs · ' + sorted.length + ' with sales · scroll to zoom · click any LGA to drill</div>' +
         '</div>' +
-        '<div style="color:' + (Chart.defaults.color || "#2c2f4a") + '; overflow:hidden; display:flex; justify-content:center;">' + svg + '</div>';
+        '<div style="color:' + (Chart.defaults.color || "#2c2f4a") + '; overflow:hidden; height:360px; display:flex; align-items:center; justify-content:center;">' + svg + '</div>';
     document.getElementById("diGeoBack").addEventListener("click", () => {
         state.di.geoDrillState = null; renderDiGeo();
     });
@@ -7737,9 +7740,8 @@ function renderDiGeo() {
     const maxSales = [...agg.values()].reduce((m, e) => Math.max(m, e.sales), 0) || 1;
     state.di = state.di || {};
     const activeState = state.di.geoActive || null;
-    // Render at host width, preserve aspect ratio 200:186 ≈ 1.075
-    const W = Math.max(240, host.clientWidth - 32), H = Math.round(W * 0.93);
-    let svg = '<svg width="' + W + '" height="' + H + '" viewBox="0 0 200 186" preserveAspectRatio="xMidYMid meet" style="font-family:Inter,sans-serif;font-size:5px;">';
+    // SVG sized via viewBox; CSS fills the fixed-height container.
+    let svg = '<svg viewBox="0 0 200 186" preserveAspectRatio="xMidYMid meet" style="width:100%; height:100%; font-family:Inter,sans-serif;font-size:5px;">';
     for (const [code, path] of Object.entries(PATHS)) {
         const e = agg.get(code) || { sales: 0, cost: 0, count: 0, custs: new Set() };
         const gpPct = e.sales ? (e.sales - e.cost) / e.sales : 0;
@@ -7778,7 +7780,7 @@ function renderDiGeo() {
             '<button class="theme-btn" id="diGeoReset">Reset zoom</button>' +
             '<span>scroll to zoom · drag to pan · click any state to drill</span>' +
         '</div>' +
-        '<div style="color:' + (Chart.defaults.color || "#2c2f4a") + '; overflow:hidden;">' + svg + '</div>';
+        '<div style="color:' + (Chart.defaults.color || "#2c2f4a") + '; overflow:hidden; height:360px; display:flex; align-items:center; justify-content:center;">' + svg + '</div>';
     const svgEl = host.querySelector("svg");
     const tooltip = diBuildHoverTooltip(host);
     const zoom = diAttachZoom(svgEl);
