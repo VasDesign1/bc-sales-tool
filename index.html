@@ -6638,6 +6638,13 @@ function renderDiFunnel() {
         if (!inRange(d)) continue;
         qCount++; qAmt += num(q.totalAmountExcludingTax);
     }
+    let boCount = 0, boAmt = 0;
+    for (const bo of (state.blanketOrders || [])) {
+        const d = (bo.documentDate || bo.orderDate || "").toString().slice(0, 10);
+        if (!inRange(d)) continue;
+        boCount++;
+        boAmt += num(bo.totalAmountExcludingTax) || blanketOrderAmount(bo);
+    }
     let openOrders = 0, openOrdersAmt = 0, sniCount = 0, sniAmt = 0;
     if (state.salesOrderOutstandingLines && state.salesOrderOutstandingLines.length) {
         const openDocs = new Set(), sniDocs = new Set();
@@ -6668,7 +6675,7 @@ function renderDiFunnel() {
         if ((inv.status || "").toLowerCase() === "paid") { paidCount++; paidAmt += s; }
     }
     const stages = [
-        { name: "Quotes",                 count: qCount,     amt: qAmt },
+        { name: "Quotes",                 count: qCount + boCount, amt: qAmt + boAmt, breakdown: { qCount, qAmt, boCount, boAmt } },
         { name: "Outstanding orders",     count: openOrders, amt: openOrdersAmt },
         { name: "Shipped",                count: shipCount,  amt: shipAmt },
         { name: "Shipped, not invoiced",  count: sniCount,   amt: sniAmt },
@@ -6682,19 +6689,83 @@ function renderDiFunnel() {
         return s.name + " · " + s.count + " (" + conv + "% from prev)";
     });
     const palette = ["#3949ab","#1e88e5","#00897b","#fb8c00","#43a047","#6d4c41"];
+    const blanketColor = "#9c27b0";
+    // First dataset = Sales quotes segment of bar 0 + the full bar for stages 1-5.
+    // Second dataset = Blanket sales orders, only contributes to bar 0 (other indices are 0).
+    // Stacked horizontally so bar 0 shows quotes + blanket as two colours; later bars unchanged.
     state.charts.diFunnel = new Chart(canvas.getContext("2d"), {
         type: "bar",
-        data: { labels, datasets: [{ data: stages.map(s => s.count), backgroundColor: palette, borderRadius: 4 }] },
+        data: {
+            labels,
+            datasets: [
+                {
+                    label: "Sales quotes",
+                    data: [qCount, openOrders, shipCount, sniCount, invCount, paidCount],
+                    backgroundColor: palette,
+                    borderRadius: 4,
+                    stack: "funnel",
+                },
+                {
+                    label: "Blanket sales orders",
+                    data: [boCount, 0, 0, 0, 0, 0],
+                    backgroundColor: blanketColor,
+                    borderRadius: 4,
+                    stack: "funnel",
+                },
+            ],
+        },
         plugins: [ChartDataLabels],
         options: chartBase({
             indexAxis: "y",
             plugins: {
-                legend: { display: false },
-                tooltip: { callbacks: { label: c => fmtInt(stages[c.dataIndex].count) + " docs · " + fmtMoneyFull(stages[c.dataIndex].amt) } },
-                datalabels: { anchor: "end", align: "end", clamp: true, formatter: (_, c) => fmtMoneyFull(stages[c.dataIndex].amt), font: { size: 10, weight: 600 }, color: Chart.defaults.color },
+                legend: {
+                    display: true,
+                    position: "bottom",
+                    labels: {
+                        boxWidth: 12,
+                        // Only show the two stage-0 legends (quotes vs blanket) — palette colours for stages 1-5 aren't really "Sales quotes".
+                        generateLabels: () => [
+                            { text: "Sales quotes",         fillStyle: palette[0],   strokeStyle: palette[0] },
+                            { text: "Blanket sales orders", fillStyle: blanketColor, strokeStyle: blanketColor },
+                        ],
+                    },
+                },
+                tooltip: {
+                    filter: t => !(t.dataIndex > 0 && t.datasetIndex === 1),
+                    callbacks: {
+                        label: c => {
+                            if (c.dataIndex === 0) {
+                                return c.datasetIndex === 0
+                                    ? "Sales quotes: "         + fmtInt(qCount)  + " docs · " + fmtMoneyFull(qAmt)
+                                    : "Blanket sales orders: " + fmtInt(boCount) + " docs · " + fmtMoneyFull(boAmt);
+                            }
+                            return fmtInt(stages[c.dataIndex].count) + " docs · " + fmtMoneyFull(stages[c.dataIndex].amt);
+                        },
+                        footer: items => {
+                            const it = items[0]; if (!it || it.dataIndex !== 0) return "";
+                            return "Combined: " + fmtInt(qCount + boCount) + " docs · " + fmtMoneyFull(qAmt + boAmt);
+                        },
+                    },
+                },
+                datalabels: {
+                    anchor: "end",
+                    align: "end",
+                    clamp: true,
+                    // Print the dollar amount once per bar, anchored to the outer (rightmost) segment.
+                    formatter: (_, c) => {
+                        if (c.dataIndex === 0 && c.datasetIndex === 1) return fmtMoneyFull(stages[0].amt);
+                        if (c.dataIndex !== 0 && c.datasetIndex === 0) return fmtMoneyFull(stages[c.dataIndex].amt);
+                        return "";
+                    },
+                    font: { size: 10, weight: 600 },
+                    color: Chart.defaults.color,
+                },
             },
             layout: { padding: { right: 100 } },
-            scales: { x: { ticks: { callback: v => fmtInt(v) } } },
+            scales: {
+                x: { stacked: true, ticks: { callback: v => fmtInt(v) } },
+                y: { stacked: true },
+            },
             onClick: (_, els) => {
                 if (!els.length) return;
                 // Click drills back to Overview tab so user sees the
@@ -9544,9 +9615,11 @@ function renderByItem() {
                 onClick: (_, els) => {
                     if (!els.length) return;
                     const r = top20[els[0].index];
-                    state.itemFilter = r.number || r.description || "";
-                    const search = document.getElementById("itemSearch"); if (search) search.value = state.itemFilter;
-                    renderByItem();
+                    const code = r.number || r.description || "";
+                    state.filters.item = (state.filters.item === code) ? "" : code;
+                    state.filters.itemDesc = state.filters.item ? (r.description || "") : "";
+                    const box = document.getElementById("itemFilterBox"); if (box) box.value = state.filters.item;
+                    rebuildFiltered(); renderCurrentTab();
                 },
             })
         });
