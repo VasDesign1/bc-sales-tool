@@ -1997,7 +1997,7 @@
                 </div>
                 <div class="chart-grid">
                     <div class="card span-12">
-                        <div class="head"><h3>Daily sales calendar heatmap</h3><div class="meta">GitHub-style grid · one cell per day · colour intensity = revenue</div></div>
+                        <div class="head"><h3>Daily sales calendar heatmap</h3><div class="meta">click a day to drill in · use the back button to restore the previous range · dark cells = high revenue</div></div>
                         <div id="diCalendarHeatmap" style="padding: 14px 18px 18px;"></div>
                     </div>
                     <div class="card span-8">
@@ -2005,18 +2005,19 @@
                         <div class="chart-wrap" style="min-height:380px;"><canvas id="diTreemap"></canvas></div>
                     </div>
                     <div class="card span-4">
-                        <div class="head"><h3>Customer concentration</h3><div class="meta">Lorenz curve · Gini coefficient</div></div>
+                        <div class="head"><h3>Customer concentration</h3><div class="meta">how lopsided your customer base is — a few big fish vs many small ones</div></div>
                         <div class="kpi-row" style="grid-template-columns: 1fr; padding: 0 18px;">
-                            <div class="kpi k-rev"><div class="label">Gini coefficient</div><div class="value" id="diGini">—</div><div class="sub" id="diGiniSub">0 = perfectly even · 1 = one customer carries all</div></div>
+                            <div class="kpi k-rev"><div class="label" id="diConcentrationLabel">Top 20% of customers drive…</div><div class="value" id="diGini">—</div><div class="sub" id="diGiniSub">&nbsp;</div></div>
                         </div>
                         <div class="chart-wrap" style="min-height:240px;"><canvas id="diLorenz"></canvas></div>
+                        <div class="meta" style="padding: 0 18px 12px; font-size: 11px; opacity: 0.7;">Curve bowed below the dashed line = concentrated. Straight diagonal = perfectly even spread across all customers.</div>
                     </div>
                     <div class="card span-12">
-                        <div class="head"><h3>Sales flow · salesperson → customer → category</h3><div class="meta">Sankey diagram · ribbon width = revenue</div></div>
+                        <div class="head"><h3>Sales flow · salesperson → category</h3><div class="meta">click a salesperson on the left to highlight only their flows · click again to clear</div></div>
                         <div class="chart-wrap" style="min-height:440px;"><canvas id="diSankey"></canvas></div>
                     </div>
                     <div class="card span-6">
-                        <div class="head"><h3>Period-over-period waterfall</h3><div class="meta">what changed vs the prior comparable period</div></div>
+                        <div class="head"><h3 id="diWaterfallTitle">Period-over-period waterfall</h3><div class="meta" id="diWaterfallMeta">left bar = prior period total · floating bars show what added (green) or subtracted (red) · right bar = current period</div></div>
                         <div class="chart-wrap" style="min-height:340px;"><canvas id="diWaterfall"></canvas></div>
                     </div>
                     <div class="card span-6">
@@ -2024,7 +2025,7 @@
                         <div class="chart-wrap" style="min-height:340px;"><canvas id="diSlope"></canvas></div>
                     </div>
                     <div class="card span-12">
-                        <div class="head"><h3>Customer cohort retention</h3><div class="meta">rows = acquisition month · columns = months since · cell colour = % of cohort still buying</div></div>
+                        <div class="head"><h3>Customer cohort retention</h3><div class="meta">how well each batch of new customers keeps buying · rows that stay dark moving right = sticky cohorts · rows that fade = customers churning</div></div>
                         <div id="diCohort" style="padding: 14px 18px 18px;"></div>
                     </div>
                     <div class="card span-6">
@@ -2032,11 +2033,11 @@
                         <div class="chart-wrap" style="min-height:380px;"><canvas id="diBubble"></canvas></div>
                     </div>
                     <div class="card span-6">
-                        <div class="head"><h3>Seasonality polar chart</h3><div class="meta">12-axis radar · monthly sales by year</div></div>
+                        <div class="head"><h3>Seasonality polar chart</h3><div class="meta">each ring = one year · spikes show busy months · rings overlapping = consistent seasonal pattern · rings diverging = year-over-year drift</div></div>
                         <div class="chart-wrap" style="min-height:380px;"><canvas id="diPolar"></canvas></div>
                     </div>
                     <div class="card span-12">
-                        <div class="head"><h3>Invoice value distribution</h3><div class="meta">histogram of invoice $ · median / mean / P90 annotated</div></div>
+                        <div class="head"><h3>Invoice value distribution</h3><div class="meta">how big are your typical invoices · X-axis = invoice $ (log scale) · bar height = number of invoices in that $ band · title shows median / mean / P90</div></div>
                         <div class="chart-wrap" style="min-height:300px;"><canvas id="diHistogram"></canvas></div>
                     </div>
                 </div>
@@ -5867,12 +5868,34 @@ function renderDiCalendarHeatmap() {
             colour(t * maxRev) + ';"></span>').join("") +
         '<span>more — peak ' + fmtMoneyFull(maxRev) + '</span>' +
         '</div>';
-    host.innerHTML = '<div style="overflow-x:auto; color:' + (Chart.defaults.color || "#2c2f4a") + ';">' + svg + '</div>' + legend;
+    state.di = state.di || {};
+    // "Back to previous range" button — visible only after a drill
+    let backBtn = "";
+    if (state.di.calendarPrevRange) {
+        const pr = state.di.calendarPrevRange;
+        backBtn = '<button class="theme-btn" id="diCalendarBack" style="margin-bottom: 10px;">← Back to ' + pr.from + ' → ' + pr.to + '</button>';
+    }
+    host.innerHTML = backBtn +
+        '<div style="overflow-x:auto; color:' + (Chart.defaults.color || "#2c2f4a") + ';">' + svg + '</div>' + legend;
+    const backEl = document.getElementById("diCalendarBack");
+    if (backEl) {
+        backEl.addEventListener("click", () => {
+            const pr = state.di.calendarPrevRange;
+            state.di.calendarPrevRange = null;
+            document.getElementById("fromDate").value = pr.from;
+            document.getElementById("toDate").value = pr.to;
+            document.getElementById("quickRange").value = "";
+            setPeriodBadge();
+            rebuildFiltered();
+            renderCurrentTab();
+        });
+    }
 
-    // Click a cell → narrow the toolbar to that day
+    // Click a cell → save current range, narrow the toolbar to that day
     host.querySelectorAll("rect[data-date]").forEach(rc => {
         rc.addEventListener("click", () => {
             const d = rc.dataset.date;
+            state.di.calendarPrevRange = { from: fromInput, to: toInput };
             document.getElementById("fromDate").value = d;
             document.getElementById("toDate").value = d;
             document.getElementById("quickRange").value = "";
@@ -5998,12 +6021,20 @@ function renderDiLorenz() {
         area += (curve[i] + curve[i - 1]) / 2 * (1 / n * 100);
     }
     const gini = (1 - area / 5000); // /5000 = / (100*50) trapezoidal integration normalization
+    // Translate the abstract Gini into a plain-English answer:
+    // "Top X% of customers drive Y% of revenue" — pick X = 20 by convention.
+    // groups is sorted ASC by revenue; the TOP 20% live at the END of the array.
+    const topCount = Math.ceil(n * 0.20);
+    const topRev = groups.slice(n - topCount).reduce((s, v) => s + v, 0);
+    const topPct = total ? topRev / total * 100 : 0;
     const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
-    set("diGini", gini.toFixed(3));
-    set("diGiniSub", gini > 0.7 ? "very concentrated — top customers carry most of the business"
+    set("diGini", topPct.toFixed(0) + "%");
+    set("diConcentrationLabel", "Top 20% of customers drive…");
+    set("diGiniSub", "of total revenue · Gini " + gini.toFixed(2) + " · " + (
+        gini > 0.7 ? "very concentrated"
         : gini > 0.5 ? "moderately concentrated"
         : gini > 0.3 ? "fairly even spread"
-        : "very even spread");
+        : "very even spread"));
     state.charts.diLorenz = new Chart(canvas.getContext("2d"), {
         type: "line",
         data: { labels, datasets: [
@@ -6082,6 +6113,13 @@ function renderDiSankey() {
         flowList.push({ sp, cat, v });
     }
     flowList.sort((a, b) => b.v - a.v);
+    state.di = state.di || {};
+    const highlight = state.di.sankeyHighlight || null; // salesperson name or null
+    // Categories connected to the highlighted salesperson
+    const connectedCats = new Set();
+    if (highlight) {
+        for (const f of flowList) if (f.sp === highlight) connectedCats.add(f.cat);
+    }
     let svgStr = '<svg class="di-sankey" width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H + '" style="font-family:Inter,sans-serif;font-size:11px;">';
     // Flows first so node rectangles overlay them
     for (const f of flowList) {
@@ -6099,19 +6137,38 @@ function renderDiSankey() {
         const path = "M " + x0 + " " + y0 + " C " + cx0 + " " + y0 + " " + cx0 + " " + y1 + " " + x1 + " " + y1
                    + " L " + x1 + " " + (y1 + h) + " C " + cx0 + " " + (y1 + h) + " " + cx0 + " " + (y0 + h) + " " + x0 + " " + (y0 + h) + " Z";
         const color = palette[si % palette.length];
-        svgStr += '<path d="' + path + '" fill="' + color + '" opacity="0.32"><title>' + escapeHtml(f.sp + " → " + f.cat + ": " + fmtMoneyFull(f.v)) + '</title></path>';
+        const isHi = highlight === f.sp;
+        const op = highlight ? (isHi ? 0.7 : 0.05) : 0.32;
+        svgStr += '<path d="' + path + '" fill="' + color + '" opacity="' + op + '"><title>' + escapeHtml(f.sp + " → " + f.cat + ": " + fmtMoneyFull(f.v)) + '</title></path>';
     }
-    // Node rectangles + labels
+    // Node rectangles + labels (salespeople — clickable to highlight)
     spLay.forEach((n, i) => {
-        svgStr += '<rect x="' + leftX + '" y="' + n.y + '" width="' + colW + '" height="' + n.h + '" fill="' + palette[i % palette.length] + '" rx="2"><title>' + escapeHtml(n.name + ": " + fmtMoneyFull(n.value)) + '</title></rect>';
-        if (n.h > 12) svgStr += '<text x="' + (leftX + 6) + '" y="' + (n.y + n.h / 2 + 4) + '" fill="#fff">' + escapeHtml(truncate(n.name, 20)) + '</text>';
+        const isHi = !highlight || highlight === n.name;
+        const op = isHi ? 1 : 0.2;
+        svgStr += '<rect class="di-sankey-sp" data-sp="' + escapeAttr(n.name) + '" x="' + leftX + '" y="' + n.y + '" width="' + colW + '" height="' + n.h + '" fill="' + palette[i % palette.length] + '" opacity="' + op + '" rx="2" style="cursor:pointer;"><title>' + escapeHtml(n.name + ": " + fmtMoneyFull(n.value) + (highlight === n.name ? " · click to clear" : " · click to highlight")) + '</title></rect>';
+        if (n.h > 12) svgStr += '<text x="' + (leftX + 6) + '" y="' + (n.y + n.h / 2 + 4) + '" fill="#fff" opacity="' + op + '" style="pointer-events:none;">' + escapeHtml(truncate(n.name, 20)) + '</text>';
     });
     catLay.forEach((n, i) => {
-        svgStr += '<rect x="' + rightX + '" y="' + n.y + '" width="' + colW + '" height="' + n.h + '" fill="#5c6bc0" rx="2"><title>' + escapeHtml(n.name + ": " + fmtMoneyFull(n.value)) + '</title></rect>';
-        if (n.h > 12) svgStr += '<text x="' + (rightX + colW - 6) + '" y="' + (n.y + n.h / 2 + 4) + '" text-anchor="end" fill="#fff">' + escapeHtml(truncate(n.name, 20)) + '</text>';
+        const isHi = !highlight || connectedCats.has(n.name);
+        const op = isHi ? 1 : 0.2;
+        svgStr += '<rect x="' + rightX + '" y="' + n.y + '" width="' + colW + '" height="' + n.h + '" fill="#5c6bc0" opacity="' + op + '" rx="2"><title>' + escapeHtml(n.name + ": " + fmtMoneyFull(n.value)) + '</title></rect>';
+        if (n.h > 12) svgStr += '<text x="' + (rightX + colW - 6) + '" y="' + (n.y + n.h / 2 + 4) + '" text-anchor="end" fill="#fff" opacity="' + op + '" style="pointer-events:none;">' + escapeHtml(truncate(n.name, 20)) + '</text>';
     });
     svgStr += '</svg>';
     canvas.insertAdjacentHTML("afterend", svgStr);
+    // Click to highlight / clear
+    const svgEl = wrap.querySelector("svg.di-sankey");
+    if (svgEl) {
+        svgEl.addEventListener("click", e => {
+            const r = e.target.closest("rect.di-sankey-sp");
+            if (r && r.dataset.sp) {
+                state.di.sankeyHighlight = (state.di.sankeyHighlight === r.dataset.sp) ? null : r.dataset.sp;
+            } else {
+                state.di.sankeyHighlight = null;
+            }
+            renderDiSankey();
+        });
+    }
 }
 
 // Chart #2 — Sales waterfall (prior period → current period).
@@ -6139,6 +6196,15 @@ function renderDiWaterfall() {
         else if (cc > pp)            growthAmt += cc - pp;
         else if (cc < pp)            declineAmt += pp - cc;
     }
+    // Header: show the period delta in plain language so reading the chart
+    // is no longer a guess.
+    const delta = curTot - priorTot;
+    const fmtRange = iso => iso ? new Date(iso).toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" }) : "?";
+    const ttl = document.getElementById("diWaterfallTitle");
+    const meta = document.getElementById("diWaterfallMeta");
+    if (ttl) ttl.textContent = "Period over period · " + (delta >= 0 ? "+" : "−") + fmtMoneyFull(Math.abs(delta));
+    if (meta) meta.innerHTML = "Prior <strong>" + fmtRange(p.prevFromISO) + " → " + fmtRange(p.prevToISO) + "</strong>: " + fmtMoneyFull(priorTot) +
+        " · Current <strong>" + fmtRange(p.fromISO) + " → " + fmtRange(p.toISO) + "</strong>: " + fmtMoneyFull(curTot);
     // Floating bars [from, to]
     let running = priorTot;
     const steps = [
@@ -6376,7 +6442,12 @@ function renderDiHistogram() {
             plugins: { legend: { display: false },
                        title: { display: true, text: "median " + fmtMoney(median) + " · mean " + fmtMoney(mean) + " · P90 " + fmtMoney(p90), font: { size: 11, weight: 500 } },
                        tooltip: { callbacks: { label: c => counts[c.dataIndex] + " invoices in " + fmtMoney(lows[c.dataIndex]) + "–" + fmtMoney(highs[c.dataIndex]) } } },
-            scales: { x: { ticks: { display: false } }, y: { title: { display: true, text: "# invoices", font: { size: 10 } } } }
+            scales: {
+                x: { title: { display: true, text: "Invoice $ (log buckets)", font: { size: 10 } },
+                     ticks: { maxRotation: 60, minRotation: 45, autoSkip: true, maxTicksLimit: 8, font: { size: 9 },
+                              callback: function(v) { const label = this.getLabelForValue(v); return label.split("–")[0]; } } },
+                y: { title: { display: true, text: "# invoices", font: { size: 10 } } }
+            }
         })
     });
 }
