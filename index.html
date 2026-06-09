@@ -1860,10 +1860,10 @@
                             <h3>Revenue over time</h3>
                             <div style="display:flex; gap:10px; align-items:center;">
                                 <select id="trendChartType" class="mini-select" title="Chart type">
-                                    <option value="line" selected>Line</option>
+                                    <option value="line">Line</option>
                                     <option value="smoothline">Smooth line</option>
                                     <option value="area">Area</option>
-                                    <option value="smootharea">Smooth area</option>
+                                    <option value="smootharea" selected>Smooth area</option>
                                     <option value="stepped">Stepped</option>
                                     <option value="column">Column</option>
                                     <option value="bar">Bar (horizontal)</option>
@@ -1875,9 +1875,9 @@
                                     <option value="salesperson">Split by: salesperson</option>
                                 </select>
                                 <div class="toggle" id="trendToggle">
-                                    <button data-bucket="day">Day</button>
+                                    <button data-bucket="day" class="active">Day</button>
                                     <button data-bucket="week">Week</button>
-                                    <button data-bucket="month" class="active">Month</button>
+                                    <button data-bucket="month">Month</button>
                                 </div>
                             </div>
                         </div>
@@ -1939,8 +1939,8 @@
                         <div class="head">
                             <h3>Invoice status</h3>
                             <select id="statusChartType" class="mini-select" title="Chart type">
-                                <option value="doughnut" selected>Doughnut</option>
-                                <option value="pie">Pie</option>
+                                <option value="doughnut">Doughnut</option>
+                                <option value="pie" selected>Pie</option>
                                 <option value="barH">Bar (horizontal)</option>
                                 <option value="columnV">Column (vertical)</option>
                             </select>
@@ -4044,12 +4044,12 @@ const state = {
     // Single shared bucket so a Day / Week / Month pick on any drill (or
     // Overview's Revenue-over-time) carries over to the next drill. User
     // can override anywhere; the change propagates back to the others.
-    bucket: "month",
+    bucket: "day",
     ciMetric: "revenue", trendSplit: "",
-    trendChartType: "line", dowChartType: "bar", statusMetric: "count",
+    trendChartType: "smootharea", dowChartType: "bar", statusMetric: "count",
     topCustomersChartType: "barH", topItemsChartType: "barH",
     locationChartType: "barH",     salespersonChartType: "barH",
-    statusChartType: "doughnut",
+    statusChartType: "pie",
     currentItemDetail: null,
     sort: { key: "revenue", dir: "desc" },
     sortBranch: { key: "salesAmount", dir: "desc" },
