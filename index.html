@@ -7147,6 +7147,93 @@ function diVicLgaForPostcode(pc) {
     return VIC_POSTCODE_LGA[parseInt((pc || "").toString().slice(0, 4), 10)] || null;
 }
 
+// Generic postcode → LGA by state. Built from ABS postcode allocations
+// for major Australian metros. Coverage: Sydney/Newcastle/Wollongong
+// (NSW), Brisbane/Gold Coast/Sunshine Coast (QLD), Adelaide (SA),
+// Perth (WA), plus reasonable regional fallbacks. ACT/NT/TAS are
+// small and city-name matching covers them.
+const STATE_POSTCODE_LGA_RANGES = {
+    NSW: [
+        [2000, 2010, "Sydney"], [2011, 2014, "Sydney"], [2015, 2018, "Sydney"],
+        [2019, 2020, "Bayside"], [2021, 2025, "Waverley"], [2026, 2030, "Waverley"],
+        [2031, 2036, "Randwick"], [2037, 2044, "Inner West"], [2045, 2049, "Canada Bay"],
+        [2050, 2050, "Sydney"], [2060, 2065, "North Sydney"], [2066, 2069, "Lane Cove"],
+        [2070, 2079, "Ku-ring-gai"], [2080, 2087, "Hornsby"], [2088, 2090, "Mosman"],
+        [2092, 2096, "Northern Beaches"], [2097, 2108, "Northern Beaches"],
+        [2110, 2114, "Hunters Hill"], [2115, 2122, "Ryde"], [2125, 2128, "Parramatta"],
+        [2130, 2134, "Strathfield"], [2135, 2138, "Canada Bay"], [2140, 2147, "Parramatta"],
+        [2148, 2155, "Blacktown"], [2156, 2159, "Hills Shire"], [2160, 2168, "Cumberland"],
+        [2170, 2179, "Liverpool"], [2180, 2189, "Fairfield"], [2190, 2199, "Canterbury-Bankstown"],
+        [2200, 2210, "Canterbury-Bankstown"], [2211, 2220, "Georges River"], [2221, 2234, "Sutherland Shire"],
+        [2250, 2263, "Central Coast"], [2264, 2287, "Lake Macquarie"], [2289, 2304, "Newcastle"],
+        [2305, 2330, "Maitland"], [2500, 2530, "Wollongong"], [2540, 2549, "Shoalhaven"],
+        [2550, 2580, "Eurobodalla"], [2620, 2620, "Queanbeyan"], [2640, 2641, "Albury"],
+        [2700, 2710, "Wagga Wagga"], [2740, 2752, "Penrith"], [2753, 2770, "Penrith"],
+        [2775, 2786, "Blue Mountains"], [2800, 2810, "Orange"], [2820, 2829, "Dubbo"],
+        [2830, 2850, "Mid-Western"], [2880, 2898, "Broken Hill"], [2900, 2920, "Tweed"],
+    ],
+    QLD: [
+        [4000, 4009, "Brisbane"], [4010, 4019, "Brisbane"], [4020, 4055, "Moreton Bay"],
+        [4060, 4069, "Brisbane"], [4070, 4079, "Brisbane"], [4101, 4108, "Brisbane"],
+        [4110, 4111, "Brisbane"], [4112, 4117, "Logan"], [4118, 4123, "Logan"],
+        [4124, 4131, "Logan"], [4132, 4140, "Brisbane"], [4151, 4172, "Brisbane"],
+        [4173, 4179, "Brisbane"], [4205, 4214, "Logan"], [4215, 4230, "Gold Coast"],
+        [4270, 4275, "Scenic Rim"], [4280, 4287, "Scenic Rim"], [4300, 4309, "Ipswich"],
+        [4310, 4350, "Toowoomba"], [4380, 4399, "Toowoomba"], [4500, 4519, "Moreton Bay"],
+        [4520, 4521, "Moreton Bay"], [4550, 4575, "Sunshine Coast"], [4580, 4583, "Noosa"],
+        [4600, 4625, "Gympie"], [4650, 4674, "Bundaberg"], [4700, 4720, "Rockhampton"],
+        [4720, 4751, "Isaac"], [4800, 4805, "Whitsunday"], [4806, 4825, "Mackay"],
+        [4806, 4860, "Townsville"], [4870, 4895, "Cairns"], [4900, 4895, "Cassowary Coast"],
+    ],
+    WA: [
+        [6000, 6010, "Perth"], [6011, 6020, "Cambridge"], [6021, 6030, "Stirling"],
+        [6031, 6039, "Joondalup"], [6050, 6064, "Bayswater"], [6065, 6069, "Wanneroo"],
+        [6070, 6079, "Mundaring"], [6090, 6097, "Swan"], [6100, 6110, "Victoria Park"],
+        [6111, 6112, "Gosnells"], [6121, 6132, "Armadale"], [6147, 6149, "Canning"],
+        [6150, 6157, "Melville"], [6158, 6164, "Fremantle"], [6166, 6169, "Cockburn"],
+        [6170, 6175, "Kwinana"], [6210, 6215, "Mandurah"], [6230, 6239, "Bunbury"],
+        [6280, 6286, "Busselton"], [6330, 6336, "Albany"], [6400, 6429, "Kalgoorlie-Boulder"],
+        [6500, 6535, "Geraldton"], [6700, 6770, "Pilbara"],
+    ],
+    SA: [
+        [5000, 5009, "Adelaide"], [5010, 5019, "Charles Sturt"], [5020, 5034, "West Torrens"],
+        [5035, 5040, "Holdfast Bay"], [5041, 5048, "Marion"], [5049, 5050, "Mitcham"],
+        [5051, 5067, "Burnside"], [5068, 5074, "Norwood Payneham St Peters"],
+        [5075, 5088, "Tea Tree Gully"], [5089, 5097, "Salisbury"], [5098, 5106, "Salisbury"],
+        [5107, 5125, "Playford"], [5126, 5159, "Onkaparinga"], [5160, 5174, "Onkaparinga"],
+        [5200, 5246, "Adelaide Hills"], [5250, 5279, "Mount Barker"], [5280, 5358, "Murray Bridge"],
+        [5400, 5419, "Light"], [5500, 5560, "Wakefield"], [5600, 5680, "Whyalla"],
+        [5700, 5760, "Port Augusta"],
+    ],
+    ACT: [
+        [2600, 2618, "Unincorporated ACT"], [2900, 2920, "Unincorporated ACT"],
+    ],
+    NT: [
+        [800, 832, "Darwin"], [835, 841, "Litchfield"], [850, 853, "Palmerston"],
+        [854, 869, "Litchfield"], [870, 875, "Alice Springs"],
+    ],
+    TAS: [
+        [7000, 7019, "Hobart"], [7020, 7022, "Clarence"], [7050, 7055, "Kingborough"],
+        [7100, 7150, "Glenorchy"], [7200, 7216, "Break O'Day"], [7248, 7270, "Launceston"],
+        [7300, 7330, "Northern Midlands"], [7466, 7470, "West Coast"],
+    ],
+};
+
+const STATE_POSTCODE_MAPS = (() => {
+    const out = {};
+    for (const [code, ranges] of Object.entries(STATE_POSTCODE_LGA_RANGES)) {
+        const m = {};
+        for (const [a, b, name] of ranges) for (let p = a; p <= b; p++) m[p] = name;
+        out[code] = m;
+    }
+    return out;
+})();
+
+function diStateLgaForPostcode(stateCode, pc) {
+    const m = STATE_POSTCODE_MAPS[stateCode]; if (!m) return null;
+    return m[parseInt((pc || "").toString().slice(0, 4), 10)] || null;
+}
+
 // Decode TopoJSON arcs to lon/lat polygons. Each arc is delta-encoded
 // from the previous point; negative indices in feature.arcs mean
 // "traverse this arc in reverse".
@@ -7189,44 +7276,76 @@ function diFeatureToRings(geom, decoded) {
 }
 
 // Generic zoom + pan attach. Wraps all child paths in a transform group
-// and wires mouse wheel + drag. Returns the controller.
+// and wires mouse wheel + drag. Returns the controller with a
+// `wasDragging` flag that click handlers can check to suppress drill-in
+// after a pan.
 function diAttachZoom(svgEl) {
     if (!svgEl) return null;
-    // Move existing children into a <g class="zoom-layer">
     const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
     g.setAttribute("class", "zoom-layer");
     while (svgEl.firstChild) g.appendChild(svgEl.firstChild);
     svgEl.appendChild(g);
-    const state = { scale: 1, tx: 0, ty: 0 };
-    const apply = () => g.setAttribute("transform", "translate(" + state.tx + "," + state.ty + ") scale(" + state.scale + ")");
+    // tx/ty are in VIEWBOX coordinates so they compose with the viewBox-
+    // space scale on the inner <g>. The mouse position needs converting
+    // from screen pixels to viewBox coords for zoom-around-cursor to
+    // track the actual pointer.
+    const zoomState = { scale: 1, tx: 0, ty: 0, wasDragging: false };
+    const apply = () => g.setAttribute("transform",
+        "translate(" + zoomState.tx + "," + zoomState.ty + ") scale(" + zoomState.scale + ")");
+    const mouseToViewBox = e => {
+        const rect = svgEl.getBoundingClientRect();
+        const vb = svgEl.viewBox.baseVal;
+        const mxPx = e.clientX - rect.left, myPx = e.clientY - rect.top;
+        // Account for viewBox letterboxing (preserveAspectRatio=meet)
+        const scaleX = rect.width / vb.width, scaleY = rect.height / vb.height;
+        const fitScale = Math.min(scaleX, scaleY);
+        const offsetX = (rect.width  - vb.width  * fitScale) / 2;
+        const offsetY = (rect.height - vb.height * fitScale) / 2;
+        return [(mxPx - offsetX) / fitScale, (myPx - offsetY) / fitScale];
+    };
     svgEl.addEventListener("wheel", e => {
         e.preventDefault();
-        const rect = svgEl.getBoundingClientRect();
-        // Zoom around the mouse position
-        const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+        const [mx, my] = mouseToViewBox(e);
         const factor = e.deltaY > 0 ? 0.85 : 1.18;
-        const newScale = Math.max(0.5, Math.min(20, state.scale * factor));
-        const ratio = newScale / state.scale;
-        state.tx = mx - (mx - state.tx) * ratio;
-        state.ty = my - (my - state.ty) * ratio;
-        state.scale = newScale;
+        const newScale = Math.max(0.5, Math.min(20, zoomState.scale * factor));
+        const ratio = newScale / zoomState.scale;
+        zoomState.tx = mx - (mx - zoomState.tx) * ratio;
+        zoomState.ty = my - (my - zoomState.ty) * ratio;
+        zoomState.scale = newScale;
         apply();
     }, { passive: false });
     let drag = null;
     svgEl.addEventListener("mousedown", e => {
         if (e.button !== 0) return;
-        drag = { x: e.clientX, y: e.clientY, tx: state.tx, ty: state.ty };
+        drag = { x: e.clientX, y: e.clientY, tx: zoomState.tx, ty: zoomState.ty, moved: false };
+        zoomState.wasDragging = false;
         svgEl.style.cursor = "grabbing";
     });
     window.addEventListener("mousemove", e => {
         if (!drag) return;
-        state.tx = drag.tx + (e.clientX - drag.x);
-        state.ty = drag.ty + (e.clientY - drag.y);
+        const dxPx = e.clientX - drag.x, dyPx = e.clientY - drag.y;
+        if (Math.abs(dxPx) + Math.abs(dyPx) > 4) drag.moved = true;
+        // Convert pixel delta to viewBox delta
+        const rect = svgEl.getBoundingClientRect();
+        const vb = svgEl.viewBox.baseVal;
+        const fitScale = Math.min(rect.width / vb.width, rect.height / vb.height);
+        zoomState.tx = drag.tx + dxPx / fitScale;
+        zoomState.ty = drag.ty + dyPx / fitScale;
         apply();
     });
-    window.addEventListener("mouseup", () => { drag = null; svgEl.style.cursor = ""; });
+    window.addEventListener("mouseup", () => {
+        if (drag && drag.moved) {
+            zoomState.wasDragging = true;
+            // Reset after click event has had a chance to fire and be
+            // suppressed. setTimeout ensures click-on-path sees true.
+            setTimeout(() => { zoomState.wasDragging = false; }, 0);
+        }
+        drag = null;
+        svgEl.style.cursor = "";
+    });
     return {
-        reset: () => { state.scale = 1; state.tx = 0; state.ty = 0; apply(); },
+        reset: () => { zoomState.scale = 1; zoomState.tx = 0; zoomState.ty = 0; apply(); },
+        wasDragging: () => zoomState.wasDragging,
     };
 }
 
@@ -7576,15 +7695,15 @@ async function renderDiGeoStateLGAs(host, stateCode) {
         host.innerHTML += '<div class="hint" style="margin:12px 0;">No LGAs found for ' + escapeHtml(fullName) + ' in the open-data file.</div>';
         return;
     }
-    // Customer → LGA. VIC: detailed postcode lookup. All states: city-name match.
+    // Customer → LGA. Postcode lookup first (most accurate), then city-
+    // name fallback. Both work for all 8 states.
     const lgaNamesUpper = new Set(topo.features.map(f => f.name.toUpperCase()));
     const custLga = new Map();
     for (const c of (state.customers || [])) {
         let lga = null;
-        if (stateCode === "VIC") {
-            const p = c.postalCode || c.postCode || c.sellToPostCode || c.billToPostCode || c.shipToPostCode || c.zipCode;
-            lga = diVicLgaForPostcode(p);
-        }
+        const p = c.postalCode || c.postCode || c.sellToPostCode || c.billToPostCode || c.shipToPostCode || c.zipCode;
+        if (stateCode === "VIC") lga = diVicLgaForPostcode(p);
+        else                     lga = diStateLgaForPostcode(stateCode, p);
         if (!lga) lga = diLgaForCustomerCity(c, lgaNamesUpper);
         if (lga) custLga.set(c.number, lga);
     }
@@ -7668,6 +7787,7 @@ async function renderDiGeoStateLGAs(host, stateCode) {
         p.addEventListener("mousemove", e => tooltip.show(e.clientX, e.clientY, renderInfo(p.dataset.lga)));
         p.addEventListener("mouseleave", () => tooltip.hide());
         p.addEventListener("click", () => {
+            if (zoom && zoom.wasDragging()) return;
             state.di.geoDrillLga = p.dataset.lga;
             renderDiGeo();
         });
@@ -7789,6 +7909,7 @@ function renderDiGeo() {
         p.addEventListener("mousemove", e => tooltip.show(e.clientX, e.clientY, renderInfo(p.dataset.state)));
         p.addEventListener("mouseleave", () => tooltip.hide());
         p.addEventListener("click", () => {
+            if (zoom && zoom.wasDragging()) return;
             const code = p.dataset.state;
             state.di.geoDrillState = code;
             state.di.geoActive = null;
