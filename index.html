@@ -9999,9 +9999,29 @@ function quoteToListRow(q) {
         assignedUser: getQuoteAssignedUser(q) || "",
     };
 }
+// Convert a universe row (any source) into the same flat shape the
+// quote-list modal expects, so trend/category/campaign/user clicks
+// surface orders + invoices alongside open quotes consistently.
+function universeRowToListRow(r) {
+    return {
+        key: (r._source || "?") + ":" + (r._docNumber || r._dedupeKey || Math.random()),
+        number: r._dedupeKey || r._docNumber || "",
+        customer: r._customerName,
+        customerNumber: r._customerNumber,
+        salesperson: r._salesperson,
+        date: r._date,
+        status: r._source === "quote"
+            ? ({ won: "Won (quote)", lost: "Lost", follow: "Follow-up", other: "Open" }[r._bucket] || "Open")
+            : (r._source === "order" ? "Won — Order" : "Won — Invoiced"),
+        qty: r._qty,
+        amount: r._amount,
+        campaign: r._campaign || "",
+        assignedUser: r._user || "",
+    };
+}
 function openQuoteList(predicate, title) {
-    const filtered = filteredQuotes().filter(predicate);
-    state.quoteListCache = filtered.map(quoteToListRow);
+    const filtered = filteredQuoteUniverse().filter(predicate);
+    state.quoteListCache = filtered.map(universeRowToListRow);
     TOPN_DEFS.quoteList = {
         title: title,
         get: () => state.quoteListCache || [],
@@ -10037,9 +10057,178 @@ function filteredQuotes() {
     });
 }
 
+// =========================================================================
+// Residential Sales Quote universe
+// =========================================================================
+// BC workflow: a Sales Quote (Your Reference = "Residential") gets converted
+// to a Sales Order, then to a Sales Invoice. When converted, the quote
+// header disappears from salesQuotes but the originating Quote No. is
+// carried forward on the order and invoice (visible as "Quote No." on the
+// header in Wiise). To show the real won/lost ratio we have to union all
+// three sources, treat orders + invoices as Won, and dedupe by Quote No.
+// so a single quote that's been partially invoiced isn't double-counted.
+
+const RESIDENTIAL_YOUR_REF = "residential";
+
+// Read a doc's "Your Reference" from whatever field BC happens to expose
+// in v2.0 — usually `yourReference`, occasionally `externalDocumentNumber`
+// or `customerExternalReference`. Lowercased comparison so case typos
+// don't drop matches.
+function getYourReference(doc) {
+    if (!doc) return "";
+    const raw = doc.yourReference || doc.externalDocumentNumber || doc.customerExternalReference || doc.referenceNumber || "";
+    return raw ? raw.toString().trim() : "";
+}
+function isResidentialDoc(doc) {
+    return getYourReference(doc).toLowerCase() === RESIDENTIAL_YOUR_REF;
+}
+// Pull the originating Quote No. off an order or invoice header. v2.0
+// REST sometimes exposes `quoteNumber`; when it doesn't, the same value
+// may show up under other names (quoteNo, sourceQuoteNumber, etc.) and
+// we also accept a tenant-side OData v4 supplement (state.docQuoteLink).
+function getOriginatingQuoteNumber(doc, docNumber) {
+    if (!doc) return "";
+    const direct = doc.quoteNumber || doc.quoteNo || doc.sourceQuoteNumber || doc.originatingQuoteNumber || "";
+    if (direct) return direct.toString();
+    if (docNumber && state.docQuoteLink && state.docQuoteLink.has(docNumber)) {
+        return state.docQuoteLink.get(docNumber);
+    }
+    return "";
+}
+
+// Sum amount + qty across the lines of an order, honouring the current
+// line-level filters (item / location).
+function salesOrderAmount(so) {
+    let a = 0;
+    for (const ln of (so.salesOrderLines || [])) {
+        if (!lineMatchesFilters(ln)) continue;
+        a += lineNetAmount(ln);
+    }
+    if (!a && so.totalAmountExcludingTax != null) a = num(so.totalAmountExcludingTax);
+    return a;
+}
+function salesOrderQty(so) {
+    let q = 0;
+    for (const ln of (so.salesOrderLines || [])) {
+        if (!lineMatchesFilters(ln)) continue;
+        q += num(ln.quantity);
+    }
+    return q;
+}
+
+// Build the deduped residential quote universe.
+// Priority when the same quote number appears in multiple sources:
+//   Invoice > Order > Quote
+// Each output row is normalised so downstream aggregation doesn't need
+// to know which source it came from.
+function buildResidentialQuoteUniverse() {
+    const universe = new Map(); // key -> normalised row
+    const upsert = (key, row, priority) => {
+        const existing = universe.get(key);
+        if (!existing || priority > existing._priority) {
+            row._priority = priority;
+            universe.set(key, row);
+        }
+    };
+    // 1) Active quotes (priority 1). All quotes are treated as Residential
+    //    workflow per the user's note; we don't filter by yourReference
+    //    here because the salesperson may have left it blank on the quote.
+    for (const q of (state.quotes || [])) {
+        const key = "Q:" + (q.number || q.id || ("idx-" + Math.random()));
+        const camp = getQuoteCampaign(q);
+        const bucket = campaignBucket(camp);
+        upsert(key, {
+            _source: "quote",
+            _bucket: bucket,
+            _dedupeKey: q.number || "",
+            _doc: q,
+            _docNumber: q.number || "",
+            _customerNumber: q.customerNumber || q.customerId || "",
+            _customerName:   q.customerName || q.customerNumber || "(unknown)",
+            _salesperson:    q.salesperson || "(unassigned)",
+            _date:           q.documentDate || q.invoiceDate || "",
+            _amount:         quoteAmount(q),
+            _qty:            quoteQty(q),
+            _lines:          q.salesQuoteLines || [],
+            _campaign:       camp || "",
+            _user:           getQuoteAssignedUser(q) || "",
+            _status:         q.status || "(unknown)",
+        }, 1);
+    }
+    // 2) Active sales orders flagged Residential (priority 2 → overrides quote).
+    for (const so of (state.salesOrders || [])) {
+        if (!isResidentialDoc(so)) continue;
+        const docNumber = so.number || so.orderNumber || so.id || "";
+        const quoteNo = getOriginatingQuoteNumber(so, docNumber);
+        // Prefer Quote No. for dedupe; fall back to the order number when
+        // a quote-less order slipped through (rare — direct order entry).
+        const key = quoteNo ? "Q:" + quoteNo : "O:" + docNumber;
+        upsert(key, {
+            _source: "order",
+            _bucket: "won",
+            _dedupeKey: quoteNo || docNumber,
+            _doc: so,
+            _docNumber: docNumber,
+            _customerNumber: so.customerNumber || so.customerId || "",
+            _customerName:   so.customerName || so.customerNumber || "(unknown)",
+            _salesperson:    so.salesperson || "(unassigned)",
+            _date:           so.orderDate || so.documentDate || "",
+            _amount:         salesOrderAmount(so),
+            _qty:            salesOrderQty(so),
+            _lines:          so.salesOrderLines || [],
+            _campaign:       "QUOTE WON",
+            _user:           "",
+            _status:         so.status || "Order",
+        }, 2);
+    }
+    // 3) Posted invoices flagged Residential (priority 3 → overrides quote & order).
+    for (const inv of (state.invoices || [])) {
+        if (!isResidentialDoc(inv)) continue;
+        const docNumber = inv.number || inv.id || "";
+        const quoteNo = getOriginatingQuoteNumber(inv, docNumber);
+        const key = quoteNo ? "Q:" + quoteNo : "I:" + docNumber;
+        upsert(key, {
+            _source: "invoice",
+            _bucket: "won",
+            _dedupeKey: quoteNo || docNumber,
+            _doc: inv,
+            _docNumber: docNumber,
+            _customerNumber: inv.customerNumber || "",
+            _customerName:   inv.customerName || inv.customerNumber || "(unknown)",
+            _salesperson:    inv.salesperson || "(unassigned)",
+            _date:           inv.postingDate || inv.documentDate || "",
+            _amount:         invoiceSalesAmount(inv),
+            _qty:            invoiceQty(inv),
+            _lines:          inv.salesInvoiceLines || [],
+            _campaign:       "QUOTE WON",
+            _user:           "",
+            _status:         inv.status || "Invoiced",
+        }, 3);
+    }
+    return [...universe.values()];
+}
+// Apply the same toolbar filters used by filteredQuotes() to the deduped
+// universe, so charts/tables on the Sales Quote Overview tab respect the
+// user's selections.
+function filteredQuoteUniverse() {
+    const inRange = getDateRangePredicate();
+    return buildResidentialQuoteUniverse().filter(row => {
+        if (!inRange(row._date)) return false;
+        if (state.filters.salesperson && row._salesperson !== state.filters.salesperson) return false;
+        if (state.filters.customer && (row._customerNumber || "") !== state.filters.customer) return false;
+        if (state.filters.location) {
+            return (row._lines || []).some(ln => locationCode(ln.locationId) === state.filters.location);
+        }
+        return true;
+    });
+}
+
 function renderQuotes() {
     renderFilterChips();
-    const quotes = filteredQuotes();
+    // The Sales Quote Overview now reads the deduped Residential quote
+    // universe: active quotes + Residential sales orders + Residential
+    // posted invoices, deduped by originating Quote No.
+    const universe = filteredQuoteUniverse();
     // Diagnostic banner if we couldn't fetch Campaign/Assigned User extras
     const diag = document.getElementById("qExtrasDiagnostic");
     if (diag) {
@@ -10063,8 +10252,8 @@ function renderQuotes() {
     state.quoteSearch         = state.quoteSearch         || "";
 
     // Detect optional fields
-    const hasCampaign = quotes.some(q => getQuoteCampaign(q));
-    const hasUser     = quotes.some(q => getQuoteAssignedUser(q));
+    const hasCampaign = universe.some(r => r._campaign);
+    const hasUser     = universe.some(r => r._user);
 
     // Aggregations
     let totalAmount = 0, totalQty = 0;
@@ -10074,13 +10263,14 @@ function renderQuotes() {
     const byStatus = new Map(), byCampaign = new Map(), byUser = new Map();
     const byMonth = new Map(), byWeek = new Map(), byDay = new Map();
 
-    for (const q of quotes) {
-        let qAmount = 0, qQty = 0;
-        for (const ln of (q.salesQuoteLines || [])) {
+    for (const row of universe) {
+        const qAmount = row._amount;
+        const qQty    = row._qty;
+        // Category + item rollups walk the source document's lines.
+        for (const ln of (row._lines || [])) {
             if (!lineMatchesFilters(ln)) continue;
             const a = lineNetAmount(ln);
             const ql = num(ln.quantity);
-            qAmount += a; qQty += ql;
             const itemNo = ln.lineObjectNumber || ln.itemId || "";
             const cat = itemNo ? (state.itemCategory.get(itemNo) || "(no category)") : "(non-item)";
             const catCur = byCat.get(cat) || { name: cat, amount: 0 };
@@ -10093,43 +10283,47 @@ function renderQuotes() {
                 byItem.set(itemNo, itemCur);
             }
         }
-        if (!qAmount && q.totalAmountExcludingTax != null) qAmount = num(q.totalAmountExcludingTax);
         totalAmount += qAmount; totalQty += qQty;
 
-        const sp = q.salesperson || "(unassigned)";
+        const sp = row._salesperson;
         const spCur = bySp.get(sp) || { name: sp, amount: 0, count: 0 };
         spCur.amount += qAmount; spCur.count += 1;
         bySp.set(sp, spCur);
 
-        const custKey = q.customerNumber || q.customerId || "(unknown)";
-        const custCur = byCust.get(custKey) || { customer: q.customerName || custKey, customerNumber: custKey, amount: 0, count: 0 };
+        const custKey = row._customerNumber || "(unknown)";
+        const custCur = byCust.get(custKey) || { customer: row._customerName, customerNumber: custKey, amount: 0, count: 0 };
         custCur.amount += qAmount; custCur.count += 1;
         byCust.set(custKey, custCur);
 
-        const status = q.status || "(unknown)";
-        const statusCur = byStatus.get(status) || { name: status, count: 0, amount: 0 };
+        // Status pie now reads the universe bucket — Open / Won / Lost /
+        // Follow-up / Other — instead of the raw BC `status` field. This
+        // is what gives the user the real ratio across all converted +
+        // un-converted quotes.
+        const statusLabel = row._source === "quote"
+            ? ({ won: "Won (quote)", lost: "Lost", follow: "Follow-up", other: "Open / Other" }[row._bucket] || "Open / Other")
+            : (row._source === "order" ? "Won — Order" : "Won — Invoiced");
+        const statusCur = byStatus.get(statusLabel) || { name: statusLabel, count: 0, amount: 0 };
         statusCur.count += 1; statusCur.amount += qAmount;
-        byStatus.set(status, statusCur);
+        byStatus.set(statusLabel, statusCur);
 
-        const camp = getQuoteCampaign(q);
+        const camp = row._campaign;
         if (camp) {
             const cur = byCampaign.get(camp) || { name: camp, amount: 0, count: 0 };
             cur.amount += qAmount; cur.count += 1;
             byCampaign.set(camp, cur);
         }
-        const bucket = campaignBucket(camp);
-        if (bucket === "won")         { wonCount++;    wonAmount    += qAmount; }
-        else if (bucket === "lost")   { lostCount++;   lostAmount   += qAmount; }
-        else if (bucket === "follow") { followCount++; followAmount += qAmount; }
-        else                          { otherCount++;  otherAmount  += qAmount; }
-        const user = getQuoteAssignedUser(q);
+        if (row._bucket === "won")         { wonCount++;    wonAmount    += qAmount; }
+        else if (row._bucket === "lost")   { lostCount++;   lostAmount   += qAmount; }
+        else if (row._bucket === "follow") { followCount++; followAmount += qAmount; }
+        else                                { otherCount++;  otherAmount  += qAmount; }
+        const user = row._user;
         if (user) {
             const cur = byUser.get(user) || { name: user, amount: 0, count: 0 };
             cur.amount += qAmount; cur.count += 1;
             byUser.set(user, cur);
         }
 
-        const dateStr = q.documentDate || q.invoiceDate || "";
+        const dateStr = row._date;
         if (dateStr) {
             const mk = bucketKey(dateStr, "month");
             const wk = bucketKey(dateStr, "week");
@@ -10144,9 +10338,9 @@ function renderQuotes() {
 
     // KPIs
     document.getElementById("qKpiSales").textContent = fmtMoneyFull(totalAmount);
-    document.getElementById("qKpiCount").textContent = fmtInt(quotes.length);
+    document.getElementById("qKpiCount").textContent = fmtInt(universe.length);
     document.getElementById("qKpiQty").textContent   = fmtInt(totalQty);
-    document.getElementById("qKpiAvg").textContent   = quotes.length ? fmtMoneyFull(totalAmount / quotes.length) : "—";
+    document.getElementById("qKpiAvg").textContent   = universe.length ? fmtMoneyFull(totalAmount / universe.length) : "—";
     document.getElementById("qKpiWon").textContent     = fmtInt(wonCount);
     document.getElementById("qKpiWonSub").textContent  = wonCount ? fmtMoneyFull(wonAmount) : "";
     document.getElementById("qKpiLost").textContent    = fmtInt(lostCount);
@@ -10226,7 +10420,7 @@ function renderQuotes() {
         extraOptions: { onClick: (_, els) => {
             if (!els.length) return;
             const b = buckets[els[0].index];
-            openQuoteList(q => bucketKey(q.documentDate || q.invoiceDate || "", state.quoteTrendBucket) === b.key, "Quotes in " + b.key);
+            openQuoteList(r => bucketKey(r._date || "", state.quoteTrendBucket) === b.key, "Quotes in " + b.key);
         } },
     });
     state.charts.qTrend = new Chart(ctxQt, qCfg);
@@ -10316,7 +10510,7 @@ function renderQuotes() {
             onClick: (_, els) => {
                 if (!els.length) return;
                 const r = catRows[els[0].index];
-                openQuoteList(q => (q.salesQuoteLines || []).some(ln => {
+                openQuoteList(row => (row._lines || []).some(ln => {
                     const itemNo = ln.lineObjectNumber || ln.itemId || "";
                     const cat = itemNo ? (state.itemCategory.get(itemNo) || "(no category)") : "(non-item)";
                     return cat === r.name;
@@ -10346,7 +10540,7 @@ function renderQuotes() {
                 onClick: (_, els) => {
                     if (!els.length) return;
                     const r = userRows[els[0].index];
-                    openQuoteList(q => getQuoteAssignedUser(q) === r.name, "Quotes by user " + r.name);
+                    openQuoteList(row => row._user === r.name, "Quotes by user " + r.name);
                 }
             })
         });
@@ -10373,25 +10567,28 @@ function renderQuotes() {
                 onClick: (_, els) => {
                     if (!els.length) return;
                     const r = campRows[els[0].index];
-                    openQuoteList(q => getQuoteCampaign(q) === r.name, "Quotes in campaign " + r.name);
+                    openQuoteList(row => row._campaign === r.name, "Quotes in campaign " + r.name);
                 }
             })
         });
     }
 
     // ---------- Customer drill tree (replaces the flat detail table) ----------
-    renderQuoteCustomerTree(quotes);
+    renderQuoteCustomerTree(universe);
 }
 
-function buildQuoteCustomerTreeData(quotes) {
+// Customer drill tree now walks the universe so a customer's Won-Order
+// and Won-Invoice rows appear alongside their still-Open quotes.
+function buildQuoteCustomerTreeData(universe) {
     const custMap = new Map();
-    for (const q of quotes) {
-        const custKey = q.customerNumber || q.customerId || "(unknown)";
+    const sourceLabel = src => src === "quote" ? "Quote" : src === "order" ? "Order" : "Invoice";
+    for (const row of universe) {
+        const custKey = row._customerNumber || "(unknown)";
         let custNode = custMap.get(custKey);
         if (!custNode) {
             custNode = {
                 key: "qct-cust-" + custKey,
-                label: q.customerName || custKey,
+                label: row._customerName,
                 sales: 0, qty: 0, quoteCount: 0,
                 status: "", salesperson: "", user: "", campaign: "",
                 children: [],
@@ -10399,31 +10596,31 @@ function buildQuoteCustomerTreeData(quotes) {
             };
             custMap.set(custKey, custNode);
         }
-        const qAmt = quoteAmount(q);
-        const qQ = quoteQty(q);
-        custNode.sales += qAmt;
-        custNode.qty   += qQ;
+        custNode.sales += row._amount;
+        custNode.qty   += row._qty;
         custNode.quoteCount += 1;
-        const quoteNode = {
-            key: "qct-quote-" + q.id,
-            label: q.number || "(no number)",
-            sales: qAmt, qty: qQ, quoteCount: 1,
-            status: q.status || "",
-            salesperson: q.salesperson || "",
-            user: getQuoteAssignedUser(q) || "",
-            campaign: getQuoteCampaign(q) || "",
+        const statusLabel = row._source === "quote"
+            ? ({ won: "Won (quote)", lost: "Lost", follow: "Follow-up", other: "Open" }[row._bucket] || "Open")
+            : (row._source === "order" ? "Won — Order" : "Won — Invoiced");
+        const docNode = {
+            key: "qct-doc-" + row._source + "-" + (row._docNumber || row._dedupeKey || Math.random()),
+            label: "[" + sourceLabel(row._source) + "] " + (row._dedupeKey || row._docNumber || "(no number)"),
+            sales: row._amount, qty: row._qty, quoteCount: 1,
+            status: statusLabel,
+            salesperson: row._salesperson,
+            user: row._user || "",
+            campaign: row._campaign || "",
             children: [],
-            _quoteId: q.id,
         };
-        custNode.children.push(quoteNode);
-        for (const ln of (q.salesQuoteLines || [])) {
+        custNode.children.push(docNode);
+        for (const ln of (row._lines || [])) {
             if (!lineMatchesFilters(ln)) continue;
             const itemNo = ln.lineObjectNumber || ln.itemId || "";
             const lineLabel = (itemNo || "(non-item)") + (ln.description ? " · " + ln.description : "");
             const lineSales = lineNetAmount(ln);
             const lineQ = num(ln.quantity);
-            quoteNode.children.push({
-                key: "qct-line-" + q.id + "-" + (ln.id || ln.sequence || itemNo),
+            docNode.children.push({
+                key: docNode.key + "-line-" + (ln.id || ln.sequence || itemNo),
                 label: lineLabel,
                 sales: lineSales, qty: lineQ, quoteCount: 0,
                 status: "", salesperson: "", user: "", campaign: "",
@@ -10435,7 +10632,7 @@ function buildQuoteCustomerTreeData(quotes) {
 }
 
 function renderQuoteCustomerTree(quotes) {
-    if (!quotes) quotes = filteredQuotes();
+    if (!quotes) quotes = filteredQuoteUniverse();
     state.expandedQuoteMatrix = state.expandedQuoteMatrix || new Set();
     state.quoteTreeSort = state.quoteTreeSort || { key: "sales", dir: "desc" };
     const roots = buildQuoteCustomerTreeData(quotes);
@@ -10465,6 +10662,7 @@ function renderQuoteCustomerTree(quotes) {
     for (const n of roots) emit(n, 0);
     const tbody = document.querySelector("#quoteCustomerTree tbody");
     tbody.innerHTML = acc.join("") || '<tr><td colspan="8" class="empty">No quotes loaded for this period.</td></tr>';
+    // quotes here is the deduped universe (each row = one quote identity).
     document.getElementById("qTreeMeta").textContent =
         roots.length + " customer" + (roots.length === 1 ? "" : "s") + " · " + quotes.length + " quote" + (quotes.length === 1 ? "" : "s");
     // Sort arrows
