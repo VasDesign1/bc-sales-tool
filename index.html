@@ -7039,8 +7039,12 @@ function renderDiLifecycle() {
 function renderDiGeo() {
     const host = document.getElementById("diGeo"); if (!host) return;
     const custState = new Map();
+    // v2.0 customers endpoint exposes c.state directly; BC also sometimes
+    // populates sellToState / billToState / shipToState. Try all of them.
     for (const c of (state.customers || [])) {
-        custState.set(c.number, (c.sellToState || c.billToState || c.shipToState || "").toString().trim().toUpperCase());
+        const raw = c.state || c.sellToState || c.billToState || c.shipToState
+                 || c.sellToCounty || c.billToCounty || c.shipToCounty || "";
+        custState.set(c.number, raw.toString().trim().toUpperCase());
     }
     const STATE_NAMES = {
         NSW: "New South Wales", VIC: "Victoria", QLD: "Queensland", WA: "Western Australia",
@@ -7108,25 +7112,42 @@ function renderDiGeo() {
         if (e.sales > 0) svg += '<text x="' + pt.x + '" y="' + (pt.y + 5) + '" text-anchor="middle" fill="currentColor" opacity="0.85" font-size="3.5" style="pointer-events:none;">' + fmtMoney(e.sales) + '</text>';
     }
     svg += '</svg>';
-    const activeLabel = activeState
-        ? '<div style="font-size:11px; margin-top:6px;">Filtered to <strong>' + activeState + '</strong> · <a href="#" id="diGeoClear" style="color:inherit;">clear</a></div>'
-        : '';
-    host.innerHTML = '<div style="color:' + (Chart.defaults.color || "#2c2f4a") + ';">' + svg + '</div>' + activeLabel;
-    // Click handlers
+    // Build initial info panel content (highest-revenue state by default).
+    const sorted = [...agg.entries()].filter(([k]) => STATE_NAMES[k]).sort((a, b) => b[1].sales - a[1].sales);
+    const initial = activeState && agg.has(activeState) ? activeState : (sorted[0] && sorted[0][0]);
+    const renderInfo = code => {
+        if (!code || !STATE_NAMES[code]) return '<div style="opacity:0.6;">Hover or click a state to see its breakdown.</div>';
+        const e = agg.get(code) || { sales: 0, cost: 0, count: 0, custs: new Set() };
+        const gpPct = e.sales ? (e.sales - e.cost) / e.sales : 0;
+        return '<div style="font-weight:700; font-size:14px; margin-bottom:4px;">' + code + ' · ' + STATE_NAMES[code] + '</div>' +
+            '<div style="font-size:11px; opacity:0.75; margin-bottom:8px;">Revenue · GP · activity</div>' +
+            '<div style="font-size:18px; font-weight:700;">' + fmtMoneyFull(e.sales) + '</div>' +
+            '<div style="font-size:12px;">GP ' + fmtPct(gpPct) + ' · ' + fmtInt(e.count) + ' invoices · ' + fmtInt(e.custs.size) + ' customers</div>';
+    };
+    host.innerHTML =
+        '<div style="display:flex; gap:14px; align-items:flex-start; color:' + (Chart.defaults.color || "#2c2f4a") + ';">' +
+            '<div style="flex:1; min-width:0;">' + svg + '</div>' +
+            '<div id="diGeoInfo" style="width:200px; padding:10px 12px; border-radius:8px; background:rgba(0,0,0,0.04); font-size:13px; min-height:120px;">' + renderInfo(initial) + '</div>' +
+        '</div>' +
+        (activeState ? '<div style="font-size:11px; margin-top:8px;">Highlight on <strong>' + activeState + '</strong> · <a href="#" id="diGeoClear" style="color:inherit;">clear</a></div>' : '');
+    const infoEl = document.getElementById("diGeoInfo");
+    // Hover handler: update the info panel (much faster than native title tooltips)
     host.querySelectorAll("path.di-geo-state").forEach(p => {
+        p.addEventListener("mouseenter", () => { if (infoEl) infoEl.innerHTML = renderInfo(p.dataset.state); });
         p.addEventListener("click", () => {
             const code = p.dataset.state;
-            // Filter the toolbar Customer dropdown to one customer in that state if no current filter set?
-            // Simpler: store the active geo filter and re-render charts on this tab.
             state.di.geoActive = (state.di.geoActive === code) ? null : code;
-            // Apply as a customer-set filter by setting customerNumber filter to the first / clearing.
-            // Pragmatic: leave a visual highlight + show a status line. Full customer-set filtering
-            // would require an extra rebuildFiltered hook.
             renderDiGeo();
         });
     });
     const clearEl = document.getElementById("diGeoClear");
     if (clearEl) clearEl.addEventListener("click", e => { e.preventDefault(); state.di.geoActive = null; renderDiGeo(); });
+    // Diagnostic: tell us if the state field on customers is empty so
+    // we know whether the issue is data vs UI.
+    if (sorted.length === 0 || sorted[0][1].sales === 0) {
+        const sampleC = (state.customers || []).slice(0, 3).map(c => Object.keys(c).filter(k => /state|county|address/i.test(k)).join(","));
+        console.log("[diGeo] No state-aggregated sales. Customer state-related fields seen on sample: " + sampleC.join(" | "));
+    }
 }
 
 // Chart #15 — Salesperson performance radar with period selector.
