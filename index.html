@@ -1997,24 +1997,20 @@
                 </div>
                 <div class="chart-grid">
                     <div class="card span-12">
+                        <div class="head"><h3>Sales flow · salesperson → category</h3><div class="meta">click a salesperson on the left to highlight only their flows · click a category on the right to drill into Sales by Item · click again to clear</div></div>
+                        <div class="chart-wrap" style="min-height:440px;"><canvas id="diSankey"></canvas></div>
+                    </div>
+                    <div class="card span-6">
                         <div class="head"><h3>Daily sales calendar heatmap</h3><div class="meta">click a day to drill in · use the back button to restore the previous range · dark cells = high revenue</div></div>
                         <div id="diCalendarHeatmap" style="padding: 14px 18px 18px;"></div>
                     </div>
-                    <div class="card span-8">
-                        <div class="head"><h3>Sales treemap · category → item</h3><div class="meta">area = sales · colour = GP% · click to drill</div></div>
-                        <div class="chart-wrap" style="min-height:380px;"><canvas id="diTreemap"></canvas></div>
-                    </div>
-                    <div class="card span-4">
-                        <div class="head"><h3>Customer concentration</h3><div class="meta">how lopsided your customer base is — a few big fish vs many small ones</div></div>
-                        <div class="kpi-row" style="grid-template-columns: 1fr; padding: 0 18px;">
-                            <div class="kpi k-rev"><div class="label" id="diConcentrationLabel">Top 20% of customers drive…</div><div class="value" id="diGini">—</div><div class="sub" id="diGiniSub">&nbsp;</div></div>
-                        </div>
-                        <div class="chart-wrap" style="min-height:240px;"><canvas id="diLorenz"></canvas></div>
-                        <div class="meta" style="padding: 0 18px 12px; font-size: 11px; opacity: 0.7;">Curve bowed below the dashed line = concentrated. Straight diagonal = perfectly even spread across all customers.</div>
+                    <div class="card span-6">
+                        <div class="head"><h3>Customer cohort retention</h3><div class="meta">how well each batch of new customers keeps buying · rows that stay dark moving right = sticky cohorts · rows that fade = customers churning</div></div>
+                        <div id="diCohort" style="padding: 14px 18px 18px;"></div>
                     </div>
                     <div class="card span-12">
-                        <div class="head"><h3>Sales flow · salesperson → category</h3><div class="meta">click a salesperson on the left to highlight only their flows · click again to clear</div></div>
-                        <div class="chart-wrap" style="min-height:440px;"><canvas id="diSankey"></canvas></div>
+                        <div class="head"><h3>Sales treemap · category → item</h3><div class="meta">area = sales · colour = GP% · click to drill into Sales by Item</div></div>
+                        <div class="chart-wrap" style="min-height:560px;"><canvas id="diTreemap"></canvas></div>
                     </div>
                     <div class="card span-6">
                         <div class="head"><h3 id="diWaterfallTitle">Period-over-period waterfall</h3><div class="meta" id="diWaterfallMeta">left bar = prior period total · floating bars show what added (green) or subtracted (red) · right bar = current period</div></div>
@@ -2024,10 +2020,6 @@
                         <div class="head"><h3>Top customers · slope chart</h3><div class="meta">prior period (left) vs current (right) · slope = growth direction</div></div>
                         <div class="chart-wrap" style="min-height:340px;"><canvas id="diSlope"></canvas></div>
                     </div>
-                    <div class="card span-12">
-                        <div class="head"><h3>Customer cohort retention</h3><div class="meta">how well each batch of new customers keeps buying · rows that stay dark moving right = sticky cohorts · rows that fade = customers churning</div></div>
-                        <div id="diCohort" style="padding: 14px 18px 18px;"></div>
-                    </div>
                     <div class="card span-6">
                         <div class="head"><h3>Item bubble matrix</h3><div class="meta">X = qty · Y = avg unit price · size = revenue · colour = category</div></div>
                         <div class="chart-wrap" style="min-height:380px;"><canvas id="diBubble"></canvas></div>
@@ -2036,7 +2028,15 @@
                         <div class="head"><h3>Seasonality polar chart</h3><div class="meta">each ring = one year · spikes show busy months · rings overlapping = consistent seasonal pattern · rings diverging = year-over-year drift</div></div>
                         <div class="chart-wrap" style="min-height:380px;"><canvas id="diPolar"></canvas></div>
                     </div>
-                    <div class="card span-12">
+                    <div class="card span-4">
+                        <div class="head"><h3>Customer concentration</h3><div class="meta">how lopsided your customer base is — a few big fish vs many small ones</div></div>
+                        <div class="kpi-row" style="grid-template-columns: 1fr; padding: 0 18px;">
+                            <div class="kpi k-rev"><div class="label" id="diConcentrationLabel">Top 20% of customers drive…</div><div class="value" id="diGini">—</div><div class="sub" id="diGiniSub">&nbsp;</div></div>
+                        </div>
+                        <div class="chart-wrap" style="min-height:240px;"><canvas id="diLorenz"></canvas></div>
+                        <div class="meta" style="padding: 0 18px 12px; font-size: 11px; opacity: 0.7;">Curve bowed below the dashed line = concentrated. Straight diagonal = perfectly even spread across all customers.</div>
+                    </div>
+                    <div class="card span-8">
                         <div class="head"><h3>Invoice value distribution</h3><div class="meta">how big are your typical invoices · X-axis = invoice $ (log scale) · bar height = number of invoices in that $ band · title shows median / mean / P90</div></div>
                         <div class="chart-wrap" style="min-height:300px;"><canvas id="diHistogram"></canvas></div>
                     </div>
@@ -5906,18 +5906,20 @@ function renderDiCalendarHeatmap() {
     });
 }
 
-// Chart #5 — Treemap of sales by Item Category (slice-and-dice).
+// Chart #5 — Treemap of sales by Item Category (squarify-ish).
+// Picks split direction by current aspect ratio so blocks come out more
+// square-ish than pure slice-and-dice. Caps to top 20 categories + an
+// "Other" bucket so every block can carry a readable label.
 function renderDiTreemap() {
     const canvas = document.getElementById("diTreemap");
     if (!canvas) return;
     destroyChart("diTreemap");
     const ctx = canvas.getContext("2d");
     const wrap = canvas.parentElement;
-    const W = wrap.clientWidth || 600;
-    const H = 380;
+    const W = wrap.clientWidth || 800;
+    const H = 540;
     canvas.width = W; canvas.height = H;
     ctx.clearRect(0, 0, W, H);
-    // Aggregate per category from filtered lines
     const cats = new Map();
     for (const inv of (state.filtered || [])) {
         for (const ln of (inv.salesInvoiceLines || [])) {
@@ -5930,35 +5932,48 @@ function renderDiTreemap() {
             cats.set(cat, c);
         }
     }
-    const rows = [...cats.values()].filter(c => c.value > 0).sort((a, b) => b.value - a.value).slice(0, 30);
-    const total = rows.reduce((s, r) => s + r.value, 0);
+    const allRows = [...cats.values()].filter(c => c.value > 0).sort((a, b) => b.value - a.value);
+    const total = allRows.reduce((s, r) => s + r.value, 0);
     if (!total) {
         ctx.fillStyle = Chart.defaults.color || "#888";
         ctx.font = "12px Inter, sans-serif";
         ctx.fillText("No data in range.", 12, 24);
         return;
     }
-    // Slice-and-dice: alternate horizontal and vertical splits, biggest first.
+    // Top 20 + "Other" bucket — keeps every block above ~3K px²
+    // so the algorithm doesn't degenerate into invisible slivers.
+    const TOP_N = 20;
+    let rows;
+    if (allRows.length > TOP_N) {
+        const top = allRows.slice(0, TOP_N);
+        const rest = allRows.slice(TOP_N);
+        const other = { name: "Other (" + rest.length + ")", value: 0, cost: 0 };
+        for (const r of rest) { other.value += r.value; other.cost += r.cost; }
+        rows = [...top, other];
+    } else {
+        rows = allRows;
+    }
+    // Aspect-aware slice-and-dice. Choose the longer dimension as the
+    // current split direction, which keeps each rect's aspect close to 1.
     const rects = [];
-    const place = (items, x, y, w, h, horizontal) => {
+    const place = (items, x, y, w, h) => {
         if (!items.length) return;
         if (items.length === 1) { rects.push({ ...items[0], x, y, w, h }); return; }
         const sum = items.reduce((s, i) => s + i.value, 0);
         const head = items[0];
         const tail = items.slice(1);
         const ratio = head.value / sum;
-        if (horizontal) {
+        if (w >= h) {
             const hW = w * ratio;
             rects.push({ ...head, x, y, w: hW, h });
-            place(tail, x + hW, y, w - hW, h, !horizontal);
+            place(tail, x + hW, y, w - hW, h);
         } else {
             const hH = h * ratio;
             rects.push({ ...head, x, y, w, h: hH });
-            place(tail, x, y + hH, w, h - hH, !horizontal);
+            place(tail, x, y + hH, w, h - hH);
         }
     };
-    place(rows, 0, 0, W, H, W > H);
-    // Colour by GP% (deep red below 0, amber low, green high)
+    place(rows, 0, 0, W, H);
     const colourByGp = (gp, sales) => {
         const pct = sales ? gp / sales : 0;
         if (pct < 0)    return "#b71c1c";
@@ -5967,27 +5982,53 @@ function renderDiTreemap() {
         if (pct < 0.30) return "#7cb342";
         return "#2e7d32";
     };
+    // Tiered labelling — every block gets at least the category name.
+    // Pick font size + label depth based on the block's smaller
+    // dimension so labels never spill outside.
     for (const r of rects) {
         const gp = r.value - r.cost;
+        const w = Math.max(0, r.w - 2), h = Math.max(0, r.h - 2);
         ctx.fillStyle = colourByGp(gp, r.value);
-        ctx.fillRect(r.x + 1, r.y + 1, Math.max(0, r.w - 2), Math.max(0, r.h - 2));
-        ctx.strokeStyle = "rgba(255,255,255,0.4)";
+        ctx.fillRect(r.x + 1, r.y + 1, w, h);
+        ctx.strokeStyle = "rgba(255,255,255,0.45)";
         ctx.lineWidth = 1;
-        ctx.strokeRect(r.x + 1, r.y + 1, Math.max(0, r.w - 2), Math.max(0, r.h - 2));
-        if (r.w > 60 && r.h > 28) {
-            ctx.fillStyle = "#fff";
-            ctx.font = "bold 11px Inter, sans-serif";
-            ctx.textBaseline = "top";
-            ctx.fillText(truncate(r.name, Math.max(4, Math.floor(r.w / 7))), r.x + 6, r.y + 6);
-            ctx.font = "10px Inter, sans-serif";
-            ctx.fillStyle = "rgba(255,255,255,0.85)";
-            ctx.fillText(fmtMoney(r.value), r.x + 6, r.y + 20);
-            if (r.h > 44) {
-                ctx.fillText("GP " + fmtPct(r.value ? gp / r.value : 0), r.x + 6, r.y + 34);
-            }
+        ctx.strokeRect(r.x + 1, r.y + 1, w, h);
+        ctx.textBaseline = "top";
+        ctx.fillStyle = "#fff";
+        const padL = 5, padT = 4;
+        const minor = Math.min(w, h);
+        const area = w * h;
+        if (minor < 18 || area < 600) continue; // too small for any text
+        // Font sizing: name takes the most weight
+        let nameSize, valSize, gpSize;
+        if (minor >= 60 && area >= 5000) { nameSize = 13; valSize = 11; gpSize = 11; }
+        else if (minor >= 36 && area >= 2000) { nameSize = 11; valSize = 10; gpSize = 9; }
+        else if (minor >= 22 && area >= 900) { nameSize = 10; valSize = 9; gpSize = 0; }
+        else { nameSize = 9; valSize = 0; gpSize = 0; }
+        // Estimated text width per char at the given size
+        const charW = nameSize * 0.6;
+        const maxChars = Math.max(2, Math.floor((w - padL * 2) / charW));
+        ctx.font = "bold " + nameSize + "px Inter, sans-serif";
+        ctx.fillText(truncate(r.name, maxChars), r.x + padL, r.y + padT);
+        let cy = r.y + padT + nameSize + 2;
+        if (valSize && cy + valSize <= r.y + h - 2) {
+            ctx.font = valSize + "px Inter, sans-serif";
+            ctx.fillStyle = "rgba(255,255,255,0.92)";
+            ctx.fillText(fmtMoney(r.value), r.x + padL, cy);
+            cy += valSize + 2;
+        }
+        if (gpSize && cy + gpSize <= r.y + h - 2) {
+            ctx.font = gpSize + "px Inter, sans-serif";
+            ctx.fillText("GP " + fmtPct(r.value ? gp / r.value : 0), r.x + padL, cy);
         }
     }
-    // Click to filter category in the byItem tab
+    // Mouse handling — tooltip on hover + click drill
+    canvas.onmousemove = e => {
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left, y = e.clientY - rect.top;
+        const hit = rects.find(r => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h);
+        canvas.title = hit ? (hit.name + " · " + fmtMoneyFull(hit.value) + " · GP " + fmtPct(hit.value ? (hit.value - hit.cost) / hit.value : 0)) : "";
+    };
     canvas.onclick = e => {
         const rect = canvas.getBoundingClientRect();
         const x = e.clientX - rect.left, y = e.clientY - rect.top;
@@ -6151,18 +6192,26 @@ function renderDiSankey() {
     catLay.forEach((n, i) => {
         const isHi = !highlight || connectedCats.has(n.name);
         const op = isHi ? 1 : 0.2;
-        svgStr += '<rect x="' + rightX + '" y="' + n.y + '" width="' + colW + '" height="' + n.h + '" fill="#5c6bc0" opacity="' + op + '" rx="2"><title>' + escapeHtml(n.name + ": " + fmtMoneyFull(n.value)) + '</title></rect>';
+        svgStr += '<rect class="di-sankey-cat" data-cat="' + escapeAttr(n.name) + '" x="' + rightX + '" y="' + n.y + '" width="' + colW + '" height="' + n.h + '" fill="#5c6bc0" opacity="' + op + '" rx="2" style="cursor:pointer;"><title>' + escapeHtml(n.name + ": " + fmtMoneyFull(n.value) + " · click to drill into Sales by Item") + '</title></rect>';
         if (n.h > 12) svgStr += '<text x="' + (rightX + colW - 6) + '" y="' + (n.y + n.h / 2 + 4) + '" text-anchor="end" fill="#fff" opacity="' + op + '" style="pointer-events:none;">' + escapeHtml(truncate(n.name, 20)) + '</text>';
     });
     svgStr += '</svg>';
     canvas.insertAdjacentHTML("afterend", svgStr);
-    // Click to highlight / clear
+    // Click handlers — salesperson rect toggles highlight, category rect
+    // drills into the Sales by Item tab filtered to that category (same
+    // contract as the treemap so the drill flow is consistent).
     const svgEl = wrap.querySelector("svg.di-sankey");
     if (svgEl) {
         svgEl.addEventListener("click", e => {
-            const r = e.target.closest("rect.di-sankey-sp");
-            if (r && r.dataset.sp) {
-                state.di.sankeyHighlight = (state.di.sankeyHighlight === r.dataset.sp) ? null : r.dataset.sp;
+            const catR = e.target.closest("rect.di-sankey-cat");
+            if (catR && catR.dataset.cat) {
+                state.byItemCategoryFilter = (state.byItemCategoryFilter === catR.dataset.cat) ? "" : catR.dataset.cat;
+                setActiveTab("byItem");
+                return;
+            }
+            const spR = e.target.closest("rect.di-sankey-sp");
+            if (spR && spR.dataset.sp) {
+                state.di.sankeyHighlight = (state.di.sankeyHighlight === spR.dataset.sp) ? null : spR.dataset.sp;
             } else {
                 state.di.sankeyHighlight = null;
             }
