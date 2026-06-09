@@ -1457,6 +1457,7 @@
         <nav>
             <div class="group-label">Dashboards</div>
             <a data-tab="overview" class="active">Overview</a>
+            <a data-tab="deepInsights">Deep Insights</a>
             <a data-tab="branch">Branch Sales</a>
             <a data-tab="salesperson">Salesperson Sales</a>
             <a data-tab="byItem">Sales by Item</a>
@@ -1985,6 +1986,58 @@
                             </tr></thead>
                             <tbody></tbody>
                         </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB: Deep Insights -->
+            <section data-tab-content="deepInsights" style="display:none;">
+                <div class="hint" style="margin-bottom:14px;">
+                    Exploratory analytical views — each chart answers a different question about your sales than the operational KPIs on Overview. All views derive from the toolbar's loaded set.
+                </div>
+                <div class="chart-grid">
+                    <div class="card span-12">
+                        <div class="head"><h3>Daily sales calendar heatmap</h3><div class="meta">GitHub-style grid · one cell per day · colour intensity = revenue</div></div>
+                        <div id="diCalendarHeatmap" style="padding: 14px 18px 18px;"></div>
+                    </div>
+                    <div class="card span-8">
+                        <div class="head"><h3>Sales treemap · category → item</h3><div class="meta">area = sales · colour = GP% · click to drill</div></div>
+                        <div class="chart-wrap" style="min-height:380px;"><canvas id="diTreemap"></canvas></div>
+                    </div>
+                    <div class="card span-4">
+                        <div class="head"><h3>Customer concentration</h3><div class="meta">Lorenz curve · Gini coefficient</div></div>
+                        <div class="kpi-row" style="grid-template-columns: 1fr; padding: 0 18px;">
+                            <div class="kpi k-rev"><div class="label">Gini coefficient</div><div class="value" id="diGini">—</div><div class="sub" id="diGiniSub">0 = perfectly even · 1 = one customer carries all</div></div>
+                        </div>
+                        <div class="chart-wrap" style="min-height:240px;"><canvas id="diLorenz"></canvas></div>
+                    </div>
+                    <div class="card span-12">
+                        <div class="head"><h3>Sales flow · salesperson → customer → category</h3><div class="meta">Sankey diagram · ribbon width = revenue</div></div>
+                        <div class="chart-wrap" style="min-height:440px;"><canvas id="diSankey"></canvas></div>
+                    </div>
+                    <div class="card span-6">
+                        <div class="head"><h3>Period-over-period waterfall</h3><div class="meta">what changed vs the prior comparable period</div></div>
+                        <div class="chart-wrap" style="min-height:340px;"><canvas id="diWaterfall"></canvas></div>
+                    </div>
+                    <div class="card span-6">
+                        <div class="head"><h3>Top customers · slope chart</h3><div class="meta">prior period (left) vs current (right) · slope = growth direction</div></div>
+                        <div class="chart-wrap" style="min-height:340px;"><canvas id="diSlope"></canvas></div>
+                    </div>
+                    <div class="card span-12">
+                        <div class="head"><h3>Customer cohort retention</h3><div class="meta">rows = acquisition month · columns = months since · cell colour = % of cohort still buying</div></div>
+                        <div id="diCohort" style="padding: 14px 18px 18px;"></div>
+                    </div>
+                    <div class="card span-6">
+                        <div class="head"><h3>Item bubble matrix</h3><div class="meta">X = qty · Y = avg unit price · size = revenue · colour = category</div></div>
+                        <div class="chart-wrap" style="min-height:380px;"><canvas id="diBubble"></canvas></div>
+                    </div>
+                    <div class="card span-6">
+                        <div class="head"><h3>Seasonality polar chart</h3><div class="meta">12-axis radar · monthly sales by year</div></div>
+                        <div class="chart-wrap" style="min-height:380px;"><canvas id="diPolar"></canvas></div>
+                    </div>
+                    <div class="card span-12">
+                        <div class="head"><h3>Invoice value distribution</h3><div class="meta">histogram of invoice $ · median / mean / P90 annotated</div></div>
+                        <div class="chart-wrap" style="min-height:300px;"><canvas id="diHistogram"></canvas></div>
                     </div>
                 </div>
             </section>
@@ -5258,6 +5311,7 @@ function closeDrill() {
 function renderCurrentTab() {
     switch (state.tab) {
         case "overview":    renderOverview(); break;
+        case "deepInsights": renderDeepInsights(); break;
         case "branch":      renderBranch();   break;
         case "salesperson": renderSalesperson(); break;
         case "byItem":      renderByItem();   break;
@@ -5649,6 +5703,149 @@ function paintPipelineKpis() {
     set("kpiPipeSniSub",  sniCount + " orders · scheduled-to-ship in range");
     set("kpiPipeOiAmt",   fmtMoneyFull(oiAmt));
     set("kpiPipeOiSub",   oiCount + " invoices · unpaid in range");
+}
+
+// ============================================================
+// DEEP INSIGHTS TAB
+// ============================================================
+function renderDeepInsights() {
+    renderFilterChips();
+    renderDiCalendarHeatmap();
+    // Charts 2-10 will be implemented incrementally; the placeholders
+    // already exist in the markup and will simply stay empty until
+    // their renderer is added.
+}
+
+// Chart #1 — Daily sales calendar heatmap (GitHub-style grid).
+// One cell per day in the loaded range, coloured by daily revenue.
+// Hovering shows date + $; click filters the toolbar date inputs
+// to that single day.
+function renderDiCalendarHeatmap() {
+    const host = document.getElementById("diCalendarHeatmap");
+    if (!host) return;
+    const inRange = getDateRangePredicate();
+    // Bucket revenue per ISO date (yyyy-mm-dd)
+    const daily = new Map();
+    let minDate = null, maxDate = null;
+    for (const inv of (state.filtered || [])) {
+        const d = (inv.postingDate || "").toString().slice(0, 10);
+        if (!d) continue;
+        if (!minDate || d < minDate) minDate = d;
+        if (!maxDate || d > maxDate) maxDate = d;
+        daily.set(d, (daily.get(d) || 0) + invoiceSalesAmount(inv));
+    }
+    if (!minDate || !maxDate) {
+        host.innerHTML = '<div class="empty" style="padding: 18px;">No invoices in the selected range.</div>';
+        return;
+    }
+    // Walk every calendar day in range, even zero-revenue days, so the
+    // grid is continuous. Anchor on the From/To inputs if they widen
+    // the visible window beyond what the data covers.
+    const fromInput = document.getElementById("fromDate").value || minDate;
+    const toInput   = document.getElementById("toDate").value   || maxDate;
+    const start = new Date(fromInput);
+    const end   = new Date(toInput);
+    if (isNaN(start) || isNaN(end) || start > end) {
+        host.innerHTML = '<div class="empty" style="padding: 18px;">Invalid date range.</div>';
+        return;
+    }
+    const cells = [];
+    let maxRev = 0;
+    for (let t = new Date(start); t <= end; t.setDate(t.getDate() + 1)) {
+        const iso = t.toISOString().slice(0, 10);
+        const rev = daily.get(iso) || 0;
+        if (rev > maxRev) maxRev = rev;
+        cells.push({ date: iso, rev, day: new Date(t) });
+    }
+
+    // GitHub-style layout: weeks across (columns), Sun-Sat down (rows).
+    // Each cell = 12x12 px with 2px gap. Roughly 53 weeks fit in 750px.
+    const CELL = 12, GAP = 2, WEEK = CELL + GAP;
+    // Align Sunday of the week of `start` so column 0 starts on a Sunday
+    const startDow = start.getDay(); // 0 = Sun
+    const gridStart = new Date(start);
+    gridStart.setDate(start.getDate() - startDow);
+    const dayMs = 86400000;
+    const totalDays = Math.ceil((end - gridStart) / dayMs) + 1;
+    const totalWeeks = Math.ceil(totalDays / 7);
+    const width  = totalWeeks * WEEK + 36; // +36 for the DOW label gutter
+    const height = 7 * WEEK + 24;          // +24 for the month-label strip
+
+    // Colour ramp from #f1efe9 (no sales) → #1e3a5f (max).
+    // Use sqrt scale so a few big days don't drown out the rest.
+    const colour = rev => {
+        if (rev <= 0) return "rgba(46,40,30,0.06)";
+        const t = Math.sqrt(rev / maxRev);
+        const r = Math.round(241 + (30 - 241) * t);
+        const g = Math.round(239 + (58 - 239) * t);
+        const b = Math.round(233 + (95 - 233) * t);
+        return "rgb(" + r + "," + g + "," + b + ")";
+    };
+
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const dowLabels = ["", "Mon", "", "Wed", "", "Fri", ""]; // sparse so we don't crowd
+    let svg = '<svg width="' + width + '" height="' + height + '" viewBox="0 0 ' + width + ' ' + height + '" style="font-family: Inter, sans-serif; font-size: 10px;">';
+
+    // Month labels at top
+    let lastMonth = -1;
+    for (let w = 0; w < totalWeeks; w++) {
+        const sundayDate = new Date(gridStart);
+        sundayDate.setDate(gridStart.getDate() + w * 7);
+        if (sundayDate > end) break;
+        const m = sundayDate.getMonth();
+        if (m !== lastMonth) {
+            const x = 36 + w * WEEK;
+            svg += '<text x="' + x + '" y="10" fill="currentColor" opacity="0.65">' + monthNames[m] + '</text>';
+            lastMonth = m;
+        }
+    }
+    // DOW labels at left
+    for (let d = 0; d < 7; d++) {
+        if (dowLabels[d]) {
+            svg += '<text x="0" y="' + (24 + d * WEEK + CELL - 1) + '" fill="currentColor" opacity="0.65">' + dowLabels[d] + '</text>';
+        }
+    }
+    // Cells
+    for (let i = 0; i < totalDays; i++) {
+        const d = new Date(gridStart);
+        d.setDate(gridStart.getDate() + i);
+        if (d < start || d > end) continue;
+        const iso = d.toISOString().slice(0, 10);
+        const rev = daily.get(iso) || 0;
+        const week = Math.floor(i / 7);
+        const dow = i % 7;
+        const x = 36 + week * WEEK;
+        const y = 24 + dow * WEEK;
+        const fmtDay = d.toLocaleDateString("en-AU", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+        const title = fmtDay + " — " + (rev > 0 ? fmtMoneyFull(rev) : "no sales");
+        svg += '<rect x="' + x + '" y="' + y + '" width="' + CELL + '" height="' + CELL +
+            '" rx="2" ry="2" fill="' + colour(rev) + '" data-date="' + iso +
+            '" style="cursor:pointer;"><title>' + escapeHtml(title) + '</title></rect>';
+    }
+    svg += '</svg>';
+
+    // Legend
+    const legend = '<div style="display:flex; align-items:center; gap:6px; margin-top:10px; font-size:11px; opacity:0.7;">' +
+        '<span>less</span>' +
+        [0, 0.2, 0.45, 0.7, 1].map(t =>
+            '<span style="display:inline-block; width:12px; height:12px; border-radius:2px; background:' +
+            colour(t * maxRev) + ';"></span>').join("") +
+        '<span>more — peak ' + fmtMoneyFull(maxRev) + '</span>' +
+        '</div>';
+    host.innerHTML = '<div style="overflow-x:auto; color:' + (Chart.defaults.color || "#2c2f4a") + ';">' + svg + '</div>' + legend;
+
+    // Click a cell → narrow the toolbar to that day
+    host.querySelectorAll("rect[data-date]").forEach(rc => {
+        rc.addEventListener("click", () => {
+            const d = rc.dataset.date;
+            document.getElementById("fromDate").value = d;
+            document.getElementById("toDate").value = d;
+            document.getElementById("quickRange").value = "";
+            setPeriodBadge();
+            rebuildFiltered();
+            renderCurrentTab();
+        });
+    });
 }
 
 // ============================================================
