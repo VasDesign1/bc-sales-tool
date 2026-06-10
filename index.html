@@ -2617,10 +2617,10 @@
                         <div class="head">
                             <h3>Quote status</h3>
                             <select id="qStatusChartType" class="mini-select" title="Chart type">
-                                <option value="pie" selected>Pie</option>
-                                <option value="doughnut">Doughnut</option>
+                                <option value="columnV" selected>Column (vertical)</option>
                                 <option value="barH">Bar (horizontal)</option>
-                                <option value="columnV">Column (vertical)</option>
+                                <option value="pie">Pie</option>
+                                <option value="doughnut">Doughnut</option>
                             </select>
                             <div class="toggle" id="qStatusMetricToggle">
                                 <button data-metric="count" class="active">Count</button>
@@ -2747,10 +2747,10 @@
                         <div class="head">
                             <h3>Order status</h3>
                             <select id="boStatusChartType" class="mini-select" title="Chart type">
-                                <option value="pie" selected>Pie</option>
-                                <option value="doughnut">Doughnut</option>
+                                <option value="columnV" selected>Column (vertical)</option>
                                 <option value="barH">Bar (horizontal)</option>
-                                <option value="columnV">Column (vertical)</option>
+                                <option value="pie">Pie</option>
+                                <option value="doughnut">Doughnut</option>
                             </select>
                             <div class="toggle" id="boStatusMetricToggle">
                                 <button data-metric="count" class="active">Count</button>
@@ -10768,7 +10768,7 @@ function renderQuotes() {
     });
     const statusValueFn = state.quoteStatusMetric === "amount" ? (r => r.amount) : (r => r.count);
     const ctxQs = document.getElementById("qStatusChart").getContext("2d");
-    const qsType = state.quoteStatusChartType || "pie";
+    const qsType = state.quoteStatusChartType || "columnV";
     // Pie / Doughnut / Bar / Column — same UX as the Invoice status chart
     // on the Overview tab.
     if (qsType === "barH" || qsType === "columnV") {
@@ -10805,141 +10805,21 @@ function renderQuotes() {
             })
         });
     } else {
-        // Pie (default) or Doughnut.
-        // Labels for small slices (<8%) are pushed to the LEFT or RIGHT
-        // side of the chart and connected to their slice with a thin
-        // leader line. Slices are routed to whichever side they sit on
-        // (cos(midAngle) >= 0 → right, otherwise → left). Labels stack
-        // vertically with consistent spacing so multiple slivers at
-        // similar angles can't pile on top of each other.
-        // Large slices (>=8%) keep the centred white-on-colour label.
-        const totalForPct = statusRows.reduce((s, r) => s + statusValueFn(r), 0);
-        const pctFor = (i) => totalForPct ? (statusValueFn(statusRows[i]) / totalForPct * 100) : 0;
-        const sideLabelPlugin = {
-            id: "qStatusSideLabels",
-            afterDatasetDraw: (chart, args) => {
-                const { ctx, chartArea } = chart;
-                const meta = chart.getDatasetMeta(args.index);
-                if (!meta || !meta.data) return;
-                const small = [];
-                meta.data.forEach((arc, i) => {
-                    const pct = pctFor(i);
-                    if (pct >= 8) return;
-                    const props = arc.getProps(["x","y","startAngle","endAngle","outerRadius"], true);
-                    let mid = (props.startAngle + props.endAngle) / 2;
-                    small.push({
-                        i, mid, props,
-                        isRight: Math.cos(mid) >= 0,
-                        value: chart.data.datasets[args.index].data[i],
-                        pct,
-                    });
-                });
-                if (!small.length) return;
-                // Bucket left vs right and sort each by vertical position
-                // (sin(mid)) so the top-most slice gets the top-most label
-                // on its side.
-                const right = small.filter(s => s.isRight).sort((a, b) => Math.sin(a.mid) - Math.sin(b.mid));
-                const left  = small.filter(s => !s.isRight).sort((a, b) => Math.sin(a.mid) - Math.sin(b.mid));
-                const lineHeight = 24;
-                const assign = (group, isRight) => {
-                    if (!group.length) return;
-                    const centerY = (chartArea.top + chartArea.bottom) / 2;
-                    const groupHeight = (group.length - 1) * lineHeight;
-                    const startY = centerY - groupHeight / 2;
-                    group.forEach((s, idx) => {
-                        s.labelY = startY + idx * lineHeight;
-                        s.labelX = isRight ? chartArea.right - 4 : chartArea.left + 4;
-                    });
-                };
-                assign(right, true);
-                assign(left, false);
-                ctx.save();
-                ctx.font = "600 11px " + ((Chart.defaults.font && Chart.defaults.font.family) || "Inter, sans-serif");
-                ctx.textBaseline = "middle";
-                const lineColor = Chart.defaults.color || "rgba(0,0,0,0.55)";
-                [...right, ...left].forEach(s => {
-                    const r1 = s.props.outerRadius;
-                    const sliceX = s.props.x + Math.cos(s.mid) * r1;
-                    const sliceY = s.props.y + Math.sin(s.mid) * r1;
-                    // Leader line: short radial step out of the slice, then
-                    // bend toward the label position.
-                    const r2 = r1 + 10;
-                    const bendX = s.props.x + Math.cos(s.mid) * r2;
-                    const bendY = s.props.y + Math.sin(s.mid) * r2;
-                    ctx.strokeStyle = lineColor;
-                    ctx.lineWidth = 1;
-                    ctx.beginPath();
-                    ctx.moveTo(sliceX, sliceY);
-                    ctx.lineTo(bendX, bendY);
-                    ctx.lineTo(s.labelX + (s.isRight ? -2 : 2), s.labelY);
-                    ctx.stroke();
-                    // Anchor dot at the slice edge
-                    ctx.fillStyle = lineColor;
-                    ctx.beginPath();
-                    ctx.arc(sliceX, sliceY, 1.6, 0, Math.PI * 2);
-                    ctx.fill();
-                    // Draw dark rounded label box at end of leader.
-                    const valStr = state.quoteStatusMetric === "amount" ? fmtMoney(s.value) : fmtInt(s.value);
-                    const text = valStr + " · " + s.pct.toFixed(1) + "%";
-                    const textW = ctx.measureText(text).width;
-                    const padX = 7, padY = 4;
-                    const boxW = textW + padX * 2;
-                    const boxH = 11 + padY * 2;
-                    const boxY = s.labelY - boxH / 2;
-                    const boxX = s.isRight ? s.labelX - boxW : s.labelX;
-                    ctx.fillStyle = "rgba(40,40,40,0.92)";
-                    const radius = 4;
-                    ctx.beginPath();
-                    ctx.moveTo(boxX + radius, boxY);
-                    ctx.lineTo(boxX + boxW - radius, boxY);
-                    ctx.quadraticCurveTo(boxX + boxW, boxY, boxX + boxW, boxY + radius);
-                    ctx.lineTo(boxX + boxW, boxY + boxH - radius);
-                    ctx.quadraticCurveTo(boxX + boxW, boxY + boxH, boxX + boxW - radius, boxY + boxH);
-                    ctx.lineTo(boxX + radius, boxY + boxH);
-                    ctx.quadraticCurveTo(boxX, boxY + boxH, boxX, boxY + boxH - radius);
-                    ctx.lineTo(boxX, boxY + radius);
-                    ctx.quadraticCurveTo(boxX, boxY, boxX + radius, boxY);
-                    ctx.closePath();
-                    ctx.fill();
-                    ctx.fillStyle = "#fff";
-                    ctx.textAlign = "left";
-                    ctx.fillText(text, boxX + padX, s.labelY);
-                });
-                ctx.restore();
-            },
-        };
+        // Pie or Doughnut — no on-chart labels per user; values appear
+        // only on hover via the tooltip.
         state.charts.qStatus = new Chart(ctxQs, {
             type: "doughnut",
             data: { labels: statusRows.map(r => r.name),
                     datasets: [{ data: statusRows.map(statusValueFn), backgroundColor: statusPalette, borderWidth: 0 }] },
-            plugins: [ChartDataLabels, sideLabelPlugin],
             options: chartBase({
                 cutout: qsType === "doughnut" ? "62%" : 0,
-                // Generous side padding so the side-positioned label
-                // boxes can sit at the chart edges without clipping.
-                layout: { padding: { top: 18, bottom: 18, left: 130, right: 130 } },
                 plugins: {
                     legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } },
                     tooltip: { callbacks: { label: c => {
                         const r = statusRows[c.dataIndex];
                         return r.name + ": " + fmtInt(r.count) + " quotes · " + fmtMoneyFull(r.amount);
                     } } },
-                    // Only paint a centred white-on-colour label for big
-                    // slices; small slices are drawn instead by sideLabelPlugin.
-                    datalabels: {
-                        color: "#fff",
-                        textStrokeColor: "rgba(0,0,0,0.5)",
-                        textStrokeWidth: 2,
-                        font: { weight: 700, size: 11 },
-                        anchor: "center",
-                        align: "center",
-                        formatter: (value, ctx) => {
-                            const pct = pctFor(ctx.dataIndex);
-                            if (pct < 8) return "";
-                            const valStr = state.quoteStatusMetric === "amount" ? fmtMoney(value) : fmtInt(value);
-                            return valStr + " · " + pct.toFixed(1) + "%";
-                        },
-                    },
+                    datalabels: { display: false },
                 },
                 onClick: (_, els) => {
                     if (!els.length) return;
@@ -11505,7 +11385,7 @@ function renderBlanketOrders() {
     });
     const statusValueFn = state.boStatusMetric === "amount" ? (r => r.amount) : (r => r.count);
     const ctxBs = document.getElementById("boStatusChart").getContext("2d");
-    const bsType = state.boStatusChartType || "pie";
+    const bsType = state.boStatusChartType || "columnV";
     const totalForBsPct = statusRows.reduce((s, r) => s + statusValueFn(r), 0);
     const bsPctFor = (i) => totalForBsPct ? (statusValueFn(statusRows[i]) / totalForBsPct * 100) : 0;
     if (bsType === "barH" || bsType === "columnV") {
@@ -11542,37 +11422,20 @@ function renderBlanketOrders() {
             })
         });
     } else {
+        // Pie or Doughnut — no on-chart labels; tooltip on hover only.
         state.charts.boStatus = new Chart(ctxBs, {
             type: "doughnut",
             data: { labels: statusRows.map(r => r.name),
                     datasets: [{ data: statusRows.map(statusValueFn), backgroundColor: statusPalette, borderWidth: 0 }] },
-            plugins: [ChartDataLabels],
             options: chartBase({
                 cutout: bsType === "doughnut" ? "62%" : 0,
-                layout: { padding: { top: 18, bottom: 18, left: 60, right: 60 } },
                 plugins: {
                     legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } },
                     tooltip: { callbacks: { label: c => {
                         const r = statusRows[c.dataIndex];
                         return r.name + ": " + fmtInt(r.count) + " orders · " + fmtMoneyFull(r.amount);
                     } } },
-                    datalabels: {
-                        color: "#fff",
-                        font: { weight: 700, size: 11 },
-                        anchor: (ctx) => bsPctFor(ctx.dataIndex) < 8 ? "end" : "center",
-                        align:  (ctx) => bsPctFor(ctx.dataIndex) < 8 ? "end" : "center",
-                        offset: (ctx) => bsPctFor(ctx.dataIndex) < 8 ? 8 : 0,
-                        backgroundColor: (ctx) => bsPctFor(ctx.dataIndex) < 8 ? "rgba(40,40,40,0.92)" : null,
-                        borderRadius: (ctx) => bsPctFor(ctx.dataIndex) < 8 ? 4 : 0,
-                        padding: (ctx) => bsPctFor(ctx.dataIndex) < 8 ? { top: 3, bottom: 3, left: 6, right: 6 } : 0,
-                        textStrokeColor: (ctx) => bsPctFor(ctx.dataIndex) < 8 ? null : "rgba(0,0,0,0.5)",
-                        textStrokeWidth: (ctx) => bsPctFor(ctx.dataIndex) < 8 ? 0 : 2,
-                        formatter: (value) => {
-                            const pct = totalForBsPct ? (value / totalForBsPct * 100) : 0;
-                            const valStr = state.boStatusMetric === "amount" ? fmtMoney(value) : fmtInt(value);
-                            return valStr + " · " + pct.toFixed(1) + "%";
-                        },
-                    },
+                    datalabels: { display: false },
                 },
                 onClick: (_, els) => {
                     if (!els.length) return;
@@ -13327,13 +13190,38 @@ function renderMTD() {
         const d = new Date(inv.postingDate);
         return d >= mStart && d <= today;
     });
+    // VE-based cost per invoice (so MTD GP reconciles with Overview's
+    // Adjusted Profit on the same date range). Walks state.valueEntries
+    // once, sums Cost_Amount_Actual + Cost_Amount_Non_Invtbl per invoice
+    // for sales-type rows only. If VE isn't loaded, fall back to the
+    // per-line totalCostFromLine helper — same as before.
+    const veByDoc = new Map();
+    if (state.valueEntries && state.valueEntries.length) {
+        for (const v of state.valueEntries) {
+            if (!isSalesValueEntry(v)) continue;
+            const k = v.documentNumber;
+            if (!k) continue;
+            const cur = veByDoc.get(k) || 0;
+            veByDoc.set(k, cur + (v.costAmount || 0) + (v.costAmountNonInv || 0));
+        }
+    }
+    const haveVE = veByDoc.size > 0;
     // Group by date
     const byDate = new Map();
     for (const inv of rows) {
         const day = (inv.postingDate || "").slice(0, 10);
         const cur = byDate.get(day) || { day, sales: 0, gp: 0, invCount: 0 };
         const s = invoiceSalesAmount(inv);
-        const gp = invoiceGPInContext(inv);
+        // GP = sales − (VE cost if known, else per-line estimate).
+        // Math.abs because Value Entry's cost is signed (sales = negative
+        // movement out of inventory). Mirrors Overview's getValueEntryTotals.
+        let cost;
+        if (haveVE && veByDoc.has(inv.number)) {
+            cost = Math.abs(veByDoc.get(inv.number));
+        } else {
+            cost = invoiceCost(inv);
+        }
+        const gp = s - cost;
         cur.sales += s; cur.gp += gp; cur.invCount += 1;
         byDate.set(day, cur);
     }
