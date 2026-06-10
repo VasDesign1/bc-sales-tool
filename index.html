@@ -4200,6 +4200,20 @@ async function fetchResidentialDocLookup() {
         console.warn("[Residential lookup] no candidates in $metadata");
         return;
     }
+    // Dump the full entity-set list grouped by intent so we can spot any
+    // Wiise-custom posted-invoice entity that our regex above missed.
+    // Helpful only on first inspection — costs nothing to print.
+    const allSets = Object.keys(md.entitySets);
+    const postedLike = allSets.filter(n => /post|sinv|invoiceheader|crmemo|cr_memo|^pInv|pstd/i.test(n));
+    const yourRefBearing = [];
+    for (const [setName, typeName] of Object.entries(md.entitySets)) {
+        const f = md.entityTypes[typeName] || [];
+        if (f.some(x => /your.?reference/i.test(x))) yourRefBearing.push(setName);
+    }
+    console.log("[Residential lookup] candidate entities (after dedupe):", candidates.map(c => c.entity));
+    console.log("[Residential lookup] ALL entities with a Your_Reference column (regardless of doc-no field):", yourRefBearing);
+    console.log("[Residential lookup] entity names containing post/sinv/invoiceheader/crmemo/pstd:", postedLike);
+    console.log("[Residential lookup] total entity sets in $metadata:", allSets.length);
     const coName = encodeURIComponent(await bcGetCompanyInternalName());
     let totalHits = 0;
     for (const c of candidates) {
