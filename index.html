@@ -3587,7 +3587,13 @@ async function bcGetODataMetadata() {
         const propRe = /<Property\s+Name="([^"]+)"/g;
         const fields = []; let p;
         while ((p = propRe.exec(m[2])) !== null) fields.push(p[1]);
-        entityTypes[m[1]] = fields;
+        // BC / Wiise metadata sometimes ships multiple EntityType blocks
+        // with the same Name (e.g. one tiny salutation fragment plus the
+        // real header). Keep the version with the most fields — that's
+        // overwhelmingly the page's actual data shape.
+        if (!entityTypes[m[1]] || entityTypes[m[1]].length < fields.length) {
+            entityTypes[m[1]] = fields;
+        }
     }
     bcODataMetadata = { entitySets, entityTypes };
     return bcODataMetadata;
