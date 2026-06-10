@@ -2746,6 +2746,12 @@
                     <div class="card span-4">
                         <div class="head">
                             <h3>Order status</h3>
+                            <select id="boStatusChartType" class="mini-select" title="Chart type">
+                                <option value="pie" selected>Pie</option>
+                                <option value="doughnut">Doughnut</option>
+                                <option value="barH">Bar (horizontal)</option>
+                                <option value="columnV">Column (vertical)</option>
+                            </select>
                             <div class="toggle" id="boStatusMetricToggle">
                                 <button data-metric="count" class="active">Count</button>
                                 <button data-metric="amount">$ Amount</button>
@@ -10799,102 +10805,20 @@ function renderQuotes() {
             })
         });
     } else {
-        // Pie (default) or Doughnut
+        // Pie (default) or Doughnut — Excel-style labels: small slices get
+        // pushed just outside the slice in a dark box; large slices keep
+        // the centred in-pie label. No custom leader-line plugin — the
+        // anchor/align positioning alone is enough.
         const totalForPct = statusRows.reduce((s, r) => s + statusValueFn(r), 0);
         const pctFor = (i) => totalForPct ? (statusValueFn(statusRows[i]) / totalForPct * 100) : 0;
-        // Custom leader-line plugin (D3-style):
-        //   For slices < 8% we don't try to fit a label on the sliver. We
-        //   route a thin bent line from the slice edge OUT and then
-        //   HORIZONTAL to the left or right edge of the chart, depending
-        //   on which side the slice sits. Labels are stacked vertically on
-        //   each side so multiple slivers at similar angles don't collide.
-        //   Big slices keep the centred white-on-colour label (datalabels
-        //   plugin formatter returns "" for them below).
-        const leaderLinePlugin = {
-            id: "qStatusLeaderLines",
-            afterDatasetDraw: (chart, args) => {
-                const { ctx, chartArea } = chart;
-                const meta = chart.getDatasetMeta(args.index);
-                if (!meta || !meta.data) return;
-                const small = [];
-                meta.data.forEach((arc, i) => {
-                    const pct = pctFor(i);
-                    if (pct >= 8) return;
-                    const props = arc.getProps(["x","y","startAngle","endAngle","outerRadius"], true);
-                    const mid = (props.startAngle + props.endAngle) / 2;
-                    small.push({
-                        i, mid, props,
-                        isRight: Math.cos(mid) >= 0,
-                        value: chart.data.datasets[args.index].data[i],
-                        pct,
-                        name: chart.data.labels[i],
-                    });
-                });
-                if (!small.length) return;
-                // Split into left + right and sort top-to-bottom by mid angle.
-                // For the right side, smaller mid angles are higher up; for the
-                // left side it's the reverse — that lines up the connector lines
-                // with the visual position of each sliver.
-                const right = small.filter(s => s.isRight).sort((a, b) => a.mid - b.mid);
-                const left  = small.filter(s => !s.isRight).sort((a, b) => b.mid - a.mid);
-                const lineHeight = 22;
-                const assignStack = (group, isRight) => {
-                    if (!group.length) return;
-                    const centerY = (chartArea.top + chartArea.bottom) / 2;
-                    const startY = centerY - (group.length - 1) * lineHeight / 2;
-                    group.forEach((s, idx) => {
-                        s.labelY = startY + idx * lineHeight;
-                        s.labelX = isRight ? chartArea.right - 4 : chartArea.left + 4;
-                    });
-                };
-                assignStack(right, true);
-                assignStack(left, false);
-                ctx.save();
-                const textColor = Chart.defaults.color || "#333";
-                ctx.strokeStyle = textColor;
-                ctx.lineWidth = 1;
-                ctx.font = "600 11px " + (Chart.defaults.font.family || "Inter, sans-serif");
-                ctx.textBaseline = "middle";
-                [...right, ...left].forEach(s => {
-                    const r1 = s.props.outerRadius;
-                    const startX = s.props.x + Math.cos(s.mid) * r1;
-                    const startY = s.props.y + Math.sin(s.mid) * r1;
-                    // Bend point — a small radial step outward from the slice
-                    // edge so the connector clearly "exits" the pie before bending.
-                    const r2 = r1 + 12;
-                    const bendX = s.props.x + Math.cos(s.mid) * r2;
-                    const bendY = s.props.y + Math.sin(s.mid) * r2;
-                    ctx.beginPath();
-                    ctx.moveTo(startX, startY);
-                    ctx.lineTo(bendX, bendY);
-                    ctx.lineTo(s.labelX, s.labelY);
-                    ctx.stroke();
-                    // Small dot at the slice edge for visual anchor.
-                    ctx.beginPath();
-                    ctx.arc(startX, startY, 1.5, 0, Math.PI * 2);
-                    ctx.fillStyle = textColor;
-                    ctx.fill();
-                    // Label text
-                    const valStr = state.quoteStatusMetric === "amount" ? fmtMoney(s.value) : fmtInt(s.value);
-                    const text = valStr + " · " + s.pct.toFixed(1) + "%";
-                    ctx.fillStyle = textColor;
-                    ctx.textAlign = s.isRight ? "right" : "left";
-                    ctx.fillText(text, s.labelX, s.labelY);
-                });
-                ctx.restore();
-            },
-        };
         state.charts.qStatus = new Chart(ctxQs, {
             type: "doughnut",
             data: { labels: statusRows.map(r => r.name),
                     datasets: [{ data: statusRows.map(statusValueFn), backgroundColor: statusPalette, borderWidth: 0 }] },
-            plugins: [ChartDataLabels, leaderLinePlugin],
+            plugins: [ChartDataLabels],
             options: chartBase({
                 cutout: qsType === "doughnut" ? "62%" : 0,
-                // Generous horizontal padding so the leader-line labels on
-                // each side (drawn by the plugin above) don't bump the card
-                // edges. Top/bottom kept tight to maximise pie size.
-                layout: { padding: { top: 16, bottom: 16, left: 110, right: 110 } },
+                layout: { padding: { top: 18, bottom: 18, left: 60, right: 60 } },
                 plugins: {
                     legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } },
                     tooltip: { callbacks: { label: c => {
@@ -10902,20 +10826,24 @@ function renderQuotes() {
                         return r.name + ": " + fmtInt(r.count) + " quotes · " + fmtMoneyFull(r.amount);
                     } } },
                     datalabels: {
-                        // Only paint a centred white-on-colour label for big
-                        // slices. Small slices return "" and are drawn instead
-                        // by our custom leaderLinePlugin at the chart edges.
+                        // Big slices (>= 8%): centred white text on the slice colour.
+                        // Small slices (< 8%): anchor at slice edge, push label
+                        //   outward, render with a dark rounded box so it
+                        //   reads cleanly against the chart background.
                         color: "#fff",
-                        textStrokeColor: "rgba(0,0,0,0.5)",
-                        textStrokeWidth: 2,
                         font: { weight: 700, size: 11 },
-                        anchor: "center",
-                        align: "center",
-                        formatter: (value, ctx) => {
-                            const pct = pctFor(ctx.dataIndex);
-                            if (pct < 8) return "";
+                        anchor: (ctx) => pctFor(ctx.dataIndex) < 8 ? "end" : "center",
+                        align:  (ctx) => pctFor(ctx.dataIndex) < 8 ? "end" : "center",
+                        offset: (ctx) => pctFor(ctx.dataIndex) < 8 ? 8 : 0,
+                        backgroundColor: (ctx) => pctFor(ctx.dataIndex) < 8 ? "rgba(40,40,40,0.92)" : null,
+                        borderRadius: (ctx) => pctFor(ctx.dataIndex) < 8 ? 4 : 0,
+                        padding: (ctx) => pctFor(ctx.dataIndex) < 8 ? { top: 3, bottom: 3, left: 6, right: 6 } : 0,
+                        textStrokeColor: (ctx) => pctFor(ctx.dataIndex) < 8 ? null : "rgba(0,0,0,0.5)",
+                        textStrokeWidth: (ctx) => pctFor(ctx.dataIndex) < 8 ? 0 : 2,
+                        formatter: (value) => {
+                            const pct = totalForPct ? (value / totalForPct * 100) : 0;
                             const valStr = state.quoteStatusMetric === "amount" ? fmtMoney(value) : fmtInt(value);
-                            return valStr + "\n" + pct.toFixed(1) + "%";
+                            return valStr + " · " + pct.toFixed(1) + "%";
                         },
                     },
                 },
@@ -11483,33 +11411,84 @@ function renderBlanketOrders() {
     });
     const statusValueFn = state.boStatusMetric === "amount" ? (r => r.amount) : (r => r.count);
     const ctxBs = document.getElementById("boStatusChart").getContext("2d");
-    state.charts.boStatus = new Chart(ctxBs, {
-        type: "doughnut",
-        data: { labels: statusRows.map(r => r.name), datasets: [{ data: statusRows.map(statusValueFn), backgroundColor: statusPalette, borderWidth: 0 }] },
-        plugins: [ChartDataLabels],
-        options: chartBase({ cutout: "62%",
-            plugins: { legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } },
-                       tooltip: { callbacks: { label: c => {
-                           const r = statusRows[c.dataIndex];
-                           return r.name + ": " + fmtInt(r.count) + " orders · " + fmtMoneyFull(r.amount);
-                       } } },
-                       datalabels: ringDataLabels({
-                           formatter: (value, ctx) => {
-                               const total = statusRows.reduce((s, r) => s + statusValueFn(r), 0);
-                               const pct = total ? (value / total * 100) : 0;
-                               if (pct < 4) return "";
-                               const valStr = state.boStatusMetric === "amount" ? fmtMoney(value) : fmtInt(value);
-                               return valStr + "\n" + pct.toFixed(0) + "%";
-                           }
-                       }) },
-            onClick: (_, els) => {
-                if (!els.length) return;
-                const r = statusRows[els[0].index];
-                state.filters.status = (state.filters.status === r.name) ? "" : r.name;
-                rebuildFiltered(); renderCurrentTab();
-            }
-        })
-    });
+    const bsType = state.boStatusChartType || "pie";
+    const totalForBsPct = statusRows.reduce((s, r) => s + statusValueFn(r), 0);
+    const bsPctFor = (i) => totalForBsPct ? (statusValueFn(statusRows[i]) / totalForBsPct * 100) : 0;
+    if (bsType === "barH" || bsType === "columnV") {
+        const isHoriz = bsType === "barH";
+        state.charts.boStatus = new Chart(ctxBs, {
+            type: "bar",
+            data: { labels: statusRows.map(r => r.name),
+                    datasets: [{ data: statusRows.map(statusValueFn), backgroundColor: statusPalette, borderRadius: 4 }] },
+            plugins: [ChartDataLabels],
+            options: chartBase({
+                indexAxis: isHoriz ? "y" : "x",
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { callbacks: { label: c => {
+                        const r = statusRows[c.dataIndex];
+                        return r.name + ": " + fmtInt(r.count) + " orders · " + fmtMoneyFull(r.amount);
+                    } } },
+                    datalabels: {
+                        anchor: "end", align: "end", clamp: true,
+                        formatter: v => state.boStatusMetric === "amount" ? fmtMoney(v) : fmtInt(v),
+                        font: { size: 11, weight: 600 },
+                        color: Chart.defaults.color,
+                    },
+                },
+                scales: isHoriz
+                    ? { x: { ticks: { callback: v => state.boStatusMetric === "amount" ? fmtMoney(v) : fmtInt(v) } } }
+                    : { y: { ticks: { callback: v => state.boStatusMetric === "amount" ? fmtMoney(v) : fmtInt(v) } } },
+                onClick: (_, els) => {
+                    if (!els.length) return;
+                    const r = statusRows[els[0].index];
+                    state.filters.status = (state.filters.status === r.name) ? "" : r.name;
+                    rebuildFiltered(); renderCurrentTab();
+                }
+            })
+        });
+    } else {
+        state.charts.boStatus = new Chart(ctxBs, {
+            type: "doughnut",
+            data: { labels: statusRows.map(r => r.name),
+                    datasets: [{ data: statusRows.map(statusValueFn), backgroundColor: statusPalette, borderWidth: 0 }] },
+            plugins: [ChartDataLabels],
+            options: chartBase({
+                cutout: bsType === "doughnut" ? "62%" : 0,
+                layout: { padding: { top: 18, bottom: 18, left: 60, right: 60 } },
+                plugins: {
+                    legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } },
+                    tooltip: { callbacks: { label: c => {
+                        const r = statusRows[c.dataIndex];
+                        return r.name + ": " + fmtInt(r.count) + " orders · " + fmtMoneyFull(r.amount);
+                    } } },
+                    datalabels: {
+                        color: "#fff",
+                        font: { weight: 700, size: 11 },
+                        anchor: (ctx) => bsPctFor(ctx.dataIndex) < 8 ? "end" : "center",
+                        align:  (ctx) => bsPctFor(ctx.dataIndex) < 8 ? "end" : "center",
+                        offset: (ctx) => bsPctFor(ctx.dataIndex) < 8 ? 8 : 0,
+                        backgroundColor: (ctx) => bsPctFor(ctx.dataIndex) < 8 ? "rgba(40,40,40,0.92)" : null,
+                        borderRadius: (ctx) => bsPctFor(ctx.dataIndex) < 8 ? 4 : 0,
+                        padding: (ctx) => bsPctFor(ctx.dataIndex) < 8 ? { top: 3, bottom: 3, left: 6, right: 6 } : 0,
+                        textStrokeColor: (ctx) => bsPctFor(ctx.dataIndex) < 8 ? null : "rgba(0,0,0,0.5)",
+                        textStrokeWidth: (ctx) => bsPctFor(ctx.dataIndex) < 8 ? 0 : 2,
+                        formatter: (value) => {
+                            const pct = totalForBsPct ? (value / totalForBsPct * 100) : 0;
+                            const valStr = state.boStatusMetric === "amount" ? fmtMoney(value) : fmtInt(value);
+                            return valStr + " · " + pct.toFixed(1) + "%";
+                        },
+                    },
+                },
+                onClick: (_, els) => {
+                    if (!els.length) return;
+                    const r = statusRows[els[0].index];
+                    state.filters.status = (state.filters.status === r.name) ? "" : r.name;
+                    rebuildFiltered(); renderCurrentTab();
+                }
+            })
+        });
+    }
 
     // Trend
     destroyChart("boTrend");
@@ -11644,7 +11623,23 @@ function renderBlanketOrders() {
                 onClick: (_, els) => {
                     if (!els.length) return;
                     const r = userRows[els[0].index];
-                    openBlanketList(bo => (bo.assignedUserID || "").trim() === r.name, "Blanket orders by user " + r.name);
+                    // Tolerant match — strip whitespace AND compare
+                    // case-insensitive so capitalisation drift between the
+                    // chart label and the underlying OData value can't
+                    // produce a "No data" modal.
+                    const target = (r.name || "").trim().toLowerCase();
+                    const allBO = state.blanketOrders || [];
+                    const userKeys = new Set();
+                    allBO.forEach(bo => {
+                        const v = (bo.assignedUserID || bo.assignedUserId || bo.assignedUser || "").toString().trim();
+                        if (v) userKeys.add(v);
+                    });
+                    console.log("[BO User filter] target=" + JSON.stringify(r.name) +
+                        ", distinct user values on " + allBO.length + " orders:", [...userKeys]);
+                    openBlanketList(bo => {
+                        const v = (bo.assignedUserID || bo.assignedUserId || bo.assignedUser || "").toString().trim().toLowerCase();
+                        return v === target;
+                    }, "Blanket orders by user " + r.name);
                 }
             })
         });
@@ -11671,7 +11666,11 @@ function renderBlanketOrders() {
                 onClick: (_, els) => {
                     if (!els.length) return;
                     const r = campRows[els[0].index];
-                    openBlanketList(bo => (bo.campaignNumber || "").trim() === r.name, "Blanket orders in campaign " + r.name);
+                    const target = (r.name || "").trim().toLowerCase();
+                    openBlanketList(bo => {
+                        const v = (bo.campaignNumber || bo.campaignNo || "").toString().trim().toLowerCase();
+                        return v === target;
+                    }, "Blanket orders in campaign " + r.name);
                 }
             })
         });
@@ -14810,6 +14809,8 @@ function wireEvents() {
     });
     document.getElementById("qTrendChartType").addEventListener("change", e => { state.quoteTrendChartType = e.target.value; renderQuotes(); });
     document.getElementById("qStatusChartType").addEventListener("change", e => { state.quoteStatusChartType = e.target.value; renderQuotes(); });
+    const boStatusTypeEl = document.getElementById("boStatusChartType");
+    if (boStatusTypeEl) boStatusTypeEl.addEventListener("change", e => { state.boStatusChartType = e.target.value; renderBlanketOrders(); });
     document.getElementById("qTrendMetric").addEventListener("change",    e => { state.quoteTrendMetric    = e.target.value; renderQuotes(); });
     document.querySelectorAll("#qTrendBucketToggle button").forEach(btn => {
         btn.addEventListener("click", () => {
