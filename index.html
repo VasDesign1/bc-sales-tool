@@ -4474,6 +4474,7 @@ const state = {
     // show as 100% GP. Populated after fetchValueEntries(). Keyed by
     // VE.Document_No + "|" + VE.Item_No.
     veCostByDocItem: new Map(),
+    veCostByInvoice: new Map(),
     veCostNonInvByDocItem: new Map(),
     byCustomer: new Map(), byItem: new Map(), byLocation: new Map(), bySalesperson: new Map(),
     currentCustomer: null, currentInvoice: null, currentItem: null,
@@ -4958,6 +4959,13 @@ function costNonInvFromLine(line, sign, postingDate, customerNumber, documentNum
     return uc * qty * sign;
 }
 function invoiceCost(inv) {
+    // Prefer Value Entry cost for this invoice when loaded — matches
+    // BC's reported cost exactly and reconciles with the Overview tab.
+    // Falls back to per-line estimation only when VE has no row for
+    // this invoice (rare; e.g. direct G/L-only invoices).
+    if (state.veCostByInvoice && inv && inv.number && state.veCostByInvoice.has(inv.number)) {
+        return Math.abs(state.veCostByInvoice.get(inv.number));
+    }
     return (inv.salesInvoiceLines || []).reduce((s, ln) => s + totalCostFromLine(ln, 1, inv.postingDate, inv.customerNumber, inv.number), 0);
 }
 function invoiceGP(inv) {
@@ -5119,6 +5127,8 @@ function aggregateByItem(invoices) {
     const map = new Map();
     for (const inv of invoices) {
         const lines = inv.salesInvoiceLines || [];
+        const invCost = invoiceCost(inv);
+        const invTotalSales = lines.reduce((s, ln) => s + lineNetAmount(ln), 0);
         for (const ln of lines) {
             if (!lineMatchesFilters(ln)) continue;
             const itemNo = ln.lineObjectNumber || ln.itemId || "";
@@ -5130,8 +5140,9 @@ function aggregateByItem(invoices) {
                 map.set(key, g);
             }
             if (ln.description) g.description = ln.description;
-            g.revenue += lineNetAmount(ln);
-            g.cost    += totalCostFromLine(ln, 1, inv.postingDate, inv.customerNumber, inv.number);
+            const lineSales = lineNetAmount(ln);
+            g.revenue += lineSales;
+            g.cost    += invTotalSales > 0 ? invCost * (lineSales / invTotalSales) : 0;
             g.qty     += num(ln.quantity);
             g.lineCount += 1;
         }
@@ -5187,6 +5198,11 @@ function aggregateBranchMonthly(invoices) {
         const fy = fiscalYear(inv.postingDate);
         const mk = monthKey(inv.postingDate);
         const lines = inv.salesInvoiceLines || [];
+        // VE-based total invoice cost — allocate to each branch line in
+        // proportion to that line's net-sales share, so the per-branch
+        // cost sums match Overview's PBI-aligned cost on identical filters.
+        const invCost = invoiceCost(inv);
+        const invTotalSales = lines.reduce((s, ln) => s + lineNetAmount(ln), 0);
         const lineGroups = new Map();
         for (const ln of lines) {
             const code = locationCode(ln.locationId);
@@ -5195,8 +5211,9 @@ function aggregateBranchMonthly(invoices) {
             const k = fy + "|" + mk + "|" + code;
             let g = lineGroups.get(k);
             if (!g) { g = { fy, monthKey: mk, branch: code, sales: 0, cost: 0, qty: 0 }; lineGroups.set(k, g); }
-            g.sales += lineNetAmount(ln);
-            g.cost  += totalCostFromLine(ln, 1, inv.postingDate, inv.customerNumber, inv.number);
+            const lineSales = lineNetAmount(ln);
+            g.sales += lineSales;
+            g.cost  += invTotalSales > 0 ? invCost * (lineSales / invTotalSales) : 0;
             g.qty   += num(ln.quantity);
         }
         for (const [k, g] of lineGroups) {
@@ -11317,10 +11334,18 @@ function renderBlanketOrders() {
         custCur.amount += amt; custCur.count += 1;
         byCust.set(custKey, custCur);
 
-        const status = bo.status || "(unknown)";
-        const statusCur = byStatus.get(status) || { name: status, count: 0, amount: 0 };
+        // Status chart now buckets by Campaign No (won / lost / follow /
+        // other) instead of BC's open/released/draft field — same model
+        // as the Sales Quote Overview tab so the two read consistently.
+        const camp = (bo.campaignNumber || "").trim().toUpperCase();
+        let statusLabel;
+        if (camp === "QUOTE WON")        statusLabel = "Won";
+        else if (camp.startsWith("LOST")) statusLabel = "Lost";
+        else if (camp && camp !== "OPEN") statusLabel = camp;   // keep specific Other-bucket names
+        else                              statusLabel = "Open / Other";
+        const statusCur = byStatus.get(statusLabel) || { name: statusLabel, count: 0, amount: 0 };
         statusCur.count += 1; statusCur.amount += amt;
-        byStatus.set(status, statusCur);
+        byStatus.set(statusLabel, statusCur);
 
         const boBucket = campaignBucket(bo.campaignNumber);
         if (boBucket === "won")         { boWonCount++;    boWonAmount    += amt; }
@@ -11377,10 +11402,14 @@ function renderBlanketOrders() {
     const statusRows = [...byStatus.values()];
     const statusPalette = statusRows.map(r => {
         const kk = (r.name || "").toLowerCase();
-        if (kk === "released") return "#2e7d32";
-        if (kk === "open")     return "#e65100";
-        if (kk === "pending approval" || kk === "pending_approval") return "#6a1b9a";
-        if (kk === "draft")    return "#607d8b";
+        if (kk === "won")              return "#1b5e20";
+        if (kk === "lost")             return "#c62828";
+        if (kk.startsWith("lost"))     return "#c62828";
+        if (kk === "open / other")     return "#fb8c00";
+        if (kk.startsWith("follow"))   return "#9c27b0";
+        if (kk === "price query")      return "#1976d2";
+        if (kk === "pending")          return "#7b1fa2";
+        if (kk === "live")             return "#00897b";
         return "#3f51b5";
     });
     const statusValueFn = state.boStatusMetric === "amount" ? (r => r.amount) : (r => r.count);
@@ -13190,38 +13219,15 @@ function renderMTD() {
         const d = new Date(inv.postingDate);
         return d >= mStart && d <= today;
     });
-    // VE-based cost per invoice (so MTD GP reconciles with Overview's
-    // Adjusted Profit on the same date range). Walks state.valueEntries
-    // once, sums Cost_Amount_Actual + Cost_Amount_Non_Invtbl per invoice
-    // for sales-type rows only. If VE isn't loaded, fall back to the
-    // per-line totalCostFromLine helper — same as before.
-    const veByDoc = new Map();
-    if (state.valueEntries && state.valueEntries.length) {
-        for (const v of state.valueEntries) {
-            if (!isSalesValueEntry(v)) continue;
-            const k = v.documentNumber;
-            if (!k) continue;
-            const cur = veByDoc.get(k) || 0;
-            veByDoc.set(k, cur + (v.costAmount || 0) + (v.costAmountNonInv || 0));
-        }
-    }
-    const haveVE = veByDoc.size > 0;
-    // Group by date
+    // Group by date — invoiceCost() now reads VE per-invoice when
+    // available, so MTD reconciles with Overview Adjusted Profit
+    // without needing a tab-specific VE map here.
     const byDate = new Map();
     for (const inv of rows) {
         const day = (inv.postingDate || "").slice(0, 10);
         const cur = byDate.get(day) || { day, sales: 0, gp: 0, invCount: 0 };
         const s = invoiceSalesAmount(inv);
-        // GP = sales − (VE cost if known, else per-line estimate).
-        // Math.abs because Value Entry's cost is signed (sales = negative
-        // movement out of inventory). Mirrors Overview's getValueEntryTotals.
-        let cost;
-        if (haveVE && veByDoc.has(inv.number)) {
-            cost = Math.abs(veByDoc.get(inv.number));
-        } else {
-            cost = invoiceCost(inv);
-        }
-        const gp = s - cost;
+        const gp = s - invoiceCost(inv);
         cur.sales += s; cur.gp += gp; cur.invCount += 1;
         byDate.set(day, cur);
     }
@@ -14112,8 +14118,18 @@ async function handleLoad() {
         // cost. Sum signed values; consumers take abs at lookup time.
         state.veCostByDocItem = new Map();
         state.veCostNonInvByDocItem = new Map();
+        // Per-invoice total cost map. Sums signed cost+costNI across all
+        // sales-type VE rows for each invoice. invoiceCost() reads from
+        // this so Branch / Salesperson / Sales-by-Item / EOM / MTD use
+        // the same cost number the Overview tab does (PBI-aligned).
+        state.veCostByInvoice = new Map();
         for (const v of state.valueEntries) {
             if (!isSalesValueEntry(v)) continue;
+            const d = v.documentNumber;
+            if (d) {
+                const prev = state.veCostByInvoice.get(d) || 0;
+                state.veCostByInvoice.set(d, prev + (v.costAmount || 0) + (v.costAmountNonInv || 0));
+            }
             if (!v.documentNumber || !v.itemNumber) continue;
             const k = v.documentNumber + "|" + v.itemNumber;
             const c = state.veCostByDocItem.get(k) || { cost: 0, qty: 0 };
@@ -14122,6 +14138,9 @@ async function handleLoad() {
             const cn = state.veCostNonInvByDocItem.get(k) || { cost: 0, qty: 0 };
             cn.cost += v.costAmountNonInv; cn.qty += v.invoicedQty;
             state.veCostNonInvByDocItem.set(k, cn);
+        }
+        if (state.veCostByInvoice.size) {
+            console.log("[Value Entry] built veCostByInvoice map · " + state.veCostByInvoice.size + " distinct documents");
         }
         if (state.veCostByDocItem.size) {
             console.log("[Value Entry] built veCostByDocItem map · " + state.veCostByDocItem.size + " (doc, item) keys");
