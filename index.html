@@ -13277,9 +13277,20 @@ function renderMTD() {
     // which can span 12 months and would scale the MTD cost to the
     // year's total (producing negative GP). Walk state.valueEntries
     // once with an MTD date predicate.
+    // CRITICAL: format dates as LOCAL YYYY-MM-DD. toISOString() converts
+    // to UTC, which in AU+10/+11 shifts local June 1 → May 31, pulling
+    // the previous month's VE rows into MTD and producing a $10k cost
+    // over-count + a negative Quantity sold from May 31 return-receipt
+    // rows.
+    const fmtLocalYMD = d => {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, "0");
+        const day = String(d.getDate()).padStart(2, "0");
+        return y + "-" + m + "-" + day;
+    };
     const dateField = state.veDateField || "postingDate";
-    const mStartISO = mStart.toISOString().slice(0, 10);
-    const todayISO  = today.toISOString().slice(0, 10);
+    const mStartISO = fmtLocalYMD(mStart);
+    const todayISO  = fmtLocalYMD(today);
     let mtdVECost = 0, mtdVEQty = 0;
     let haveMtdVE = false;
     if (state.valueEntries && state.valueEntries.length) {
