@@ -4210,9 +4210,15 @@ async function fetchResidentialDocLookup() {
         const f = md.entityTypes[typeName] || [];
         if (f.some(x => /your.?reference/i.test(x))) yourRefBearing.push(setName);
     }
-    console.log("[Residential lookup] candidate entities (after dedupe):", candidates.map(c => c.entity));
-    console.log("[Residential lookup] ALL entities with a Your_Reference column (regardless of doc-no field):", yourRefBearing);
-    console.log("[Residential lookup] entity names containing post/sinv/invoiceheader/crmemo/pstd:", postedLike);
+    // Print as joined strings — Chrome collapses array values to "Array(N)"
+    // in the console which hides exactly the names we need to inspect.
+    console.log("[Residential lookup] candidate entities (after dedupe):\n  " + candidates.map(c => c.entity).join("\n  "));
+    console.log("[Residential lookup] ALL entities with a Your_Reference column:\n  " + yourRefBearing.join("\n  "));
+    console.log("[Residential lookup] entity names containing post/sinv/invoiceheader/crmemo/pstd:\n  " + postedLike.join("\n  "));
+    // Also dump every entity name that mentions "archive" or "history" or
+    // "quote" — quote-archive support is the Plan-B we discussed.
+    const archiveLike = allSets.filter(n => /archive|history|quoteHeader|salesQuote/i.test(n));
+    console.log("[Residential lookup] entity names containing archive/history/quoteHeader/salesQuote:\n  " + archiveLike.join("\n  "));
     console.log("[Residential lookup] total entity sets in $metadata:", allSets.length);
     const coName = encodeURIComponent(await bcGetCompanyInternalName());
     let totalHits = 0;
