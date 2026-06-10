@@ -4959,14 +4959,44 @@ function costNonInvFromLine(line, sign, postingDate, customerNumber, documentNum
     return uc * qty * sign;
 }
 function invoiceCost(inv) {
-    // Prefer Value Entry cost for this invoice when loaded — matches
-    // BC's reported cost exactly and reconciles with the Overview tab.
-    // Falls back to per-line estimation only when VE has no row for
-    // this invoice (rare; e.g. direct G/L-only invoices).
-    if (state.veCostByInvoice && inv && inv.number && state.veCostByInvoice.has(inv.number)) {
-        return Math.abs(state.veCostByInvoice.get(inv.number));
-    }
+    // Per-line cost (per-(doc, item) VE preferred, ILE fallback).
+    // Branch / Salesperson / Item / Customer aggregators scale their
+    // totals to match Overview's VE net via scaleEntityCostsToVE() so
+    // per-entity nuance is preserved while the headline reconciles.
     return (inv.salesInvoiceLines || []).reduce((s, ln) => s + totalCostFromLine(ln, 1, inv.postingDate, inv.customerNumber, inv.number), 0);
+}
+
+// Rescale a set of aggregated rows so the cost total matches the VE
+// net cost shown on Overview. Each entity's cost is multiplied by the
+// same ratio so relative per-entity differences (margins, mix) are
+// preserved; only the absolute total moves into agreement.
+// Pass the field name used for cost on each row (default "cost").
+function scaleEntityCostsToVE(rows, costField) {
+    costField = costField || "cost";
+    if (!rows || !rows.length) return rows;
+    if (!state.valueEntries || !state.valueEntries.length) return rows;
+    const totalCost = rows.reduce((s, g) => s + (g[costField] || 0), 0);
+    if (totalCost <= 0) return rows;
+    let veTotal;
+    try { veTotal = getValueEntryTotals().cost; }
+    catch (e) { return rows; }
+    if (veTotal == null || veTotal <= 0) return rows;
+    const ratio = veTotal / totalCost;
+    if (Math.abs(ratio - 1) < 1e-6) return rows;
+    for (const g of rows) {
+        const newCost = (g[costField] || 0) * ratio;
+        g[costField] = newCost;
+        // Recompute GP fields if present so they stay consistent.
+        if ("revenue" in g) {
+            g.gp = g.revenue - newCost;
+            g.gpPct = g.revenue ? g.gp / g.revenue : 0;
+        }
+        if ("sales" in g) {
+            g.gp = g.sales - newCost;
+            g.gpPct = g.sales ? g.gp / g.sales : 0;
+        }
+    }
+    return rows;
 }
 function invoiceGP(inv) {
     return num(inv.totalAmountExcludingTax) - invoiceCost(inv);
@@ -5120,6 +5150,7 @@ function aggregateByCustomer(invoices) {
         g.gp    = g.revenue - g.cost;
         g.gpPct = g.revenue ? g.gp / g.revenue : 0;
     }
+    scaleEntityCostsToVE([...map.values()], "cost");
     return map;
 }
 
@@ -5127,8 +5158,6 @@ function aggregateByItem(invoices) {
     const map = new Map();
     for (const inv of invoices) {
         const lines = inv.salesInvoiceLines || [];
-        const invCost = invoiceCost(inv);
-        const invTotalSales = lines.reduce((s, ln) => s + lineNetAmount(ln), 0);
         for (const ln of lines) {
             if (!lineMatchesFilters(ln)) continue;
             const itemNo = ln.lineObjectNumber || ln.itemId || "";
@@ -5140,9 +5169,9 @@ function aggregateByItem(invoices) {
                 map.set(key, g);
             }
             if (ln.description) g.description = ln.description;
-            const lineSales = lineNetAmount(ln);
-            g.revenue += lineSales;
-            g.cost    += invTotalSales > 0 ? invCost * (lineSales / invTotalSales) : 0;
+            g.revenue += lineNetAmount(ln);
+            // Per-line cost — scaled in finalise step below.
+            g.cost    += totalCostFromLine(ln, 1, inv.postingDate, inv.customerNumber, inv.number);
             g.qty     += num(ln.quantity);
             g.lineCount += 1;
         }
@@ -5151,6 +5180,7 @@ function aggregateByItem(invoices) {
         g.gp    = g.revenue - g.cost;
         g.gpPct = g.revenue ? g.gp / g.revenue : 0;
     }
+    scaleEntityCostsToVE([...map.values()], "cost");
     return map;
 }
 
@@ -5198,11 +5228,6 @@ function aggregateBranchMonthly(invoices) {
         const fy = fiscalYear(inv.postingDate);
         const mk = monthKey(inv.postingDate);
         const lines = inv.salesInvoiceLines || [];
-        // VE-based total invoice cost — allocate to each branch line in
-        // proportion to that line's net-sales share, so the per-branch
-        // cost sums match Overview's PBI-aligned cost on identical filters.
-        const invCost = invoiceCost(inv);
-        const invTotalSales = lines.reduce((s, ln) => s + lineNetAmount(ln), 0);
         const lineGroups = new Map();
         for (const ln of lines) {
             const code = locationCode(ln.locationId);
@@ -5211,9 +5236,11 @@ function aggregateBranchMonthly(invoices) {
             const k = fy + "|" + mk + "|" + code;
             let g = lineGroups.get(k);
             if (!g) { g = { fy, monthKey: mk, branch: code, sales: 0, cost: 0, qty: 0 }; lineGroups.set(k, g); }
-            const lineSales = lineNetAmount(ln);
-            g.sales += lineSales;
-            g.cost  += invTotalSales > 0 ? invCost * (lineSales / invTotalSales) : 0;
+            g.sales += lineNetAmount(ln);
+            // Per-line cost preserves per-item / per-branch nuance.
+            // Post-aggregation scaling below normalises the total to
+            // match the VE-net cost shown on Overview.
+            g.cost  += totalCostFromLine(ln, 1, inv.postingDate, inv.customerNumber, inv.number);
             g.qty   += num(ln.quantity);
         }
         for (const [k, g] of lineGroups) {
@@ -5223,7 +5250,8 @@ function aggregateBranchMonthly(invoices) {
             if (inv.customerNumber) cur.customers.add(inv.customerNumber);
         }
     }
-    return [...map.values()].map(g => ({ ...g, customerCount: g.customers.size, gp: g.sales - g.cost, gpPct: g.sales ? (g.sales - g.cost) / g.sales : 0 }));
+    const rows = [...map.values()].map(g => ({ ...g, customerCount: g.customers.size, gp: g.sales - g.cost, gpPct: g.sales ? (g.sales - g.cost) / g.sales : 0 }));
+    return scaleEntityCostsToVE(rows);
 }
 
 function aggregateSalespersonMonthly(invoices) {
@@ -5241,7 +5269,8 @@ function aggregateSalespersonMonthly(invoices) {
         g.invoiceCount += 1;
         if (inv.customerNumber) g.customers.add(inv.customerNumber);
     }
-    return [...map.values()].map(g => ({ ...g, customerCount: g.customers.size, gp: g.sales - g.cost, gpPct: g.sales ? (g.sales - g.cost) / g.sales : 0 }));
+    const rows = [...map.values()].map(g => ({ ...g, customerCount: g.customers.size, gp: g.sales - g.cost, gpPct: g.sales ? (g.sales - g.cost) / g.sales : 0 }));
+    return scaleEntityCostsToVE(rows);
 }
 
 // EOM line-level rows
@@ -13219,17 +13248,23 @@ function renderMTD() {
         const d = new Date(inv.postingDate);
         return d >= mStart && d <= today;
     });
-    // Group by date — invoiceCost() now reads VE per-invoice when
-    // available, so MTD reconciles with Overview Adjusted Profit
-    // without needing a tab-specific VE map here.
+    // Group by date. Cost comes from invoiceCost() (per-line, with
+    // VE per-(doc, item) preferred at the line level), then the
+    // per-day totals are normalised by scaleEntityCostsToVE so the
+    // MTD totals reconcile to Overview Adjusted Profit.
     const byDate = new Map();
     for (const inv of rows) {
         const day = (inv.postingDate || "").slice(0, 10);
-        const cur = byDate.get(day) || { day, sales: 0, gp: 0, invCount: 0 };
+        const cur = byDate.get(day) || { day, sales: 0, cost: 0, gp: 0, invCount: 0 };
         const s = invoiceSalesAmount(inv);
-        const gp = s - invoiceCost(inv);
-        cur.sales += s; cur.gp += gp; cur.invCount += 1;
+        const c = invoiceCost(inv);
+        cur.sales += s; cur.cost += c; cur.invCount += 1;
         byDate.set(day, cur);
+    }
+    // Normalise costs against the Overview VE total then recompute GP.
+    scaleEntityCostsToVE([...byDate.values()], "cost");
+    for (const cur of byDate.values()) {
+        cur.gp = cur.sales - cur.cost;
     }
     const daily = [...byDate.values()].sort((a, b) => a.day < b.day ? -1 : 1);
     let cumSales = 0, cumGp = 0;
