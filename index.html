@@ -4257,6 +4257,105 @@ async function fetchResidentialDocLookup() {
         " · Quote_No links: " + state.docQuoteLink.size);
 }
 
+// Sales Quote Archive (BC table 5107, page 5152). Once published as a
+// Web Service, the OData v4 metadata exposes an entity carrying every
+// quote that's been converted — preserving Quote No., Your Reference,
+// Assigned User ID, original quoted amount, and customer info. This is
+// the cleanest source for "this quote was Won" because BC writes the
+// archive row at the moment of conversion and never modifies it again.
+async function fetchSalesQuoteArchive(fromISO, toISO) {
+    state.quoteArchive = new Map();   // quoteNumber -> normalised row
+    state.quoteArchiveDiagnostic = "";
+    let md;
+    try { md = await bcGetODataMetadata(); }
+    catch (e) {
+        state.quoteArchiveDiagnostic = "OData $metadata fetch failed: " + e.message;
+        return;
+    }
+    // Match common publishing names: salesQuoteArchive, SalesQuoteArchive,
+    // archivedSalesQuotes, salesHeaderArchive, etc.
+    const ARCHIVE_NAME = /quote.?archive|archive.*quote|salesheader.*archive/i;
+    const NO_FIELD     = [/^no$/i, /^number$/i];
+    const YOUR_REF     = [/^your.?reference$/i, /yourReference/i];
+    const ASSIGNED     = [/^assigned.?user.?id/i, /assigned.?user/i, /assignedUserId/i];
+    const SP_CODE      = [/^salesperson.?code$/i, /^salesperson$/i, /salespersonCode/i];
+    const CUST_NO      = [/^sell.?to.?customer.?no/i, /^customer.?no/i, /customerNumber/i, /sellToCustomerNumber/i];
+    const CUST_NAME    = [/sell.?to.?customer.?name/i, /^customer.?name/i, /customerName/i, /sellToCustomerName/i];
+    const DOC_DATE     = [/^document.?date/i, /documentDate/i, /^order.?date/i, /orderDate/i];
+    const AMOUNT       = [/^amount.*excl/i, /^total.*amount.*excl/i, /^total.*excl/i, /totalAmountExcl/i, /^amount$/i];
+    const CAMPAIGN     = [/^campaign.?no/i, /campaignNumber/i, /campaign.?no/i];
+    const DOC_TYPE     = [/^document.?type/i, /documentType/i];
+    let info = null;
+    for (const [setName, typeName] of Object.entries(md.entitySets)) {
+        if (!ARCHIVE_NAME.test(setName)) continue;
+        const fields = md.entityTypes[typeName] || [];
+        if (!fields.length) continue;
+        const fNo = bcFindField(fields, NO_FIELD);
+        if (!fNo) continue;
+        info = {
+            entity:    setName,
+            fNo,
+            fYourRef:  bcFindField(fields, YOUR_REF),
+            fAssigned: bcFindField(fields, ASSIGNED),
+            fSp:       bcFindField(fields, SP_CODE),
+            fCustNo:   bcFindField(fields, CUST_NO),
+            fCustName: bcFindField(fields, CUST_NAME),
+            fDocDate:  bcFindField(fields, DOC_DATE),
+            fAmount:   bcFindField(fields, AMOUNT),
+            fCampaign: bcFindField(fields, CAMPAIGN),
+            fDocType:  bcFindField(fields, DOC_TYPE),
+        };
+        break;
+    }
+    if (!info) {
+        state.quoteArchiveDiagnostic =
+            "Sales Quote Archive entity not found in OData metadata. Publish Page 5152 as a Web Service in BC.";
+        console.warn("[Quote archive] no entity found in $metadata");
+        return;
+    }
+    const coName = encodeURIComponent(await bcGetCompanyInternalName());
+    // Filter by document date so we only pull archived quotes from the
+    // current window — keeps payload sane on tenants with years of history.
+    let filter = "";
+    if (info.fDocDate && fromISO && toISO) {
+        filter = info.fDocDate + " ge " + fromISO + " and " + info.fDocDate + " le " + toISO;
+    }
+    // The archive holds rows for every documentType (Quote, Order, Invoice, ...);
+    // Quote-only filter cuts the noise.
+    if (info.fDocType) {
+        filter = (filter ? "(" + filter + ") and " : "") + info.fDocType + " eq 'Quote'";
+    }
+    const params = ["$top=20000"];
+    if (filter) params.push("$filter=" + encodeURIComponent(filter));
+    const url = BC_ODATA_URL + "/Company('" + coName + "')/" + info.entity + "?" + params.join("&");
+    let rows = [];
+    try { rows = await bcFetchAll(url, "Sales Quote Archive (" + info.entity + ")"); }
+    catch (e) {
+        state.quoteArchiveDiagnostic = "Archive fetch failed: " + e.message;
+        console.warn("[Quote archive] fetch failed:", e.message);
+        return;
+    }
+    if (rows.length) {
+        console.log("[Quote archive] sample row keys:", Object.keys(rows[0]).join(", "));
+    }
+    for (const r of rows) {
+        const quoteNo = r[info.fNo]; if (!quoteNo) continue;
+        const yourRef = info.fYourRef  ? (r[info.fYourRef] || "")  : "";
+        state.quoteArchive.set(quoteNo.toString(), {
+            quoteNumber:    quoteNo.toString(),
+            yourReference:  yourRef.toString(),
+            assignedUserId: info.fAssigned ? (r[info.fAssigned] || "") : "",
+            salesperson:    info.fSp       ? (r[info.fSp]       || "") : "",
+            customerNumber: info.fCustNo   ? (r[info.fCustNo]   || "") : "",
+            customerName:   info.fCustName ? (r[info.fCustName] || "") : "",
+            documentDate:   info.fDocDate  ? (r[info.fDocDate]  || "") : "",
+            amount:         info.fAmount   ? num(r[info.fAmount])      : 0,
+            campaignNumber: info.fCampaign ? (r[info.fCampaign] || "") : "",
+        });
+    }
+    console.log("[Quote archive] " + info.entity + " → " + rows.length + " rows · " + state.quoteArchive.size + " unique quote numbers");
+}
+
 // BC v2.0 REST API doesn't expose Campaign No or Assigned User ID on
 // salesQuotes. Discover the actual published OData entity via $metadata
 // and pull Campaign No / Assigned User ID from there.
@@ -10125,7 +10224,9 @@ function universeRowToListRow(r) {
         date: r._date,
         status: r._source === "quote"
             ? ({ won: "Won (quote)", lost: "Lost", follow: "Follow-up", other: "Open" }[r._bucket] || "Open")
-            : (r._source === "order" ? "Won — Order" : "Won — Invoiced"),
+            : r._source === "archive" ? "Won — Converted"
+            : r._source === "order"   ? "Won — Order"
+            :                           "Won — Invoiced",
         qty: r._qty,
         amount: r._amount,
         campaign: r._campaign || "",
@@ -10290,6 +10391,33 @@ function buildResidentialQuoteUniverse() {
             _user:           getQuoteAssignedUser(q) || "",
             _status:         q.status || "(unknown)",
         }, 1);
+    }
+    // 1b) Sales Quote Archive — every quote BC moved here on conversion.
+    //     Treated as Won. Filtered by Residential when Your_Reference is
+    //     populated; if it's blank we trust that all live quotes are
+    //     Residential per the user's workflow note.
+    for (const arc of (state.quoteArchive ? state.quoteArchive.values() : [])) {
+        const yourRef = (arc.yourReference || "").toLowerCase();
+        const isRes = !yourRef || yourRef === RESIDENTIAL_YOUR_REF || yourRef.startsWith(RESIDENTIAL_YOUR_REF);
+        if (!isRes) continue;
+        const key = "Q:" + arc.quoteNumber;
+        upsert(key, {
+            _source: "archive",
+            _bucket: "won",
+            _dedupeKey: arc.quoteNumber,
+            _doc: arc,
+            _docNumber: arc.quoteNumber,
+            _customerNumber: arc.customerNumber || "",
+            _customerName:   arc.customerName || arc.customerNumber || "(unknown)",
+            _salesperson:    arc.salesperson || "(unassigned)",
+            _date:           arc.documentDate || "",
+            _amount:         arc.amount || 0,
+            _qty:            0,
+            _lines:          [],
+            _campaign:       arc.campaignNumber || "QUOTE WON",
+            _user:           arc.assignedUserId || "",
+            _status:         "Archived (converted)",
+        }, 1.5);
     }
     // 2) Active sales orders flagged Residential (priority 2 → overrides quote).
     for (const so of (state.salesOrders || [])) {
@@ -10465,7 +10593,9 @@ function renderQuotes() {
         // un-converted quotes.
         const statusLabel = row._source === "quote"
             ? ({ won: "Won (quote)", lost: "Lost", follow: "Follow-up", other: "Open / Other" }[row._bucket] || "Open / Other")
-            : (row._source === "order" ? "Won — Order" : "Won — Invoiced");
+            : row._source === "archive" ? "Won — Converted"
+            : row._source === "order"   ? "Won — Order"
+            :                             "Won — Invoiced";
         const statusCur = byStatus.get(statusLabel) || { name: statusLabel, count: 0, amount: 0 };
         statusCur.count += 1; statusCur.amount += qAmount;
         byStatus.set(statusLabel, statusCur);
@@ -10745,7 +10875,7 @@ function renderQuotes() {
 // and Won-Invoice rows appear alongside their still-Open quotes.
 function buildQuoteCustomerTreeData(universe) {
     const custMap = new Map();
-    const sourceLabel = src => src === "quote" ? "Quote" : src === "order" ? "Order" : "Invoice";
+    const sourceLabel = src => src === "quote" ? "Quote" : src === "archive" ? "Quote (archived)" : src === "order" ? "Order" : "Invoice";
     for (const row of universe) {
         const custKey = row._customerNumber || "(unknown)";
         let custNode = custMap.get(custKey);
@@ -10765,7 +10895,9 @@ function buildQuoteCustomerTreeData(universe) {
         custNode.quoteCount += 1;
         const statusLabel = row._source === "quote"
             ? ({ won: "Won (quote)", lost: "Lost", follow: "Follow-up", other: "Open" }[row._bucket] || "Open")
-            : (row._source === "order" ? "Won — Order" : "Won — Invoiced");
+            : row._source === "archive" ? "Won — Converted"
+            : row._source === "order"   ? "Won — Order"
+            :                             "Won — Invoiced";
         const docNode = {
             key: "qct-doc-" + row._source + "-" + (row._docNumber || row._dedupeKey || Math.random()),
             label: "[" + sourceLabel(row._source) + "] " + (row._dedupeKey || row._docNumber || "(no number)"),
@@ -13651,7 +13783,7 @@ async function handleLoad() {
     const btn = document.getElementById("loadBtn");
     btn.disabled = true; btn.textContent = "Loading…";
     try {
-        const [locs, items, customers, invoices, iles, creditMemos, shipments, returnReceipts, quotes, quoteExtras, blanketOrders, valueEntries, salesOrders, salesOrderOutstanding, _residentialLookup] = await Promise.all([
+        const [locs, items, customers, invoices, iles, creditMemos, shipments, returnReceipts, quotes, quoteExtras, blanketOrders, valueEntries, salesOrders, salesOrderOutstanding, _residentialLookup, _quoteArchive] = await Promise.all([
             fetchLocations(),
             fetchItems(),
             fetchCustomers(),
@@ -13667,6 +13799,7 @@ async function handleLoad() {
             fetchSalesOrders(),
             fetchSalesOrderOutstandingLines(),
             fetchResidentialDocLookup(),
+            fetchSalesQuoteArchive(from, to),
         ]);
         state.salesOrders = salesOrders || [];
         state.salesOrderOutstandingLines = salesOrderOutstanding || [];
