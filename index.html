@@ -13304,6 +13304,10 @@ function renderMTD() {
             mtdVEQty     += v.invoicedQty || 0;
         }
         mtdVECost = Math.abs(costSigned + costNISigned);
+        // Match getValueEntryTotals which returns Math.abs(qty) — VE's
+        // Invoiced_Quantity is negative on sales rows (outbound stock),
+        // so the raw sum is negative even though the display is positive.
+        mtdVEQty = Math.abs(mtdVEQty);
         haveMtdVE = mtdVECost > 0;
     }
     const byDate = new Map();
