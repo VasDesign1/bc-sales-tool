@@ -4274,7 +4274,7 @@ async function fetchSalesQuoteArchive(fromISO, toISO) {
     }
     // Match common publishing names: salesQuoteArchive, SalesQuoteArchive,
     // archivedSalesQuotes, salesHeaderArchive, etc.
-    const ARCHIVE_NAME = /quote.?archive|archive.*quote|salesheader.*archive/i;
+    const ARCHIVE_NAME = /quote.{0,3}archive|archive.{0,3}quote|salesheader.{0,3}archive/i;
     const NO_FIELD     = [/^no$/i, /^number$/i];
     const YOUR_REF     = [/^your.?reference$/i, /yourReference/i];
     const ASSIGNED     = [/^assigned.?user.?id/i, /assigned.?user/i, /assignedUserId/i];
@@ -4286,12 +4286,17 @@ async function fetchSalesQuoteArchive(fromISO, toISO) {
     const CAMPAIGN     = [/^campaign.?no/i, /campaignNumber/i, /campaign.?no/i];
     const DOC_TYPE     = [/^document.?type/i, /documentType/i];
     let info = null;
+    const archiveSkipReasons = [];
     for (const [setName, typeName] of Object.entries(md.entitySets)) {
         if (!ARCHIVE_NAME.test(setName)) continue;
         const fields = md.entityTypes[typeName] || [];
-        if (!fields.length) continue;
+        // Log every candidate so we can see why one was skipped — typeName
+        // mismatches and missing No fields are the common culprits.
+        console.log("[Quote archive] candidate '" + setName + "' (typeName=" + typeName + ", " + fields.length + " fields)");
+        if (fields.length < 20) console.log("[Quote archive]   fields:", fields.join(", "));
+        if (!fields.length) { archiveSkipReasons.push(setName + ": typeName '" + typeName + "' had no fields in $metadata"); continue; }
         const fNo = bcFindField(fields, NO_FIELD);
-        if (!fNo) continue;
+        if (!fNo) { archiveSkipReasons.push(setName + ": no field matched No/Number — saw: " + fields.slice(0, 30).join(", ")); continue; }
         info = {
             entity:    setName,
             fNo,
@@ -4308,9 +4313,15 @@ async function fetchSalesQuoteArchive(fromISO, toISO) {
         break;
     }
     if (!info) {
-        state.quoteArchiveDiagnostic =
-            "Sales Quote Archive entity not found in OData metadata. Publish Page 5152 as a Web Service in BC.";
-        console.warn("[Quote archive] no entity found in $metadata");
+        if (archiveSkipReasons.length) {
+            state.quoteArchiveDiagnostic =
+                "Sales Quote Archive entity found in metadata but skipped: " + archiveSkipReasons.join(" · ");
+            console.warn("[Quote archive] entity skipped:", archiveSkipReasons);
+        } else {
+            state.quoteArchiveDiagnostic =
+                "Sales Quote Archive entity not found in OData metadata. Publish Page 5152 as a Web Service in BC.";
+            console.warn("[Quote archive] no entity matched ARCHIVE_NAME regex");
+        }
         return;
     }
     const coName = encodeURIComponent(await bcGetCompanyInternalName());
