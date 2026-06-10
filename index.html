@@ -360,16 +360,14 @@
             padding: 14px 20px 20px; overflow-y: auto; flex: 1; min-height: 0;
             background-color: inherit;
         }
-        /* Make the modal's search box stick to the top of the modal body
-           so the column headers (sticky thead below it) and search field
-           stay visible while scrolling through long lists. */
-        .modal-body .search {
-            margin-bottom: 12px;
-            position: sticky; top: 0; z-index: 7;
-            background-color: inherit;
-        }
-        /* th sits just under the sticky search bar in the modal */
-        .modal-body th { top: 44px; }
+        .modal-body .search { margin-bottom: 12px; }
+        /* Column headers stick to the top of the modal body. Search box
+           scrolls naturally with the content (no sticky on it) so we don't
+           leave a sliver between the two sticky bands for data to bleed
+           through. */
+        .modal-body th { top: 0; z-index: 8; }
+        /* Bump base th z-index too so it always wins over data row backgrounds. */
+        th { z-index: 4; }
         .row-action-btn {
             background: #eef0fb; color: #3f51b5; border: none; padding: 4px 10px;
             border-radius: 6px; cursor: pointer; font-size: 11px; font-weight: 600;
@@ -2595,7 +2593,7 @@
                     <div class="kpi k-gp"><div class="label">Won</div><div class="value" id="qKpiWon">—</div><div class="sub" id="qKpiWonSub"></div></div>
                     <div class="kpi k-avg" style="background:linear-gradient(135deg,#b71c1c,#c62828);"><div class="label">Lost</div><div class="value" id="qKpiLost">—</div><div class="sub" id="qKpiLostSub"></div></div>
                     <div class="kpi k-cust"><div class="label">Archived (historic)</div><div class="value" id="qKpiFollow">—</div><div class="sub" id="qKpiFollowSub">in archive, not in active/orders/invoices</div></div>
-                    <div class="kpi k-inv" style="background:linear-gradient(135deg,#455a64,#607d8b);"><div class="label">Uncategorised</div><div class="value" id="qKpiOther">—</div><div class="sub" id="qKpiOtherSub"></div></div>
+                    <div class="kpi k-inv" style="background:linear-gradient(135deg,#fb8c00,#ef6c00);"><div class="label">Open (in progress)</div><div class="value" id="qKpiOther">—</div><div class="sub" id="qKpiOtherSub">total quote $ still being negotiated</div></div>
                     <div class="kpi k-loc"><div class="label">Win rate</div><div class="value" id="qKpiWinRate">—</div><div class="sub">Won ÷ Total quotes</div></div>
                 </div>
                 <div class="hint" style="margin-top:-8px; margin-bottom:10px;">
@@ -2619,7 +2617,10 @@
                     </div>
                     <div class="card span-8">
                         <div class="head">
-                            <h3>Quoting trend</h3>
+                            <div>
+                                <h3>Quoting trend</h3>
+                                <div class="meta" id="qTrendDateRange">tracks the global date filter</div>
+                            </div>
                             <div style="display:flex; gap:10px; align-items:center;">
                                 <select id="qTrendChartType" class="mini-select">
                                     <option value="line" selected>Line</option>
@@ -10725,12 +10726,22 @@ function renderQuotes() {
     // ---------- Quote status doughnut ----------
     destroyChart("qStatus");
     const statusRows = [...byStatus.values()];
+    // Distinct colours per bucket so the doughnut is legible at a glance.
+    // Three flavours of green for the three Won variants (invoiced > order
+    // > active-quote-with-QUOTE-WON), red for Lost, amber for in-progress,
+    // grey for archived.
     const statusPalette = statusRows.map(r => {
         const kk = (r.name || "").toLowerCase();
-        if (kk === "accepted") return "#2e7d32";
-        if (kk === "lost")     return "#c62828";
+        if (kk === "won — invoiced")       return "#1b5e20";  // deepest green — money in the bank
+        if (kk === "won — order")          return "#43a047";  // medium green — converted, billing pending
+        if (kk === "won (quote)")          return "#81c784";  // light green — campaign-tagged but no order yet
+        if (kk === "lost")                 return "#c62828";  // red
+        if (kk === "archived (historic)")  return "#9e9e9e";  // neutral grey
+        if (kk === "other")                return "#fb8c00";  // amber — in-progress
+        // legacy fallthroughs
+        if (kk === "accepted")             return "#2e7d32";
         if (kk === "sent" || kk === "open") return "#e65100";
-        if (kk === "draft")    return "#607d8b";
+        if (kk === "draft")                return "#607d8b";
         return "#6a1b9a";
     });
     const statusValueFn = state.quoteStatusMetric === "amount" ? (r => r.amount) : (r => r.count);
@@ -10766,6 +10777,13 @@ function renderQuotes() {
 
     // ---------- Quoting trend ----------
     destroyChart("qTrend");
+    // Reflect the global toolbar From/To range under the chart heading
+    // so it's visible at a glance that the trend respects the main filter.
+    const trendDateEl = document.getElementById("qTrendDateRange");
+    if (trendDateEl) {
+        const fmtAU = iso => iso ? new Date(iso).toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" }) : "?";
+        trendDateEl.textContent = "From " + fmtAU(state.from) + " → " + fmtAU(state.to) + " · changes when you adjust the global date filter";
+    }
     const map = state.quoteTrendBucket === "day" ? byDay : state.quoteTrendBucket === "week" ? byWeek : byMonth;
     const buckets = [...map.values()].sort((a, b) => a.key < b.key ? -1 : 1);
     const isAmt = state.quoteTrendMetric === "amount";
