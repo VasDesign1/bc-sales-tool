@@ -2562,11 +2562,12 @@
             <!-- TAB: Sales Quote Overview -->
             <section data-tab-content="quotes" style="display:none;">
                 <div class="hint">
-                    Every chart on this page is clickable. Click any bar / slice / row to drill into the underlying quotes.
-                    <strong>Won</strong> = quote status <em>Accepted</em>.
-                    <strong>Lost</strong> = status <em>Lost</em>.
-                    <strong>Open / Sent</strong> = anything still pending (Draft / Open / Sent).
-                    <strong>Win rate</strong> = Won ÷ (Won + Lost).
+                    Every count is <strong>one unique Quote No.</strong> across the four Residential sources (active quotes + Quote Archive + Residential Sales Orders + Residential Posted Invoices). One quote that spawned 5 invoices = 1.
+                    <strong>Won</strong> = Quote No. has a Residential Order or Invoice, OR the active quote's Campaign No is <em>QUOTE WON</em>.
+                    <strong>Lost</strong> = active quote's Campaign No is <em>LOST - AVAILABILITY / LOST - PRICE / LOST - PROJECT</em>.
+                    <strong>Other</strong> = active quote with any other campaign (Follow Up / Open / Pending / Price Query / Live / WFB / Repricing / etc.) — sub-label kept in the by-campaign chart.
+                    <strong>Archived (historic)</strong> = Quote No. only in the archive (converted out of window, or deleted).
+                    <strong>Total</strong> = unique Quote Nos. in the archive — the denominator for Win rate.
                 </div>
                 <div id="qExtrasDiagnostic" class="hint" style="background:#fff8e1; border-left-color:#ffca28; display:none;"></div>
                 <div id="qResidentialDiagnostic" class="hint" style="background:#fff8e1; border-left-color:#ffca28; display:none;"></div>
@@ -2581,7 +2582,7 @@
                 <div class="kpi-row" style="grid-template-columns: repeat(5, 1fr);">
                     <div class="kpi k-gp"><div class="label">Won</div><div class="value" id="qKpiWon">—</div><div class="sub" id="qKpiWonSub"></div></div>
                     <div class="kpi k-avg" style="background:linear-gradient(135deg,#b71c1c,#c62828);"><div class="label">Lost</div><div class="value" id="qKpiLost">—</div><div class="sub" id="qKpiLostSub"></div></div>
-                    <div class="kpi k-cust"><div class="label">Follow-up</div><div class="value" id="qKpiFollow">—</div><div class="sub" id="qKpiFollowSub"></div></div>
+                    <div class="kpi k-cust"><div class="label">Archived (historic)</div><div class="value" id="qKpiFollow">—</div><div class="sub" id="qKpiFollowSub">in archive, not in active/orders/invoices</div></div>
                     <div class="kpi k-inv" style="background:linear-gradient(135deg,#455a64,#607d8b);"><div class="label">Uncategorised</div><div class="value" id="qKpiOther">—</div><div class="sub" id="qKpiOtherSub"></div></div>
                     <div class="kpi k-loc"><div class="label">Win rate</div><div class="value" id="qKpiWinRate">—</div><div class="sub">Won ÷ (Won + Lost)</div></div>
                 </div>
@@ -10370,123 +10371,167 @@ function logResidentialUniverseStats() {
 }
 window.logResidentialUniverseStats = logResidentialUniverseStats;
 
-// Build the deduped residential quote universe.
-// Priority when the same quote number appears in multiple sources:
-//   Invoice > Order > Quote
-// Each output row is normalised so downstream aggregation doesn't need
-// to know which source it came from.
+// Build the Residential quote universe — keyed by *unique Quote No.*.
+// One entity = one Quote No. regardless of how many archive rows /
+// orders / invoices it spawned. Bucket rules (confirmed by user):
+//   Won    = Quote No. appears in a Residential Order or Invoice, OR
+//            active quote has campaign "QUOTE WON".
+//   Lost   = active quote with campaign starting "LOST".
+//   Other  = active quote with any other campaign (FOLLOW UP /
+//            OPEN / PENDING / PRICE QUERY / etc.) — sub-label kept on
+//            row._campaign for the by-campaign breakdown.
+//   Archived = Quote No. exists ONLY in Sales Quote Archive (no active
+//            quote, no Residential order/invoice). These are historic
+//            conversions (won, but invoice posting date is outside the
+//            current date window) OR quotes that were deleted before
+//            conversion. Counted in the Total but not in Won/Lost/Other
+//            because we can't tell them apart.
+// Amount rule (confirmed): "original quote amount" — proxied by the
+// order's totalAmountExcludingTax when an order exists. Falls back to
+// the sum of invoice amounts for fully-invoiced quotes (no live order).
+// Falls back to the active quote's amount for quotes still in pipeline.
+// Archive-only quotes have no amount (archive list page doesn't expose
+// a totals field — they contribute to count but not $).
 function buildResidentialQuoteUniverse() {
-    const universe = new Map(); // key -> normalised row
-    const upsert = (key, row, priority) => {
-        const existing = universe.get(key);
-        if (!existing || priority > existing._priority) {
-            row._priority = priority;
-            universe.set(key, row);
-        }
-    };
-    // 1) Active quotes (priority 1). All quotes are treated as Residential
-    //    workflow per the user's note; we don't filter by yourReference
-    //    here because the salesperson may have left it blank on the quote.
+    const byQuoteNo = new Map();
+    const newRow = (key) => ({
+        _dedupeKey:      key,
+        _source:         "",         // "quote" | "order" | "invoice" | "archive"
+        _bucket:         "unknown",  // "won" | "lost" | "other" | "archived"
+        _doc:            null,
+        _docNumber:      "",
+        _customerNumber: "",
+        _customerName:   "",
+        _salesperson:    "",
+        _date:           "",
+        _amount:         0,
+        _qty:            0,
+        _lines:          [],
+        _campaign:       "",
+        _user:           "",
+        _status:         "",
+        _orderNumber:    "",
+        _invoiceNumbers: [],
+        _archiveDates:   [],
+        _hasActive:      false,
+        _hasArchive:     false,
+        _hasOrder:       false,
+        _hasInvoice:     false,
+    });
+
+    // 1) Active quotes — bucket from campaign.
     for (const q of (state.quotes || [])) {
-        const key = "Q:" + (q.number || q.id || ("idx-" + Math.random()));
-        const camp = getQuoteCampaign(q);
-        const bucket = campaignBucket(camp);
-        upsert(key, {
-            _source: "quote",
-            _bucket: bucket,
-            _dedupeKey: q.number || "",
-            _doc: q,
-            _docNumber: q.number || "",
-            _customerNumber: q.customerNumber || q.customerId || "",
-            _customerName:   q.customerName || q.customerNumber || "(unknown)",
-            _salesperson:    q.salesperson || "(unassigned)",
-            _date:           q.documentDate || q.invoiceDate || "",
-            _amount:         quoteAmount(q),
-            _qty:            quoteQty(q),
-            _lines:          q.salesQuoteLines || [],
-            _campaign:       camp || "",
-            _user:           getQuoteAssignedUser(q) || "",
-            _status:         q.status || "(unknown)",
-        }, 1);
+        if (!q.number) continue;
+        const u = byQuoteNo.get(q.number) || newRow(q.number);
+        byQuoteNo.set(q.number, u);
+        u._hasActive = true;
+        u._source = "quote";
+        u._doc = q;
+        u._docNumber = q.number;
+        u._customerNumber = q.customerNumber || q.customerId || "";
+        u._customerName   = q.customerName || q.customerNumber || "(unknown)";
+        u._salesperson    = q.salesperson || "(unassigned)";
+        u._date           = q.documentDate || q.invoiceDate || "";
+        u._amount         = quoteAmount(q);
+        u._qty            = quoteQty(q);
+        u._lines          = q.salesQuoteLines || [];
+        u._campaign       = getQuoteCampaign(q) || "";
+        u._user           = getQuoteAssignedUser(q) || "";
+        u._status         = q.status || "(unknown)";
+        const camp = u._campaign.toUpperCase().trim();
+        if (camp === "QUOTE WON")        u._bucket = "won";
+        else if (camp.startsWith("LOST")) u._bucket = "lost";
+        else                              u._bucket = "other";
     }
-    // 1b) Sales Quote Archive — every quote BC moved here on conversion.
-    //     Treated as Won. Filtered by Residential when Your_Reference is
-    //     populated; if it's blank we trust that all live quotes are
-    //     Residential per the user's workflow note.
+
+    // 2) Sales Quote Archive — fills in any Quote No. not already
+    //    captured by the active list. Archive-only Quote Nos. get
+    //    bucket "archived" (status unknown).
     for (const arc of (state.quoteArchive ? state.quoteArchive.values() : [])) {
-        const yourRef = (arc.yourReference || "").toLowerCase();
-        const isRes = !yourRef || yourRef === RESIDENTIAL_YOUR_REF || yourRef.startsWith(RESIDENTIAL_YOUR_REF);
-        if (!isRes) continue;
-        const key = "Q:" + arc.quoteNumber;
-        upsert(key, {
-            _source: "archive",
-            _bucket: "won",
-            _dedupeKey: arc.quoteNumber,
-            _doc: arc,
-            _docNumber: arc.quoteNumber,
-            _customerNumber: arc.customerNumber || "",
-            _customerName:   arc.customerName || arc.customerNumber || "(unknown)",
-            _salesperson:    arc.salesperson || "(unassigned)",
-            _date:           arc.documentDate || "",
-            _amount:         arc.amount || 0,
-            _qty:            0,
-            _lines:          [],
-            _campaign:       arc.campaignNumber || "QUOTE WON",
-            _user:           arc.assignedUserId || "",
-            _status:         "Archived (converted)",
-        }, 1.5);
+        if (!arc.quoteNumber) continue;
+        const u = byQuoteNo.get(arc.quoteNumber) || newRow(arc.quoteNumber);
+        byQuoteNo.set(arc.quoteNumber, u);
+        u._hasArchive = true;
+        u._archiveDates.push(arc.documentDate || "");
+        // Only fill blank fields — active quote is more authoritative.
+        if (!u._customerNumber) u._customerNumber = arc.customerNumber || "";
+        if (!u._customerName)   u._customerName   = arc.customerName || arc.customerNumber || "(unknown)";
+        if (!u._salesperson)    u._salesperson    = arc.salesperson || "(unassigned)";
+        if (!u._date)           u._date           = arc.documentDate || "";
+        if (!u._user)           u._user           = arc.assignedUserId || "";
+        if (u._bucket === "unknown") {
+            u._bucket = "archived";
+            u._source = "archive";
+            u._docNumber = arc.quoteNumber;
+            u._doc = arc;
+            u._status = "Archived (status unknown)";
+        }
     }
-    // 2) Active sales orders flagged Residential (priority 2 → overrides quote).
+
+    // 3) Residential Sales Orders — Quote No. → "Won" (trumps campaign).
+    //    Order's amount is used as the "original quote amount" proxy.
     for (const so of (state.salesOrders || [])) {
         if (!isResidentialDoc(so)) continue;
         const docNumber = so.number || so.orderNumber || so.id || "";
         const quoteNo = getOriginatingQuoteNumber(so, docNumber);
-        // Prefer Quote No. for dedupe; fall back to the order number when
-        // a quote-less order slipped through (rare — direct order entry).
-        const key = quoteNo ? "Q:" + quoteNo : "O:" + docNumber;
-        upsert(key, {
-            _source: "order",
-            _bucket: "won",
-            _dedupeKey: quoteNo || docNumber,
-            _doc: so,
-            _docNumber: docNumber,
-            _customerNumber: so.customerNumber || so.customerId || "",
-            _customerName:   so.customerName || so.customerNumber || "(unknown)",
-            _salesperson:    so.salesperson || "(unassigned)",
-            _date:           so.orderDate || so.documentDate || "",
-            _amount:         salesOrderAmount(so),
-            _qty:            salesOrderQty(so),
-            _lines:          so.salesOrderLines || [],
-            _campaign:       "QUOTE WON",
-            _user:           "",
-            _status:         so.status || "Order",
-        }, 2);
+        // Orders without a linked Quote No. still represent Won business
+        // — key them off the order number so they're counted once.
+        const key = quoteNo || ("ORDER:" + docNumber);
+        const u = byQuoteNo.get(key) || newRow(key);
+        byQuoteNo.set(key, u);
+        u._hasOrder = true;
+        u._bucket = "won";
+        u._source = "order";
+        u._orderNumber = docNumber;
+        if (!u._docNumber) u._docNumber = docNumber;
+        u._doc = so;
+        // Order amount = "original quote amount" proxy per user.
+        u._amount = salesOrderAmount(so);
+        u._qty    = salesOrderQty(so);
+        u._lines  = so.salesOrderLines || [];
+        if (!u._customerNumber) u._customerNumber = so.customerNumber || so.customerId || "";
+        if (!u._customerName)   u._customerName   = so.customerName || so.customerNumber || "(unknown)";
+        if (!u._salesperson)    u._salesperson    = so.salesperson || "(unassigned)";
+        if (!u._date)           u._date           = so.orderDate || so.documentDate || "";
+        if (!u._campaign)       u._campaign       = "QUOTE WON";
+        u._status = so.status || "Order";
     }
-    // 3) Posted invoices flagged Residential (priority 3 → overrides quote & order).
+
+    // 4) Residential Posted Invoices — Quote No. → "Won" (also trumps
+    //    campaign). ONE quote can produce many invoices; dedupe by
+    //    Quote No. Sum invoice amounts ONLY when no order is present
+    //    (otherwise the order's amount is used as the original-quote proxy).
     for (const inv of (state.invoices || [])) {
         if (!isResidentialDoc(inv)) continue;
         const docNumber = inv.number || inv.id || "";
         const quoteNo = getOriginatingQuoteNumber(inv, docNumber);
-        const key = quoteNo ? "Q:" + quoteNo : "I:" + docNumber;
-        upsert(key, {
-            _source: "invoice",
-            _bucket: "won",
-            _dedupeKey: quoteNo || docNumber,
-            _doc: inv,
-            _docNumber: docNumber,
-            _customerNumber: inv.customerNumber || "",
-            _customerName:   inv.customerName || inv.customerNumber || "(unknown)",
-            _salesperson:    inv.salesperson || "(unassigned)",
-            _date:           inv.postingDate || inv.documentDate || "",
-            _amount:         invoiceSalesAmount(inv),
-            _qty:            invoiceQty(inv),
-            _lines:          inv.salesInvoiceLines || [],
-            _campaign:       "QUOTE WON",
-            _user:           "",
-            _status:         inv.status || "Invoiced",
-        }, 3);
+        const key = quoteNo || ("INVOICE:" + docNumber);
+        const u = byQuoteNo.get(key) || newRow(key);
+        byQuoteNo.set(key, u);
+        u._hasInvoice = true;
+        u._invoiceNumbers.push(docNumber);
+        u._bucket = "won";
+        // Only surface "invoice" as the primary source when there's no
+        // live order (otherwise the order is more representative).
+        if (!u._hasOrder) {
+            u._source = "invoice";
+            u._lines = inv.salesInvoiceLines || [];
+            u._amount += invoiceSalesAmount(inv);
+            u._qty    += invoiceQty(inv);
+            if (!u._docNumber) u._docNumber = docNumber;
+            u._doc = inv;
+        }
+        if (!u._customerNumber) u._customerNumber = inv.customerNumber || "";
+        if (!u._customerName)   u._customerName   = inv.customerName || inv.customerNumber || "(unknown)";
+        if (!u._salesperson)    u._salesperson    = inv.salesperson || "(unassigned)";
+        if (!u._date)           u._date           = inv.postingDate || inv.documentDate || "";
+        if (!u._campaign)       u._campaign       = "QUOTE WON";
+        if (u._status === "Archived (status unknown)" || u._status === "(unknown)" || !u._status) {
+            u._status = inv.status || "Invoiced";
+        }
     }
-    return [...universe.values()];
+
+    return [...byQuoteNo.values()];
 }
 // Apply the same toolbar filters used by filteredQuotes() to the deduped
 // universe, so charts/tables on the Sales Quote Overview tab respect the
@@ -10510,30 +10555,24 @@ function renderQuotes() {
     // universe: active quotes + Residential sales orders + Residential
     // posted invoices, deduped by originating Quote No.
     const universe = filteredQuoteUniverse();
-    // Diagnostic banner: distinguish the lookup-missing case from the
-    // posted-invoice-gap case so the user knows exactly what's missing.
+    // Diagnostic banner: distinguish missing lookups from data gaps.
     const resiDiag = document.getElementById("qResidentialDiagnostic");
     if (resiDiag) {
-        const yrCount = state.docYourReference ? state.docYourReference.size : 0;
-        const orderHits   = (state.salesOrders || []).filter(isResidentialDoc).length;
-        const invoiceHits = (state.invoices    || []).filter(isResidentialDoc).length;
+        const yrCount       = state.docYourReference ? state.docYourReference.size : 0;
+        const archiveCount  = state.quoteArchive ? state.quoteArchive.size : 0;
+        const orderHits     = (state.salesOrders || []).filter(isResidentialDoc).length;
+        const invoiceHits   = (state.invoices    || []).filter(isResidentialDoc).length;
         const totalInvoices = (state.invoices || []).length;
-        if (state.residentialDiagnostic) {
+        const issues = [];
+        if (state.residentialDiagnostic)            issues.push("Residential lookup: " + state.residentialDiagnostic);
+        if (state.quoteArchiveDiagnostic)           issues.push("Quote Archive: " + state.quoteArchiveDiagnostic);
+        if (yrCount === 0)                          issues.push("0 documents have 'Your Reference' — posted invoices and orders won't be tagged Residential.");
+        if (archiveCount === 0)                     issues.push("Sales Quote Archive returned 0 rows — Total / Archived counts will be wrong.");
+        if (totalInvoices > 0 && invoiceHits === 0) issues.push("0 of " + fmtInt(totalInvoices) + " posted invoices were tagged Residential — Won will be under-counted.");
+        if (issues.length) {
             resiDiag.style.display = "block";
-            resiDiag.innerHTML = "<strong>Residential lookup:</strong> " + escapeHtml(state.residentialDiagnostic);
-        } else if (yrCount === 0) {
-            resiDiag.style.display = "block";
-            resiDiag.innerHTML = "<strong>Residential lookup:</strong> 0 documents tagged with 'Your Reference' yet. The tool can only show active quotes until the OData v4 fetch returns data.";
-        } else if (totalInvoices > 0 && invoiceHits === 0) {
-            // Most common state on this tenant: open-document side is fine,
-            // but Sales Invoice Header isn't published so posted invoices
-            // can't be tagged Residential.
-            resiDiag.style.display = "block";
-            resiDiag.innerHTML =
-                "<strong>Partial coverage:</strong> " + fmtInt(orderHits) + " open Residential orders are counted, but <strong>0 of " + fmtInt(totalInvoices) + " posted invoices</strong> could be tagged " +
-                "(BC's Posted Sales Invoice Header — table 112 — isn't published as an OData Web Service on this tenant). " +
-                "Ask your BC admin to publish it so fully-invoiced Residential quotes feed into the Won total. " +
-                "<br><span style='font-size:11px;'>Until then the Sales Quote Overview will under-count Won relative to PBI for any quote whose order has been fully invoiced.</span>";
+            resiDiag.innerHTML = "<strong>Data coverage notes:</strong><ul style='margin:6px 0 0 16px; font-size:12px;'>" +
+                issues.map(s => "<li>" + escapeHtml(s) + "</li>").join("") + "</ul>";
         } else {
             resiDiag.style.display = "none";
         }
@@ -10604,15 +10643,14 @@ function renderQuotes() {
         custCur.amount += qAmount; custCur.count += 1;
         byCust.set(custKey, custCur);
 
-        // Status pie now reads the universe bucket — Open / Won / Lost /
-        // Follow-up / Other — instead of the raw BC `status` field. This
-        // is what gives the user the real ratio across all converted +
-        // un-converted quotes.
-        const statusLabel = row._source === "quote"
-            ? ({ won: "Won (quote)", lost: "Lost", follow: "Follow-up", other: "Open / Other" }[row._bucket] || "Open / Other")
-            : row._source === "archive" ? "Won — Converted"
-            : row._source === "order"   ? "Won — Order"
-            :                             "Won — Invoiced";
+        // Status pie groups by the four buckets — Won / Lost / Other /
+        // Archived. "Other" preserves the original campaign as a sub-label
+        // on byCampaign so the user can still see Follow-up / Open / etc.
+        const statusLabel =
+            row._bucket === "won"      ? (row._hasInvoice ? "Won — Invoiced" : row._hasOrder ? "Won — Order" : "Won (quote)") :
+            row._bucket === "lost"     ? "Lost" :
+            row._bucket === "archived" ? "Archived (historic)" :
+                                         "Other";
         const statusCur = byStatus.get(statusLabel) || { name: statusLabel, count: 0, amount: 0 };
         statusCur.count += 1; statusCur.amount += qAmount;
         byStatus.set(statusLabel, statusCur);
@@ -10623,10 +10661,10 @@ function renderQuotes() {
             cur.amount += qAmount; cur.count += 1;
             byCampaign.set(camp, cur);
         }
-        if (row._bucket === "won")         { wonCount++;    wonAmount    += qAmount; }
-        else if (row._bucket === "lost")   { lostCount++;   lostAmount   += qAmount; }
-        else if (row._bucket === "follow") { followCount++; followAmount += qAmount; }
-        else                                { otherCount++;  otherAmount  += qAmount; }
+        if (row._bucket === "won")           { wonCount++;      wonAmount      += qAmount; }
+        else if (row._bucket === "lost")     { lostCount++;     lostAmount     += qAmount; }
+        else if (row._bucket === "archived") { followCount++;   followAmount   += qAmount; }
+        else                                  { otherCount++;    otherAmount    += qAmount; }
         const user = row._user;
         if (user) {
             const cur = byUser.get(user) || { name: user, amount: 0, count: 0 };
