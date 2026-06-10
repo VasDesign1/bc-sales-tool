@@ -236,7 +236,16 @@
         .panel-header {
             padding: 13px 18px; border-bottom: 1px solid #eef;
             display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;
+            /* Global sticky panel header — keeps the panel title and its
+               toolbar visible while the table scrolls beneath. */
+            position: sticky; top: 0; z-index: 6;
+            background-color: inherit;
         }
+        /* When the panel-header is sticky, the table's column header
+           row needs to sit *under* it (not at the very top of the panel)
+           so it doesn't poke through. Bumping z-index keeps it above the
+           data rows. */
+        .panel { position: relative; }
         .panel-header h2 { font-size: 14px; color: #1a237e; font-weight: 700; }
         .panel-header .meta { font-size: 12px; color: #888; }
         .panel-header input.search {
@@ -349,8 +358,18 @@
         .modal-close:hover { color: #c62828; }
         .modal-body {
             padding: 14px 20px 20px; overflow-y: auto; flex: 1; min-height: 0;
+            background-color: inherit;
         }
-        .modal-body .search { margin-bottom: 12px; }
+        /* Make the modal's search box stick to the top of the modal body
+           so the column headers (sticky thead below it) and search field
+           stay visible while scrolling through long lists. */
+        .modal-body .search {
+            margin-bottom: 12px;
+            position: sticky; top: 0; z-index: 7;
+            background-color: inherit;
+        }
+        /* th sits just under the sticky search bar in the modal */
+        .modal-body th { top: 44px; }
         .row-action-btn {
             background: #eef0fb; color: #3f51b5; border: none; padding: 4px 10px;
             border-radius: 6px; cursor: pointer; font-size: 11px; font-weight: 600;
@@ -363,13 +382,6 @@
         }
         .card .head .more-btn:hover,
         .panel-header .more-btn:hover { background: #eef0fb; }
-        /* EOM panel header stays glued to the top of its panel while the
-           table scrolls beneath it. Inherit the panel's background so it
-           works across every theme without per-theme overrides. */
-        #eomPanel .panel-header {
-            position: sticky; top: 0; z-index: 5;
-            background-color: inherit;
-        }
         .panel-header .gp-filter-btn {
             background: white; color: #3f51b5; border: 1px solid #d6d8eb;
             padding: 4px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600;
@@ -1415,7 +1427,7 @@
         html.theme-pavilion .card .head .meta, html.theme-pavilion .panel-header .meta { color: #6e7561; }
         html.theme-pavilion .panel-header { border-bottom: 1px solid rgba(46,51,41,0.10); }
         html.theme-pavilion .panel-header input.search { background: #ffffff; color: #2e3329; border-color: rgba(46,51,41,0.18); }
-        html.theme-pavilion th { background: transparent; color: #2e3329; border-bottom: 1px solid rgba(46,51,41,0.20); font-family: 'Inter', sans-serif; font-weight: 600; letter-spacing: 1px; }
+        html.theme-pavilion th { background: #f9f5ec; color: #2e3329; border-bottom: 1px solid rgba(46,51,41,0.20); font-family: 'Inter', sans-serif; font-weight: 600; letter-spacing: 1px; }
         html.theme-pavilion th:hover { background: rgba(110,125,94,0.06); }
         html.theme-pavilion td { color: #2e3329; border-bottom: 1px solid rgba(46,51,41,0.06); }
         html.theme-pavilion tr:hover { background: rgba(168,138,76,0.06); border-left: 2px solid #a88a4c; }
@@ -2584,7 +2596,7 @@
                     <div class="kpi k-avg" style="background:linear-gradient(135deg,#b71c1c,#c62828);"><div class="label">Lost</div><div class="value" id="qKpiLost">—</div><div class="sub" id="qKpiLostSub"></div></div>
                     <div class="kpi k-cust"><div class="label">Archived (historic)</div><div class="value" id="qKpiFollow">—</div><div class="sub" id="qKpiFollowSub">in archive, not in active/orders/invoices</div></div>
                     <div class="kpi k-inv" style="background:linear-gradient(135deg,#455a64,#607d8b);"><div class="label">Uncategorised</div><div class="value" id="qKpiOther">—</div><div class="sub" id="qKpiOtherSub"></div></div>
-                    <div class="kpi k-loc"><div class="label">Win rate</div><div class="value" id="qKpiWinRate">—</div><div class="sub">Won ÷ (Won + Lost)</div></div>
+                    <div class="kpi k-loc"><div class="label">Win rate</div><div class="value" id="qKpiWinRate">—</div><div class="sub">Won ÷ Total quotes</div></div>
                 </div>
                 <div class="hint" style="margin-top:-8px; margin-bottom:10px;">
                     Buckets read from <strong>Campaign No.</strong> on each quote (not BC's <code>status</code> field).
@@ -10233,9 +10245,15 @@ function quoteToListRow(q) {
 // quote-list modal expects, so trend/category/campaign/user clicks
 // surface orders + invoices alongside open quotes consistently.
 function universeRowToListRow(r) {
+    // Strip the internal "INVOICE:" / "ORDER:" prefix on _dedupeKey for
+    // standalone wins (invoices/orders with no linked Quote No.).
+    // What the user sees in the Quote No. column = the bare document
+    // number (e.g. SINV000578) — clearer than the internal key, and the
+    // Status column still distinguishes "Won — Invoiced" / "Won — Order".
+    const cleanKey = (r._dedupeKey || r._docNumber || "").replace(/^(INVOICE|ORDER):/, "");
     return {
         key: (r._source || "?") + ":" + (r._docNumber || r._dedupeKey || Math.random()),
-        number: r._dedupeKey || r._docNumber || "",
+        number: cleanKey,
         customer: r._customerName,
         customerNumber: r._customerNumber,
         salesperson: r._salesperson,
@@ -10698,8 +10716,11 @@ function renderQuotes() {
     document.getElementById("qKpiFollowSub").textContent = followCount ? fmtMoneyFull(followAmount) : "";
     document.getElementById("qKpiOther").textContent   = fmtInt(otherCount);
     document.getElementById("qKpiOtherSub").textContent = otherCount ? fmtMoneyFull(otherAmount) : "";
-    const decided = wonCount + lostCount;
-    document.getElementById("qKpiWinRate").textContent = decided ? fmtPct(wonCount / decided) : "—";
+    // Win rate = Won / Total (per user). Open quotes stay in the
+    // denominator so the % reflects real conversion, not "of the
+    // decided ones, how many won" (which is misleading on this tenant
+    // because Lost quotes are deleted rather than campaign-tagged).
+    document.getElementById("qKpiWinRate").textContent = universe.length ? fmtPct(wonCount / universe.length) : "—";
 
     // ---------- Quote status doughnut ----------
     destroyChart("qStatus");
@@ -10953,9 +10974,10 @@ function buildQuoteCustomerTreeData(universe) {
             : row._source === "archive" ? "Won — Converted"
             : row._source === "order"   ? "Won — Order"
             :                             "Won — Invoiced";
+        const cleanDocKey = (row._dedupeKey || row._docNumber || "(no number)").replace(/^(INVOICE|ORDER):/, "");
         const docNode = {
             key: "qct-doc-" + row._source + "-" + (row._docNumber || row._dedupeKey || Math.random()),
-            label: "[" + sourceLabel(row._source) + "] " + (row._dedupeKey || row._docNumber || "(no number)"),
+            label: "[" + sourceLabel(row._source) + "] " + cleanDocKey,
             sales: row._amount, qty: row._qty, quoteCount: 1,
             status: statusLabel,
             salesperson: row._salesperson,
