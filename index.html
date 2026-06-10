@@ -10800,31 +10800,66 @@ function renderQuotes() {
         });
     } else {
         // Pie (default) or Doughnut
+        const totalForPct = statusRows.reduce((s, r) => s + statusValueFn(r), 0);
+        const pctFor = (i) => totalForPct ? (statusValueFn(statusRows[i]) / totalForPct * 100) : 0;
+        // Custom leader-line plugin: for slices under 8% the datalabels
+        // plugin pushes labels outside the pie, but on its own it would
+        // leave them floating. This plugin draws a thin connector line
+        // from the slice edge to where the label sits, so the user can
+        // tell at a glance which sliver each label belongs to.
+        const leaderLinePlugin = {
+            id: "qStatusLeaderLines",
+            afterDatasetDraw: (chart, args) => {
+                const { ctx } = chart;
+                const meta = chart.getDatasetMeta(args.index);
+                if (!meta || !meta.data) return;
+                meta.data.forEach((arc, i) => {
+                    const pct = pctFor(i);
+                    if (pct >= 8) return; // only draw connector for small slices
+                    const props = arc.getProps(["x","y","startAngle","endAngle","outerRadius"], true);
+                    const mid = (props.startAngle + props.endAngle) / 2;
+                    const r1 = props.outerRadius;
+                    const r2 = r1 + 18; // length of the line from slice edge
+                    ctx.save();
+                    ctx.strokeStyle = Chart.defaults.color || "rgba(0,0,0,0.55)";
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.moveTo(props.x + Math.cos(mid) * r1, props.y + Math.sin(mid) * r1);
+                    ctx.lineTo(props.x + Math.cos(mid) * r2, props.y + Math.sin(mid) * r2);
+                    ctx.stroke();
+                    ctx.restore();
+                });
+            },
+        };
         state.charts.qStatus = new Chart(ctxQs, {
             type: "doughnut",
             data: { labels: statusRows.map(r => r.name),
                     datasets: [{ data: statusRows.map(statusValueFn), backgroundColor: statusPalette, borderWidth: 0 }] },
-            plugins: [ChartDataLabels],
+            plugins: [ChartDataLabels, leaderLinePlugin],
             options: chartBase({
-                cutout: qsType === "doughnut" ? "62%" : 0,  // 0 = full pie
+                cutout: qsType === "doughnut" ? "62%" : 0,
+                // Give the chart breathing room so external labels (small
+                // slices) don't get clipped by the card edges.
+                layout: { padding: { top: 24, bottom: 24, left: 40, right: 40 } },
                 plugins: {
                     legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } },
                     tooltip: { callbacks: { label: c => {
                         const r = statusRows[c.dataIndex];
                         return r.name + ": " + fmtInt(r.count) + " quotes · " + fmtMoneyFull(r.amount);
                     } } },
-                    // Show a label on every slice, no matter how small — connector
-                    // lines pull labels for slivers out so they remain readable.
                     datalabels: {
-                        color: "#fff",
-                        font: { weight: 700, size: 11 },
-                        textStrokeColor: "rgba(0,0,0,0.45)",
+                        // Big slices: white-on-colour text inside the slice.
+                        // Small slices (<8%): dark text pushed outside, sitting at
+                        // the end of the leader line drawn by the plugin above.
+                        anchor: (ctx) => pctFor(ctx.dataIndex) < 8 ? "end" : "center",
+                        align:  (ctx) => pctFor(ctx.dataIndex) < 8 ? "end" : "center",
+                        offset: (ctx) => pctFor(ctx.dataIndex) < 8 ? 22 : 0,
+                        color: (ctx) => pctFor(ctx.dataIndex) < 8 ? (Chart.defaults.color || "#333") : "#fff",
+                        textStrokeColor: (ctx) => pctFor(ctx.dataIndex) < 8 ? "rgba(255,255,255,0.85)" : "rgba(0,0,0,0.5)",
                         textStrokeWidth: 2,
-                        anchor: "center",
-                        align: "center",
+                        font: { weight: 700, size: 11 },
                         formatter: (value) => {
-                            const total = statusRows.reduce((s, r) => s + statusValueFn(r), 0);
-                            const pct = total ? (value / total * 100) : 0;
+                            const pct = totalForPct ? (value / totalForPct * 100) : 0;
                             const valStr = state.quoteStatusMetric === "amount" ? fmtMoney(value) : fmtInt(value);
                             return valStr + "\n" + pct.toFixed(1) + "%";
                         },
@@ -11138,6 +11173,51 @@ function renderQuoteCustomerTree(quotes) {
 // ============================================================
 function getBlanketOrderLines(bo) {
     return bo.blanketSalesOrderLines || bo.blanketOrderLines || bo.salesLines || [];
+}
+// Convert a blanket-order header to the flat row shape the TopN modal
+// expects — same idea as universeRowToListRow on the quote side.
+function blanketOrderToListRow(bo) {
+    return {
+        key: bo.id || bo.number || Math.random(),
+        number:         bo.number || "(no number)",
+        customer:       bo.customerName || bo.customerNumber || "(unknown)",
+        customerNumber: bo.customerNumber || "",
+        salesperson:    bo.salesperson || "(unassigned)",
+        date:           bo.documentDate || bo.orderDate || "",
+        status:         bo.status || "(unknown)",
+        qty:            blanketOrderQty(bo),
+        amount:         blanketOrderAmount(bo),
+        campaign:       (bo.campaignNumber || "").trim(),
+        assignedUser:   (bo.assignedUserID || "").trim(),
+    };
+}
+// Mirror of openQuoteList for the Blanket Sales Order Overview tab.
+// Used by the By-Assigned-User and By-Campaign bar charts so each bar is
+// clickable and opens the underlying orders in the standard TopN modal.
+function openBlanketList(predicate, title) {
+    const orders = filteredBlanketOrders().filter(predicate);
+    state.boListCache = orders.map(blanketOrderToListRow);
+    TOPN_DEFS.boList = {
+        title: title,
+        get: () => state.boListCache || [],
+        columns: ["Order No", "Customer", "Salesperson", "Document Date", "Status", "Qty", "Amount", ""],
+        sortKey: "amount",
+        headerKeys: {
+            "Order No": "number",
+            "Customer": "customer",
+            "Salesperson": "salesperson",
+            "Document Date": "date",
+            "Status": "status",
+            "Qty": "qty",
+            "Amount": "amount",
+        },
+        headerNumeric: new Set(["Qty", "Amount"]),
+        action: {
+            label: "Drill customer",
+            run: r => { closeTopNModal(); if (r.customerNumber) showCustomer(r.customerNumber); }
+        },
+    };
+    openTopNModal("boList");
 }
 function blanketOrderAmount(bo) {
     let a = 0;
@@ -11507,6 +11587,11 @@ function renderBlanketOrders() {
                 indexAxis: "y",
                 plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => fmtMoneyFull(c.parsed.x) + " · " + userRows[c.dataIndex].count + " orders" } } },
                 scales: { x: { ticks: { callback: v => fmtMoney(v) } } },
+                onClick: (_, els) => {
+                    if (!els.length) return;
+                    const r = userRows[els[0].index];
+                    openBlanketList(bo => (bo.assignedUserID || "").trim() === r.name, "Blanket orders by user " + r.name);
+                }
             })
         });
     }
@@ -11529,6 +11614,11 @@ function renderBlanketOrders() {
                 indexAxis: "y",
                 plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => fmtMoneyFull(c.parsed.x) + " · " + campRows[c.dataIndex].count + " orders" } } },
                 scales: { x: { ticks: { callback: v => fmtMoney(v) } } },
+                onClick: (_, els) => {
+                    if (!els.length) return;
+                    const r = campRows[els[0].index];
+                    openBlanketList(bo => (bo.campaignNumber || "").trim() === r.name, "Blanket orders in campaign " + r.name);
+                }
             })
         });
     }
