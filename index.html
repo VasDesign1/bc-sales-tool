@@ -2159,10 +2159,10 @@
             <!-- TAB: Branch Sales -->
             <section data-tab-content="branch" style="display:none;">
                 <div class="kpi-row">
-                    <div class="kpi k-rev"><div class="label">Sales</div><div class="value" id="brKpiSales">—</div></div>
-                    <div class="kpi k-qty"><div class="label">Sales Quantity</div><div class="value" id="brKpiQty">—</div></div>
-                    <div class="kpi k-gp"><div class="label">Gross Profit</div><div class="value" id="brKpiGp">—</div></div>
-                    <div class="kpi k-gpp"><div class="label">Gross Profit Margin</div><div class="value" id="brKpiGpp">—</div></div>
+                    <div class="kpi k-rev"><div class="label">Sales (excl. tax)</div><div class="value" id="brKpiSales">—</div><div class="sub" id="brKpiSalesSub">&nbsp;</div></div>
+                    <div class="kpi k-gp"><div class="label">Gross Profit $</div><div class="value" id="brKpiGp">—</div><div class="sub" id="brKpiGpSub">&nbsp;</div></div>
+                    <div class="kpi k-gpp"><div class="label">GP %</div><div class="value" id="brKpiGpp">—</div><div class="sub">overall margin</div></div>
+                    <div class="kpi k-qty"><div class="label">Qty sold</div><div class="value" id="brKpiQty">—</div><div class="sub">across all lines</div></div>
                 </div>
                 <div class="kpi-row" style="grid-template-columns: repeat(4, 1fr);">
                     <div class="kpi k-inv"><div class="label">Adjusted Sales</div><div class="value" id="brKpiAdjSales">—</div><div class="sub" id="brKpiAdjSalesSub">net of returns</div></div>
@@ -2247,10 +2247,10 @@
             <!-- TAB: Salesperson Sales -->
             <section data-tab-content="salesperson" style="display:none;">
                 <div class="kpi-row">
-                    <div class="kpi k-rev"><div class="label">Sales</div><div class="value" id="spKpiSales">—</div></div>
-                    <div class="kpi k-qty"><div class="label">Sales Quantity</div><div class="value" id="spKpiQty">—</div></div>
-                    <div class="kpi k-gp"><div class="label">Gross Profit</div><div class="value" id="spKpiGp">—</div></div>
-                    <div class="kpi k-gpp"><div class="label">Gross Profit Margin</div><div class="value" id="spKpiGpp">—</div></div>
+                    <div class="kpi k-rev"><div class="label">Sales (excl. tax)</div><div class="value" id="spKpiSales">—</div><div class="sub" id="spKpiSalesSub">&nbsp;</div></div>
+                    <div class="kpi k-gp"><div class="label">Gross Profit $</div><div class="value" id="spKpiGp">—</div><div class="sub" id="spKpiGpSub">&nbsp;</div></div>
+                    <div class="kpi k-gpp"><div class="label">GP %</div><div class="value" id="spKpiGpp">—</div><div class="sub">overall margin</div></div>
+                    <div class="kpi k-qty"><div class="label">Qty sold</div><div class="value" id="spKpiQty">—</div><div class="sub">across all lines</div></div>
                 </div>
                 <div class="kpi-row" style="grid-template-columns: repeat(4, 1fr);">
                     <div class="kpi k-inv"><div class="label">Adjusted Sales</div><div class="value" id="spKpiAdjSales">—</div><div class="sub" id="spKpiAdjSalesSub">net of returns</div></div>
@@ -2335,10 +2335,10 @@
             <!-- TAB: Sales by Item -->
             <section data-tab-content="byItem" style="display:none;">
                 <div class="kpi-row">
-                    <div class="kpi k-rev"><div class="label">Sales</div><div class="value" id="itKpiSales">—</div></div>
-                    <div class="kpi k-qty"><div class="label">Qty</div><div class="value" id="itKpiQty">—</div></div>
-                    <div class="kpi k-gp"><div class="label">GP $</div><div class="value" id="itKpiGp">—</div></div>
-                    <div class="kpi k-gpp"><div class="label">GP %</div><div class="value" id="itKpiGpp">—</div></div>
+                    <div class="kpi k-rev"><div class="label">Sales (excl. tax)</div><div class="value" id="itKpiSales">—</div><div class="sub" id="itKpiSalesSub">&nbsp;</div></div>
+                    <div class="kpi k-gp"><div class="label">Gross Profit $</div><div class="value" id="itKpiGp">—</div><div class="sub" id="itKpiGpSub">&nbsp;</div></div>
+                    <div class="kpi k-gpp"><div class="label">GP %</div><div class="value" id="itKpiGpp">—</div><div class="sub">overall margin</div></div>
+                    <div class="kpi k-qty"><div class="label">Qty sold</div><div class="value" id="itKpiQty">—</div><div class="sub">across all lines</div></div>
                 </div>
                 <div class="kpi-row" style="grid-template-columns: repeat(4, 1fr);">
                     <div class="kpi k-inv"><div class="label">Adjusted Sales</div><div class="value" id="itKpiAdjSales">—</div><div class="sub" id="itKpiAdjSalesSub">net of returns</div></div>
@@ -2879,10 +2879,16 @@
             <!-- TAB: Month-to-Date -->
             <section data-tab-content="mtd" style="display:none;">
                 <div class="kpi-row">
-                    <div class="kpi k-rev"><div class="label">MTD Sales</div><div class="value" id="mtdSales">—</div><div class="sub" id="mtdSalesSub">&nbsp;</div></div>
-                    <div class="kpi k-gp"><div class="label">MTD Gross Profit</div><div class="value" id="mtdGp">—</div><div class="sub">&nbsp;</div></div>
-                    <div class="kpi k-gpp"><div class="label">MTD GP %</div><div class="value" id="mtdGpp">—</div><div class="sub">&nbsp;</div></div>
-                    <div class="kpi k-inv"><div class="label">MTD Invoices</div><div class="value" id="mtdInv">—</div><div class="sub">&nbsp;</div></div>
+                    <div class="kpi k-rev"><div class="label">Sales (excl. tax)</div><div class="value" id="mtdSales">—</div><div class="sub" id="mtdSalesSub">&nbsp;</div></div>
+                    <div class="kpi k-gp"><div class="label">Gross Profit $</div><div class="value" id="mtdGp">—</div><div class="sub" id="mtdGpSub">&nbsp;</div></div>
+                    <div class="kpi k-gpp"><div class="label">GP %</div><div class="value" id="mtdGpp">—</div><div class="sub">overall margin</div></div>
+                    <div class="kpi k-qty"><div class="label">Qty sold</div><div class="value" id="mtdQty">—</div><div class="sub">across all lines</div></div>
+                </div>
+                <div class="kpi-row" style="grid-template-columns: repeat(4, 1fr);">
+                    <div class="kpi k-inv"><div class="label">Adjusted Sales</div><div class="value" id="mtdKpiAdjSales">—</div><div class="sub" id="mtdKpiAdjSalesSub">net of returns</div></div>
+                    <div class="kpi k-loc"><div class="label">Adjusted Cost</div><div class="value" id="mtdKpiAdjCost">—</div><div class="sub" id="mtdKpiAdjCostSub">net of returns</div></div>
+                    <div class="kpi k-cust"><div class="label">Adjusted Profit</div><div class="value" id="mtdKpiAdjGp">—</div><div class="sub" id="mtdKpiAdjGpSub">net of returns</div></div>
+                    <div class="kpi k-avg"><div class="label">Adjusted Profit Margin</div><div class="value" id="mtdKpiAdjGpp">—</div><div class="sub" id="mtdKpiAdjGppSub">after credit memos</div></div>
                 </div>
                 <div class="chart-grid">
                     <div class="card span-12">
@@ -9224,8 +9230,10 @@ function renderBranch() {
     const totGp    = rows.reduce((s, r) => s + r.gp, 0);
     const totQty   = rows.reduce((s, r) => s + r.qty, 0);
     document.getElementById("brKpiSales").textContent = fmtMoneyFull(totSales);
+    document.getElementById("brKpiSalesSub").textContent = fmtInt(state.filtered.length) + " invoices";
     document.getElementById("brKpiQty").textContent   = fmtInt(totQty);
     document.getElementById("brKpiGp").textContent    = fmtMoneyFull(totGp);
+    document.getElementById("brKpiGpSub").textContent = state.valueEntries && state.valueEntries.length ? ("cost from VE: " + fmtMoneyFull(totSales - totGp)) : "";
     document.getElementById("brKpiGpp").textContent   = fmtPct(totSales ? totGp / totSales : 0);
     paintAdjustedKpis("brKpi", totSales, totGp);
 
@@ -9267,8 +9275,10 @@ function renderSalesperson() {
     const totGp    = rows.reduce((s, r) => s + r.gp, 0);
     const totQty   = rows.reduce((s, r) => s + r.qty, 0);
     document.getElementById("spKpiSales").textContent = fmtMoneyFull(totSales);
+    document.getElementById("spKpiSalesSub").textContent = fmtInt(state.filtered.length) + " invoices";
     document.getElementById("spKpiQty").textContent   = fmtInt(totQty);
     document.getElementById("spKpiGp").textContent    = fmtMoneyFull(totGp);
+    document.getElementById("spKpiGpSub").textContent = state.valueEntries && state.valueEntries.length ? ("cost from VE: " + fmtMoneyFull(totSales - totGp)) : "";
     document.getElementById("spKpiGpp").textContent   = fmtPct(totSales ? totGp / totSales : 0);
     paintAdjustedKpis("spKpi", totSales, totGp);
 
@@ -9944,8 +9954,10 @@ function renderByItem() {
     const totGp    = rows.reduce((s, r) => s + r.gp, 0);
     const totQty   = rows.reduce((s, r) => s + r.qty, 0);
     document.getElementById("itKpiSales").textContent = fmtMoneyFull(totSales);
+    document.getElementById("itKpiSalesSub").textContent = fmtInt(state.filtered.length) + " invoices";
     document.getElementById("itKpiQty").textContent   = fmtInt(totQty);
     document.getElementById("itKpiGp").textContent    = fmtMoneyFull(totGp);
+    document.getElementById("itKpiGpSub").textContent = state.valueEntries && state.valueEntries.length ? ("cost from VE: " + fmtMoneyFull(totSales - totGp)) : "";
     document.getElementById("itKpiGpp").textContent   = fmtPct(totSales ? totGp / totSales : 0);
     paintAdjustedKpis("itKpi", totSales, totGp);
 
@@ -13279,12 +13291,18 @@ function renderMTD() {
     }
     const totSales = cumSales, totGp = cumGp;
     const totInv = rows.length;
+    // Total qty across all invoice lines in MTD window — matches Overview's Qty Sold semantic.
+    let totQty = 0;
+    for (const inv of rows) totQty += invoiceQty(inv);
     document.getElementById("mtdSales").textContent = fmtMoneyFull(totSales);
-    document.getElementById("mtdSalesSub").textContent = mStart.toLocaleDateString("en-AU", { month: "long", year: "numeric" });
+    document.getElementById("mtdSalesSub").textContent = fmtInt(totInv) + " invoices · " + mStart.toLocaleDateString("en-AU", { month: "long", year: "numeric" });
     document.getElementById("mtdGp").textContent  = fmtMoneyFull(totGp);
+    document.getElementById("mtdGpSub").textContent = state.valueEntries && state.valueEntries.length ? ("cost from VE: " + fmtMoneyFull(totSales - totGp)) : "";
     document.getElementById("mtdGpp").textContent = fmtPct(totSales ? totGp / totSales : 0);
-    document.getElementById("mtdInv").textContent = fmtInt(totInv);
+    document.getElementById("mtdQty").textContent = fmtInt(totQty);
     document.getElementById("mtdMeta").textContent = daily.length + " day" + (daily.length === 1 ? "" : "s") + " with sales";
+    // Adjusted KPIs — same shape as Overview / Branch / Salesperson / Item.
+    paintAdjustedKpis("mtdKpi", totSales, totGp);
 
     destroyChart("mtd");
     const ctx = document.getElementById("mtdChart").getContext("2d");
