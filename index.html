@@ -2178,9 +2178,9 @@
                             <div style="display:flex; gap:10px; align-items:center;">
                                 <div class="meta">click → filter</div>
                                 <select id="brTrendChartType" class="mini-select">
-                                    <option value="stackedcolumn" selected>Stacked column</option>
+                                    <option value="groupedcolumn" selected>Grouped column</option>
+                                    <option value="stackedcolumn">Stacked column</option>
                                     <option value="stackedarea">Stacked area</option>
-                                    <option value="groupedcolumn">Grouped column</option>
                                     <option value="lines">Lines</option>
                                     <option value="smoothlines">Smooth lines</option>
                                     <option value="total">Total (one series)</option>
@@ -2266,9 +2266,9 @@
                             <div style="display:flex; gap:10px; align-items:center;">
                                 <div class="meta">click → filter</div>
                                 <select id="spTrendChartType" class="mini-select">
-                                    <option value="stackedcolumn" selected>Stacked column</option>
+                                    <option value="groupedcolumn" selected>Grouped column</option>
+                                    <option value="stackedcolumn">Stacked column</option>
                                     <option value="stackedarea">Stacked area</option>
-                                    <option value="groupedcolumn">Grouped column</option>
                                     <option value="lines">Lines</option>
                                     <option value="smoothlines">Smooth lines</option>
                                     <option value="total">Total (one series)</option>
@@ -9083,7 +9083,7 @@ function renderEntityCharts(rows, opts) {
     const topEntitiesForStack = entitySorted.slice(0, 10).map(e => e.name);
     const trendCanvas = document.getElementById(prefix + "TrendChart");
     const stateKey = prefix + "TrendChartType";
-    const ct = state[stateKey] || "stackedcolumn";
+    const ct = state[stateKey] || "groupedcolumn";
     if (trendCanvas) {
         const monthLabels = months.map(m => monthLabelFromKey(m.monthKey));
         let datasets, chartType, scales, legendDisplay = true;
@@ -15153,6 +15153,44 @@ function applyChartDefaultsForTheme(theme) {
                  : theme === "pavilion"     ? "'Inter', sans-serif"
                  :                             "'Segoe UI', sans-serif"; // classic
     Chart.defaults.font.family = family;
+    // Global tooltip styling — applied to every chart unless it overrides.
+    // Format mirrors the Sales-by-month chart on Branch / Salesperson tabs:
+    //   "Series Name: $1,234.56"
+    // For value-axis charts we use the parsed y / x value; for pie/doughnut
+    // (where ctx.parsed is a bare number) we use that directly. Currency
+    // formatting via fmtMoneyFull; bare integers get fmtInt so counts read
+    // cleanly. Each chart can still set its own tooltip.callbacks.label to
+    // append context (qty, GP%, invoice count, etc.).
+    if (Chart.defaults.plugins && Chart.defaults.plugins.tooltip) {
+        const tip = Chart.defaults.plugins.tooltip;
+        tip.backgroundColor = isDark ? "rgba(10,10,10,0.92)" : "rgba(40,40,40,0.92)";
+        tip.titleColor = "#fff";
+        tip.bodyColor = "#fff";
+        tip.borderColor = "rgba(255,255,255,0.15)";
+        tip.borderWidth = 1;
+        tip.cornerRadius = 6;
+        tip.padding = { top: 8, right: 12, bottom: 8, left: 12 };
+        tip.titleFont = { weight: 700, size: 12, family };
+        tip.bodyFont = { weight: 500, size: 12, family };
+        tip.boxPadding = 6;
+        tip.displayColors = true;
+        tip.callbacks = tip.callbacks || {};
+        tip.callbacks.label = function (ctx) {
+            const ds = (ctx.dataset && ctx.dataset.label) || ctx.label || "";
+            let val = ctx.parsed;
+            if (val && typeof val === "object") {
+                val = val.y != null ? val.y : (val.x != null ? val.x : null);
+            }
+            let str;
+            if (typeof val === "number") {
+                // Integers under 1000 — treat as counts; everything else dollars.
+                str = (Number.isInteger(val) && Math.abs(val) < 1000) ? fmtInt(val) : fmtMoneyFull(val);
+            } else {
+                str = String(val == null ? "" : val);
+            }
+            return (ds ? ds + ": " : "") + str;
+        };
+    }
 }
 
 function applyTheme(theme) {
