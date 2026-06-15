@@ -221,10 +221,22 @@
             font-size: 12px; font-weight: 600; cursor: pointer;
         }
         .toggle button.active { background: linear-gradient(135deg, #3f51b5, #5c6bc0); color: white; }
-        /* Amber highlight when Adjusted view mode is active — makes it
-           obvious at a glance that charts are showing net-of-returns data. */
-        #viewModeToggle button[data-mode="adjusted"].active { background: linear-gradient(135deg, #f57c00, #fb8c00); }
-        body.view-adjusted #viewModeToggle { box-shadow: 0 0 0 2px rgba(245,124,0,0.35); border-color: #fb8c00; }
+        /* Per-chart Gross | Adjusted pill — sits in the chart-card .head
+           alongside chart-type selectors. Amber Adjusted state so the
+           user can scan a tab and see which charts are netted. */
+        .chart-view-toggle {
+            display: inline-flex; border: 1px solid #d6d8eb; border-radius: 6px;
+            overflow: hidden; font-size: 10px;
+        }
+        .chart-view-toggle button {
+            background: transparent; border: none; padding: 3px 8px;
+            font-weight: 700; cursor: pointer; color: #455a64; letter-spacing: 0.3px;
+            text-transform: uppercase;
+        }
+        .chart-view-toggle button + button { border-left: 1px solid #d6d8eb; }
+        .chart-view-toggle button.active { background: linear-gradient(135deg, #3f51b5, #5c6bc0); color: #fff; }
+        .chart-view-toggle button[data-mode="adjusted"].active { background: linear-gradient(135deg, #f57c00, #fb8c00); }
+        .card .head .chart-view-toggle { margin-left: 4px; }
         .toggle button + button { border-left: 1px solid #d6d8eb; }
         .mini-select {
             padding: 5px 8px; border: 1px solid #d6d8eb; border-radius: 8px;
@@ -1626,13 +1638,6 @@
                     <label for="snapshotAsOf">Compare as of</label>
                     <input type="datetime-local" id="snapshotAsOf">
                 </div>
-                <div class="field" title="Toggle every chart in the tool between gross figures and figures net of credit-memo returns. KPI tiles always show both — only the graphs switch.">
-                    <label>View mode</label>
-                    <div class="toggle" id="viewModeToggle">
-                        <button type="button" data-mode="gross" class="active">Gross</button>
-                        <button type="button" data-mode="adjusted">Adjusted</button>
-                    </div>
-                </div>
             </div>
 
             <div class="filter-chips" id="filterChips"></div>
@@ -2102,7 +2107,13 @@
                         <div class="chart-wrap" style="min-height:560px;"><canvas id="diTreemap"></canvas></div>
                     </div>
                     <div class="card span-4">
-                        <div class="head"><h3>Customer concentration</h3><div class="meta">how lopsided your customer base is — a few big fish vs many small ones</div></div>
+                        <div class="head">
+                            <h3>Customer concentration</h3>
+                            <div style="display:flex; gap:10px; align-items:center;">
+                                <div class="meta">how lopsided your customer base is — a few big fish vs many small ones</div>
+                                <div class="chart-view-toggle" data-chart="diLorenz" title="Gross | Adjusted (net of credit-memo returns)"><button type="button" data-mode="gross" class="active">Gross</button><button type="button" data-mode="adjusted">Adj</button></div>
+                            </div>
+                        </div>
                         <div class="kpi-row" style="grid-template-columns: 1fr; padding: 0 18px;">
                             <div class="kpi k-rev"><div class="label" id="diConcentrationLabel">Top 20% of customers drive…</div><div class="value" id="diGini">—</div><div class="sub" id="diGiniSub">&nbsp;</div></div>
                         </div>
@@ -2110,7 +2121,13 @@
                         <div class="meta" style="padding: 0 18px 12px; font-size: 11px; opacity: 0.7;">Curve bowed below the dashed line = concentrated. Straight diagonal = perfectly even spread across all customers.</div>
                     </div>
                     <div class="card span-8">
-                        <div class="head"><h3>Item bubble matrix</h3><div class="meta">X = qty · Y = avg unit price · size = revenue · colour = category</div></div>
+                        <div class="head">
+                            <h3>Item bubble matrix</h3>
+                            <div style="display:flex; gap:10px; align-items:center;">
+                                <div class="meta">X = qty · Y = avg unit price · size = revenue · colour = category</div>
+                                <div class="chart-view-toggle" data-chart="diBubble" title="Gross | Adjusted (net of credit-memo returns)"><button type="button" data-mode="gross" class="active">Gross</button><button type="button" data-mode="adjusted">Adj</button></div>
+                            </div>
+                        </div>
                         <div class="chart-wrap" style="min-height:380px;"><canvas id="diBubble"></canvas></div>
                     </div>
                     <div class="card span-6">
@@ -2182,7 +2199,13 @@
                     </div>
 
                     <div class="card span-6">
-                        <div class="head"><h3>Daily sales calendar heatmap</h3><div class="meta">click a day to drill in · use the back button to restore the previous range · dark cells = high revenue · view scrolled to most-recent end</div></div>
+                        <div class="head">
+                            <h3>Daily sales calendar heatmap</h3>
+                            <div style="display:flex; gap:10px; align-items:center;">
+                                <div class="meta">click a day to drill in · use the back button to restore the previous range · dark cells = high revenue · view scrolled to most-recent end</div>
+                                <div class="chart-view-toggle" data-chart="diCalendar" title="Gross | Adjusted (net of credit-memo returns)"><button type="button" data-mode="gross" class="active">Gross</button><button type="button" data-mode="adjusted">Adj</button></div>
+                            </div>
+                        </div>
                         <div id="diCalendarHeatmap" style="padding: 14px 18px 18px;"></div>
                     </div>
                     <div class="card span-6">
@@ -2221,6 +2244,7 @@
                                     <option value="smoothlines">Smooth lines</option>
                                     <option value="total">Total (one series)</option>
                                 </select>
+                                <div class="chart-view-toggle" data-chart="brTrend" title="Gross | Adjusted (net of credit-memo returns)"><button type="button" data-mode="gross" class="active">Gross</button><button type="button" data-mode="adjusted">Adj</button></div>
                             </div>
                         </div>
                         <div class="chart-wrap" style="min-height:340px;"><canvas id="brTrendChart"></canvas></div>
@@ -2228,16 +2252,25 @@
                     <div class="card span-4">
                         <div class="head">
                             <h3>Top branches by sales</h3>
-                            <div class="meta">click → filter</div>
+                            <div style="display:flex; gap:10px; align-items:center;">
+                                <div class="meta">click → filter</div>
+                                <div class="chart-view-toggle" data-chart="brTop" title="Gross | Adjusted (net of credit-memo returns)"><button type="button" data-mode="gross" class="active">Gross</button><button type="button" data-mode="adjusted">Adj</button></div>
+                            </div>
                         </div>
                         <div class="chart-wrap" style="min-height:340px;"><canvas id="brTopChart"></canvas></div>
                     </div>
                     <div class="card span-6">
-                        <div class="head"><h3>GP $ vs GP % by branch</h3></div>
+                        <div class="head">
+                            <h3>GP $ vs GP % by branch</h3>
+                            <div class="chart-view-toggle" data-chart="brGp" title="Gross | Adjusted (net of credit-memo returns)"><button type="button" data-mode="gross" class="active">Gross</button><button type="button" data-mode="adjusted">Adj</button></div>
+                        </div>
                         <div class="chart-wrap" style="min-height:300px;"><canvas id="brGpChart"></canvas></div>
                     </div>
                     <div class="card span-6">
-                        <div class="head"><h3>Invoices · Qty · Customers by branch</h3></div>
+                        <div class="head">
+                            <h3>Invoices · Qty · Customers by branch</h3>
+                            <div class="chart-view-toggle" data-chart="brVol" title="Gross | Adjusted (net of credit-memo returns)"><button type="button" data-mode="gross" class="active">Gross</button><button type="button" data-mode="adjusted">Adj</button></div>
+                        </div>
                         <div class="chart-wrap" style="min-height:300px;"><canvas id="brVolChart"></canvas></div>
                     </div>
                 </div>
@@ -2309,6 +2342,7 @@
                                     <option value="smoothlines">Smooth lines</option>
                                     <option value="total">Total (one series)</option>
                                 </select>
+                                <div class="chart-view-toggle" data-chart="spTrend" title="Gross | Adjusted (net of credit-memo returns)"><button type="button" data-mode="gross" class="active">Gross</button><button type="button" data-mode="adjusted">Adj</button></div>
                             </div>
                         </div>
                         <div class="chart-wrap" style="min-height:340px;"><canvas id="spTrendChart"></canvas></div>
@@ -2316,16 +2350,25 @@
                     <div class="card span-4">
                         <div class="head">
                             <h3>Top salespeople by sales</h3>
-                            <div class="meta">click → filter</div>
+                            <div style="display:flex; gap:10px; align-items:center;">
+                                <div class="meta">click → filter</div>
+                                <div class="chart-view-toggle" data-chart="spTop" title="Gross | Adjusted (net of credit-memo returns)"><button type="button" data-mode="gross" class="active">Gross</button><button type="button" data-mode="adjusted">Adj</button></div>
+                            </div>
                         </div>
                         <div class="chart-wrap" style="min-height:340px;"><canvas id="spTopChart"></canvas></div>
                     </div>
                     <div class="card span-6">
-                        <div class="head"><h3>GP $ vs GP % by salesperson</h3></div>
+                        <div class="head">
+                            <h3>GP $ vs GP % by salesperson</h3>
+                            <div class="chart-view-toggle" data-chart="spGp" title="Gross | Adjusted (net of credit-memo returns)"><button type="button" data-mode="gross" class="active">Gross</button><button type="button" data-mode="adjusted">Adj</button></div>
+                        </div>
                         <div class="chart-wrap" style="min-height:300px;"><canvas id="spGpChart"></canvas></div>
                     </div>
                     <div class="card span-6">
-                        <div class="head"><h3>Invoices · Qty · Customers by salesperson</h3></div>
+                        <div class="head">
+                            <h3>Invoices · Qty · Customers by salesperson</h3>
+                            <div class="chart-view-toggle" data-chart="spVol" title="Gross | Adjusted (net of credit-memo returns)"><button type="button" data-mode="gross" class="active">Gross</button><button type="button" data-mode="adjusted">Adj</button></div>
+                        </div>
                         <div class="chart-wrap" style="min-height:300px;"><canvas id="spVolChart"></canvas></div>
                     </div>
                 </div>
@@ -2390,17 +2433,32 @@
 
                 <div class="chart-grid">
                     <div class="card span-6">
-                        <div class="head"><h3>Top 20 items by sales</h3><div class="meta">click a bar to filter table</div></div>
+                        <div class="head">
+                            <h3>Top 20 items by sales</h3>
+                            <div style="display:flex; gap:10px; align-items:center;">
+                                <div class="meta">click a bar to filter table</div>
+                                <div class="chart-view-toggle" data-chart="itTopItems" title="Gross | Adjusted (net of credit-memo returns)"><button type="button" data-mode="gross" class="active">Gross</button><button type="button" data-mode="adjusted">Adj</button></div>
+                            </div>
+                        </div>
                         <div class="chart-wrap" style="min-height:440px;"><canvas id="itTopItemsChart"></canvas></div>
                     </div>
                     <div class="card span-6">
-                        <div class="head"><h3>Sales by item category</h3><div class="meta">click a slice to filter table</div></div>
+                        <div class="head">
+                            <h3>Sales by item category</h3>
+                            <div style="display:flex; gap:10px; align-items:center;">
+                                <div class="meta">click a slice to filter table</div>
+                                <div class="chart-view-toggle" data-chart="itCategory" title="Gross | Adjusted (net of credit-memo returns)"><button type="button" data-mode="gross" class="active">Gross</button><button type="button" data-mode="adjusted">Adj</button></div>
+                            </div>
+                        </div>
                         <div class="chart-wrap" style="min-height:440px;"><canvas id="itCategoryChart"></canvas></div>
                     </div>
                     <div class="card span-12">
                         <div class="head">
                             <h3>Item Pareto · cumulative % of sales</h3>
-                            <div class="meta" id="itParetoMeta"></div>
+                            <div style="display:flex; gap:10px; align-items:center;">
+                                <div class="meta" id="itParetoMeta"></div>
+                                <div class="chart-view-toggle" data-chart="itPareto" title="Gross | Adjusted (net of credit-memo returns)"><button type="button" data-mode="gross" class="active">Gross</button><button type="button" data-mode="adjusted">Adj</button></div>
+                            </div>
                         </div>
                         <div class="chart-wrap" style="min-height:300px;"><canvas id="itParetoChart"></canvas></div>
                     </div>
@@ -4547,8 +4605,9 @@ const state = {
     custFilter: "", itemFilter: "", eomFilter: "", customerItemFilter: "",
     filters: { location: "", salesperson: "", customer: "", customerName: "", item: "", itemDesc: "", status: "" },
     snapshotAsOf: null,
-    // "gross" (default) or "adjusted" — see scaleEntityViewMode() / applyViewModeToCharts() / etc.
-    viewMode: "gross",
+    // Per-chart view mode: { chartId: "gross" | "adjusted" }. Loaded from
+    // localStorage at startup; chartViewMode(id) reads with a "gross" fallback.
+    chartViewModes: {},
     valueEntries: [],
     salesOrders: [],
     salesOrderOutstandingLines: [],
@@ -5375,33 +5434,7 @@ function bucketInvoices(invoices, bucket) {
         cur.count += 1;
         map.set(k, cur);
     }
-    const rows = [...map.values()].sort((a, b) => a.key < b.key ? -1 : 1);
-    // View-mode adjustment — subtract bucketed credit-memo revenue per
-    // time bucket so the Overview revenue-over-time and any other
-    // bucket-driven trend chart honours the global Adjusted toggle.
-    if (state.viewMode === "adjusted") {
-        const returnsMap = bucket === "day"   ? getReturnsBuckets().byDate
-                         : bucket === "week"  ? null                   /* sum-on-the-fly below */
-                         :                       getReturnsBuckets().byMonth;
-        if (returnsMap) {
-            for (const r of rows) {
-                const ret = returnsMap.get(r.key);
-                if (ret) r.revenue -= ret.sales;
-            }
-        } else if (bucket === "week") {
-            // Re-bucket date-keyed returns into week keys.
-            const weekly = new Map();
-            for (const [dk, v] of getReturnsBuckets().byDate) {
-                const wk = bucketKey(dk, "week");
-                weekly.set(wk, (weekly.get(wk) || 0) + v.sales);
-            }
-            for (const r of rows) {
-                const sub = weekly.get(r.key);
-                if (sub) r.revenue -= sub;
-            }
-        }
-    }
-    return rows;
+    return [...map.values()].sort((a, b) => a.key < b.key ? -1 : 1);
 }
 function bucketInvoicesSplitBy(invoices, bucket, dimension) {
     const matrix = new Map(), dims = new Set();
@@ -5445,14 +5478,6 @@ function dayOfWeekCounts(invoices) {
         const d = new Date(inv.postingDate); if (isNaN(d)) continue;
         const idx = (d.getUTCDay() + 6) % 7;
         rev[idx] += invoiceSalesAmount(inv); cnt[idx] += 1;
-    }
-    // View-mode adjustment — subtract returns per day-of-week. credit
-    // memos use the same Mon=0..Sun=6 reordering applied to invoices.
-    if (state.viewMode === "adjusted") {
-        for (const [dowStr, v] of getReturnsBuckets().byDow) {
-            const idx = ((parseInt(dowStr, 10) || 0) + 6) % 7;
-            rev[idx] -= v.sales;
-        }
     }
     return { rev, cnt };
 }
@@ -5570,10 +5595,11 @@ document.addEventListener("mouseout", e => {
 // =========================================================================
 // VIEW MODE: gross vs adjusted (net of credit-memo returns)
 // =========================================================================
-// One global state.viewMode flag — when "adjusted", every aggregator
-// subtracts the matching credit-memo totals from its per-entity rows so
-// every chart in the tool reads as net-of-returns. KPI tiles keep
-// showing both side-by-side regardless of the toggle, per the user spec.
+// Per-chart pills (state.chartViewModes[chartId]) flip individual charts
+// between gross (default) and adjusted. Aggregators always produce gross
+// numbers so KPI tiles read straight — viewRowsForCharts() clones and
+// nets-out returns ONLY at chart-render time when a chart's pill is on
+// Adjusted. KPI tiles keep showing both side-by-side regardless.
 //
 // All credit memos in the current toolbar window are bucketed into a
 // shared object so each render path can pluck just the dimension it
@@ -5581,8 +5607,9 @@ document.addEventListener("mouseout", e => {
 // by month, by date, by DOW). Cost is included so GP / GP% recompute
 // cleanly. Each bucket also tracks qty so Qty-axis charts adjust too.
 //
-// IMPORTANT — applyViewMode mutates the rows in place. Aggregators
-// rebuild their rows on every render, so this is safe.
+// IMPORTANT — applyViewMode mutates the rows in place, but its callers
+// (viewRowsForCharts) always hand it a cloned array, so original
+// aggregator output is never touched.
 
 function getReturnsBuckets() {
     if (state._returnsBuckets && state._returnsBucketsKey === _returnsCacheKey()) {
@@ -5659,7 +5686,8 @@ function _returnsCacheKey() {
 // (most rows use "sales", aggregateByItem and aggregateByCustomer use
 // "revenue").
 function applyViewMode(rows, bucketMap, keyFn, revField) {
-    if (state.viewMode !== "adjusted") return rows;
+    // Caller is responsible for gating (viewRowsForCharts checks the
+    // per-chart pill before invoking us).
     if (!rows || !rows.length) return rows;
     revField = revField || "sales";
     for (const r of rows) {
@@ -5677,16 +5705,59 @@ function applyViewMode(rows, bucketMap, keyFn, revField) {
 
 // Chart-side view-mode hook. Keeps the source aggregations (and the
 // KPI-tile calculations that read them) on GROSS values; returns a
-// cloned array with returns subtracted only when the toggle is on.
-// Use this at every render site that feeds rows into a chart dataset.
-function viewRowsForCharts(rows, dim, keyFn, revField) {
-    if (state.viewMode !== "adjusted") return rows;
+// cloned array with returns subtracted only when the chart's pill is
+// flipped to Adjusted. Use this at every render site that feeds rows
+// into a chart dataset.
+function viewRowsForCharts(rows, dim, keyFn, revField, chartId) {
+    if (chartViewMode(chartId) !== "adjusted") return rows;
     if (!rows || !rows.length) return rows;
     const clone = rows.map(r => ({ ...r }));
     const buckets = getReturnsBuckets();
     const bucketMap = buckets[dim];
     if (!bucketMap) return rows;
     return applyViewMode(clone, bucketMap, keyFn, revField);
+}
+
+// =========================================================================
+// Per-chart view mode: state + persistence + pill HTML helper
+// =========================================================================
+// Each chart card head carries a small Gross | Adjusted pill. Mode is
+// stored under state.chartViewModes[chartId] and persisted as one
+// localStorage JSON blob so a reload remembers each chart's setting.
+function chartViewMode(chartId) {
+    if (!chartId) return "gross";
+    return state.chartViewModes[chartId] === "adjusted" ? "adjusted" : "gross";
+}
+function loadChartViewModes() {
+    try {
+        const raw = localStorage.getItem("bcChartViewModes");
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object") state.chartViewModes = parsed;
+    } catch (e) { /* ignore */ }
+}
+function saveChartViewModes() {
+    try { localStorage.setItem("bcChartViewModes", JSON.stringify(state.chartViewModes)); }
+    catch (e) { /* storage blocked */ }
+}
+// Apply the current mode to every chart-view-toggle button on the page.
+// Called by renderCurrentTab so freshly-rendered cards get the right state.
+function paintChartViewToggles() {
+    document.querySelectorAll(".chart-view-toggle").forEach(wrap => {
+        const id = wrap.dataset.chart;
+        const mode = chartViewMode(id);
+        wrap.querySelectorAll("button").forEach(b => b.classList.toggle("active", b.dataset.mode === mode));
+    });
+}
+// Returns a static HTML snippet for the pill — use in static HTML
+// templates. Inline so the page loads with the right visual state
+// before JS runs.
+function chartViewTogglePillHTML(chartId) {
+    const m = chartViewMode(chartId);
+    return '<div class="chart-view-toggle" data-chart="' + chartId + '" title="Gross | Adjusted (net of credit-memo returns)">'
+         +   '<button type="button" data-mode="gross"' + (m === "gross" ? ' class="active"' : '') + '>Gross</button>'
+         +   '<button type="button" data-mode="adjusted"' + (m === "adjusted" ? ' class="active"' : '') + '>Adj</button>'
+         + '</div>';
 }
 
 // Return credit-memo totals respecting the current toolbar filters —
@@ -6022,6 +6093,8 @@ function renderCurrentTab() {
         case "salespersonSalesRate":   renderSalespersonSalesRunRate(); break;
         case "salespersonMarginRate":  renderSalespersonMarginRunRate(); break;
     }
+    // Re-sync the per-chart Gross/Adj pill active-state after every tab render.
+    paintChartViewToggles();
 }
 
 function setPeriodBadge() {
@@ -6488,6 +6561,18 @@ function renderDiCalendarHeatmap() {
         if (!maxDate || d > maxDate) maxDate = d;
         daily.set(d, (daily.get(d) || 0) + invoiceSalesAmount(inv));
     }
+    // Per-chart pill: subtract credit-memo sales bucketed by date when
+    // this chart is on Adjusted. Other charts on the page are unaffected
+    // because `daily` is local.
+    if (chartViewMode("diCalendar") === "adjusted") {
+        const bucket = getReturnsBuckets().byDate;
+        for (const [d, ret] of bucket) {
+            if (!ret) continue;
+            const cur = daily.get(d) || 0;
+            const next = cur - ret.sales;
+            if (next !== 0 || daily.has(d)) daily.set(d, next);
+        }
+    }
     if (!minDate || !maxDate) {
         host.innerHTML = '<div class="empty" style="padding: 18px;">No invoices in the selected range.</div>';
         return;
@@ -6785,8 +6870,18 @@ function renderDiLorenz() {
     destroyChart("diLorenz");
     const canvas = document.getElementById("diLorenz");
     if (!canvas) return;
-    const groups = [...(state.byCustomer || new Map()).values()]
-        .map(g => g.revenue).filter(v => v > 0).sort((a, b) => a - b);
+    // Per-chart pill: subtract returns from each customer's revenue
+    // before measuring concentration. Clone first so state.byCustomer
+    // stays gross — KPI tiles on other tabs read straight from it.
+    const groups = (() => {
+        const src = [...(state.byCustomer || new Map()).values()];
+        if (chartViewMode("diLorenz") !== "adjusted") return src.map(g => g.revenue).filter(v => v > 0).sort((a, b) => a - b);
+        const bucket = getReturnsBuckets().byCustomer;
+        return src.map(g => {
+            const ret = bucket.get(g.number);
+            return (g.revenue || 0) - (ret ? ret.sales : 0);
+        }).filter(v => v > 0).sort((a, b) => a - b);
+    })();
     if (!groups.length) return;
     const total = groups.reduce((s, v) => s + v, 0);
     const n = groups.length;
@@ -7118,7 +7213,17 @@ function renderDiBubble() {
     destroyChart("diBubble");
     const canvas = document.getElementById("diBubble");
     if (!canvas) return;
+    // Per-chart pill: net out per-item returns before mapping to bubbles.
+    // Clone via spread so state.byItem stays gross.
+    const adjusted = chartViewMode("diBubble") === "adjusted";
+    const bucket = adjusted ? getReturnsBuckets().byItem : null;
     const items = [...(state.byItem || new Map()).values()]
+        .map(it => {
+            const ret = bucket && bucket.get(it.key);
+            const revenue = (it.revenue || 0) - (ret ? ret.sales : 0);
+            const qty     = (it.qty || 0)     - (ret ? ret.qty   : 0);
+            return { ...it, revenue, qty };
+        })
         .filter(it => it.revenue > 0 && it.qty > 0)
         .map(it => {
             const cat = (state.itemCategory && state.itemCategory.get(it.number)) || "(uncat)";
@@ -9096,8 +9201,7 @@ function buildOverviewSingleSeriesConfig(chartType, opts) {
 
 function renderTopCustomersChart() {
     destroyChart("topCustomers");
-    const all = viewRowsForCharts([...state.byCustomer.values()], "byCustomer", r => r.customerNumber || "(unknown)", "revenue");
-    const top = all.sort((a, b) => b.revenue - a.revenue).slice(0, 10);
+    const top = [...state.byCustomer.values()].sort((a, b) => b.revenue - a.revenue).slice(0, 10);
     const ctx = document.getElementById("topCustomersChart").getContext("2d");
     state.charts.topCustomers = new Chart(ctx, buildOverviewSingleSeriesConfig(state.topCustomersChartType, {
         labels: top.map(g => truncate(g.customerName || g.customerNumber, 28)),
@@ -9110,8 +9214,7 @@ function renderTopCustomersChart() {
 
 function renderTopItemsChart() {
     destroyChart("topItems");
-    const all = viewRowsForCharts([...state.byItem.values()], "byItem", r => r.key, "revenue");
-    const top = all.filter(it => it.revenue > 0).sort((a, b) => b.revenue - a.revenue).slice(0, 10);
+    const top = [...state.byItem.values()].filter(it => it.revenue > 0).sort((a, b) => b.revenue - a.revenue).slice(0, 10);
     const ctx = document.getElementById("topItemsChart").getContext("2d");
     state.charts.topItems = new Chart(ctx, buildOverviewSingleSeriesConfig(state.topItemsChartType, {
         labels: top.map(it => truncate((it.number ? it.number + " — " : "") + (it.description || ""), 30)),
@@ -9124,8 +9227,7 @@ function renderTopItemsChart() {
 
 function renderLocationChart() {
     destroyChart("location");
-    const all = viewRowsForCharts([...state.byLocation.values()], "byBranch", r => r.code, "revenue");
-    const rows = all.filter(r => r.revenue > 0).sort((a, b) => b.revenue - a.revenue);
+    const rows = [...state.byLocation.values()].filter(r => r.revenue > 0).sort((a, b) => b.revenue - a.revenue);
     const ctx = document.getElementById("locationChart").getContext("2d");
     state.charts.location = new Chart(ctx, buildOverviewSingleSeriesConfig(state.locationChartType, {
         labels: rows.map(r => r.code),
@@ -9143,8 +9245,7 @@ function renderLocationChart() {
 
 function renderSalespersonChart() {
     destroyChart("salesperson");
-    const all = viewRowsForCharts([...state.bySalesperson.values()], "bySalesperson", r => r.code, "revenue");
-    const rows = all.filter(r => r.revenue > 0).sort((a, b) => b.revenue - a.revenue);
+    const rows = [...state.bySalesperson.values()].filter(r => r.revenue > 0).sort((a, b) => b.revenue - a.revenue);
     const ctx = document.getElementById("salespersonChart").getContext("2d");
     state.charts.salesperson = new Chart(ctx, buildOverviewSingleSeriesConfig(state.salespersonChartType, {
         labels: rows.map(r => r.code),
@@ -9327,35 +9428,50 @@ function sortAndRenderCustomerTable() {
 // keyed by fy|monthKey|entity) — render the same four charts on both,
 // just bound to different field names + filter keys.
 function renderEntityCharts(rows, opts) {
-    const { entityField, prefix, filterKey, filterEl, paletteBase } = opts;
+    const { entityField, prefix, filterKey, filterEl, paletteBase, dim, keyFn } = opts;
 
-    // Roll up per-entity (across all months)
-    const byEntity = new Map();
-    for (const r of rows) {
-        const k = r[entityField] || "(unassigned)";
-        const cur = byEntity.get(k) || { name: k, sales: 0, gp: 0, cost: 0, qty: 0, invoiceCount: 0, customerCount: 0, customerSet: new Set() };
-        cur.sales += r.sales; cur.gp += r.gp; cur.cost += r.cost || 0;
-        cur.qty += r.qty; cur.invoiceCount += r.invoiceCount || 0;
-        if (r.customerCount) cur.customerCount += r.customerCount;
-        if (r.customers) for (const c of r.customers) cur.customerSet.add(c);
-        byEntity.set(k, cur);
+    // Roll up per-entity (across all months). Each chart gets its own
+    // rollup so its per-chart Gross/Adjusted pill can flip independently
+    // — viewRowsForCharts returns `rows` unchanged when the pill is on
+    // Gross (default), so the four calls below cost almost nothing.
+    function rollupEntities(srcRows) {
+        const byEntity = new Map();
+        for (const r of srcRows) {
+            const k = r[entityField] || "(unassigned)";
+            const cur = byEntity.get(k) || { name: k, sales: 0, gp: 0, cost: 0, qty: 0, invoiceCount: 0, customerCount: 0, customerSet: new Set() };
+            cur.sales += r.sales; cur.gp += r.gp; cur.cost += r.cost || 0;
+            cur.qty += r.qty; cur.invoiceCount += r.invoiceCount || 0;
+            if (r.customerCount) cur.customerCount += r.customerCount;
+            if (r.customers) for (const c of r.customers) cur.customerSet.add(c);
+            byEntity.set(k, cur);
+        }
+        return [...byEntity.values()]
+            .map(e => ({ ...e, gpPct: e.sales ? e.gp / e.sales : 0, customerCount: e.customerSet.size || e.customerCount }))
+            .sort((a, b) => b.sales - a.sales);
     }
-    const entitySorted = [...byEntity.values()]
-        .map(e => ({ ...e, gpPct: e.sales ? e.gp / e.sales : 0, customerCount: e.customerSet.size || e.customerCount }))
-        .sort((a, b) => b.sales - a.sales);
-    const entityIndex = new Map(entitySorted.map((e, i) => [e.name, i]));
+    const trendRows = viewRowsForCharts(rows, dim, keyFn, "sales", prefix + "Trend");
+    const topRows   = viewRowsForCharts(rows, dim, keyFn, "sales", prefix + "Top");
+    const gpRows    = viewRowsForCharts(rows, dim, keyFn, "sales", prefix + "Gp");
+    const volRows   = viewRowsForCharts(rows, dim, keyFn, "sales", prefix + "Vol");
+    const trendEntitySorted = rollupEntities(trendRows);
+    const topEntitySorted   = rollupEntities(topRows);
+    const gpEntitySorted    = rollupEntities(gpRows);
+    const volEntitySorted   = rollupEntities(volRows);
+    // Trend's per-entity stack picks the top 10 by sales — keep the
+    // ranking stable with the Trend chart's own rollup.
+    const entityIndex = new Map(trendEntitySorted.map((e, i) => [e.name, i]));
 
     // ----- 1. Monthly trend (chart type picker drives the shape) -----
     destroyChart(prefix + "Trend");
     const monthMap = new Map(); // monthKey -> {monthKey, fy, perEntity:{name: sales}}
-    for (const r of rows) {
+    for (const r of trendRows) {
         const mk = r.monthKey;
         const cur = monthMap.get(mk) || { monthKey: mk, fy: r.fy, perEntity: {} };
         cur.perEntity[r[entityField] || "(unassigned)"] = (cur.perEntity[r[entityField] || "(unassigned)"] || 0) + r.sales;
         monthMap.set(mk, cur);
     }
     const months = [...monthMap.values()].sort((a, b) => a.monthKey < b.monthKey ? -1 : 1);
-    const topEntitiesForStack = entitySorted.slice(0, 10).map(e => e.name);
+    const topEntitiesForStack = trendEntitySorted.slice(0, 10).map(e => e.name);
     const trendCanvas = document.getElementById(prefix + "TrendChart");
     const stateKey = prefix + "TrendChartType";
     const ct = state[stateKey] || "groupedcolumn";
@@ -9421,7 +9537,7 @@ function renderEntityCharts(rows, opts) {
 
     // ----- 2. Top entities by sales -----
     destroyChart(prefix + "Top");
-    const top = entitySorted.slice(0, 12);
+    const top = topEntitySorted.slice(0, 12);
     const topCanvas = document.getElementById(prefix + "TopChart");
     if (topCanvas) {
         state.charts[prefix + "Top"] = new Chart(topCanvas.getContext("2d"), {
@@ -9459,7 +9575,7 @@ function renderEntityCharts(rows, opts) {
 
     // ----- 3. GP $ vs GP % combo -----
     destroyChart(prefix + "Gp");
-    const topGp = [...entitySorted].sort((a, b) => b.gp - a.gp).slice(0, 12);
+    const topGp = [...gpEntitySorted].sort((a, b) => b.gp - a.gp).slice(0, 12);
     const gpCanvas = document.getElementById(prefix + "GpChart");
     if (gpCanvas) {
         state.charts[prefix + "Gp"] = new Chart(gpCanvas.getContext("2d"), {
@@ -9485,7 +9601,7 @@ function renderEntityCharts(rows, opts) {
 
     // ----- 4. Volume: Invoices + Qty + Customers -----
     destroyChart(prefix + "Vol");
-    const topVol = entitySorted.slice(0, 12);
+    const topVol = volEntitySorted.slice(0, 12);
     const volCanvas = document.getElementById(prefix + "VolChart");
     if (volCanvas) {
         state.charts[prefix + "Vol"] = new Chart(volCanvas.getContext("2d"), {
@@ -9525,12 +9641,15 @@ function renderBranch() {
     document.getElementById("brKpiGpp").textContent   = fmtPct(totSales ? totGp / totSales : 0);
     paintAdjustedKpis("brKpi", totSales, totGp);
 
-    // Clone + adjust rows ONLY for the charts when view mode = adjusted.
-    // KPI tiles above keep reading gross from `rows` so the
-    // "Sales (excl. tax)" tile stays gross and the Adjusted-row tiles
-    // compute once via paintAdjustedKpis (no double-subtraction).
-    const chartRows = viewRowsForCharts(rows, "byBranchMonth", r => r.fy + "|" + r.monthKey + "|" + r.branch);
-    renderEntityCharts(chartRows, { entityField: "branch", prefix: "br", filterKey: "location", filterEl: "locationFilter", paletteBase: "#3949ab" });
+    // Pass raw rows + the returns-bucket dim/keyFn so renderEntityCharts
+    // can apply each chart's own pill mode independently (Gross is a
+    // no-op). KPI tiles above keep reading gross from `rows`.
+    renderEntityCharts(rows, {
+        entityField: "branch", prefix: "br",
+        filterKey: "location", filterEl: "locationFilter", paletteBase: "#3949ab",
+        dim: "byBranchMonth",
+        keyFn: r => r.fy + "|" + r.monthKey + "|" + r.branch,
+    });
 
     const sorted = sortRowsBy([...rows], state.sortBranchTable);
     paintSortHeaders("#branchTable", state.sortBranchTable);
@@ -9577,8 +9696,12 @@ function renderSalesperson() {
     document.getElementById("spKpiGpp").textContent   = fmtPct(totSales ? totGp / totSales : 0);
     paintAdjustedKpis("spKpi", totSales, totGp);
 
-    const chartRows = viewRowsForCharts(rows, "bySalespersonMonth", r => r.fy + "|" + r.monthKey + "|" + r.salesperson);
-    renderEntityCharts(chartRows, { entityField: "salesperson", prefix: "sp", filterKey: "salesperson", filterEl: "salespersonFilter", paletteBase: "#00897b" });
+    renderEntityCharts(rows, {
+        entityField: "salesperson", prefix: "sp",
+        filterKey: "salesperson", filterEl: "salespersonFilter", paletteBase: "#00897b",
+        dim: "bySalespersonMonth",
+        keyFn: r => r.fy + "|" + r.monthKey + "|" + r.salesperson,
+    });
 
     const sorted = sortRowsBy([...rows], state.sortSalespersonTable);
     paintSortHeaders("#salespersonTable", state.sortSalespersonTable);
@@ -10259,13 +10382,15 @@ function renderByItem() {
     document.getElementById("itKpiGpp").textContent   = fmtPct(totSales ? totGp / totSales : 0);
     paintAdjustedKpis("itKpi", totSales, totGp);
 
-    // Clone + adjust rows for the charts only — KPI tiles above keep
-    // reading gross from `rows` so paintAdjustedKpis nets returns once.
-    const chartRows = viewRowsForCharts(rows, "byItem", r => r.key, "revenue");
+    // Each item chart gets its own clone — when its pill is on Gross
+    // (default) viewRowsForCharts returns `rows` unchanged at no cost.
+    const topItemsRows = viewRowsForCharts(rows, "byItem", r => r.key, "revenue", "itTopItems");
+    const categoryRows = viewRowsForCharts(rows, "byItem", r => r.key, "revenue", "itCategory");
+    const paretoRows   = viewRowsForCharts(rows, "byItem", r => r.key, "revenue", "itPareto");
     // ---------- Charts (computed off the filtered rows so they honour the cross-filter) ----------
     // Top 20 items by sales
     destroyChart("itTopItems");
-    const top20 = [...chartRows].filter(r => r.revenue > 0).sort((a, b) => b.revenue - a.revenue).slice(0, 20);
+    const top20 = [...topItemsRows].filter(r => r.revenue > 0).sort((a, b) => b.revenue - a.revenue).slice(0, 20);
     const topCtx = document.getElementById("itTopItemsChart");
     if (topCtx) {
         state.charts.itTopItems = new Chart(topCtx.getContext("2d"), {
@@ -10295,7 +10420,7 @@ function renderByItem() {
     // Sales by item category (doughnut)
     destroyChart("itCategory");
     const catMap = new Map();
-    for (const r of chartRows) {
+    for (const r of categoryRows) {
         const cur = catMap.get(r.category) || { name: r.category, amount: 0, count: 0 };
         cur.amount += r.revenue; cur.count++;
         catMap.set(r.category, cur);
@@ -10332,7 +10457,7 @@ function renderByItem() {
 
     // Pareto: cumulative % of sales
     destroyChart("itPareto");
-    const sortedForPareto = [...chartRows].filter(r => r.revenue > 0).sort((a, b) => b.revenue - a.revenue);
+    const sortedForPareto = [...paretoRows].filter(r => r.revenue > 0).sort((a, b) => b.revenue - a.revenue);
     const sumP = sortedForPareto.reduce((s, r) => s + r.revenue, 0);
     let cum = 0;
     const paretoTop = sortedForPareto.slice(0, 50);
@@ -13609,15 +13734,6 @@ function renderMTD() {
     }
     // Normalise costs against the MTD-window VE total (not toolbar range).
     scaleEntityCostsToVE([...byDate.values()], "cost", haveMtdVE ? mtdVECost : null);
-    // View-mode adjustment — subtract returns per day in the MTD window
-    // so the cumulative line + daily bar honour the global Adjusted toggle.
-    if (state.viewMode === "adjusted") {
-        const dateMap = getReturnsBuckets().byDate;
-        for (const cur of byDate.values()) {
-            const ret = dateMap.get(cur.day);
-            if (ret) { cur.sales -= ret.sales; cur.cost -= ret.cost; }
-        }
-    }
     for (const cur of byDate.values()) {
         cur.gp = cur.sales - cur.cost;
     }
@@ -14813,27 +14929,25 @@ function wireEvents() {
         });
     });
 
-    // View mode toggle (Gross | Adjusted) — global, affects every chart.
-    // Persists in localStorage so a reload remembers the last choice.
-    (function wireViewMode() {
-        const stored = (() => { try { return localStorage.getItem("bcViewMode") || ""; } catch (e) { return ""; } })();
-        if (stored === "adjusted" || stored === "gross") state.viewMode = stored;
-        const buttons = document.querySelectorAll("#viewModeToggle button");
-        const applyClass = () => {
-            buttons.forEach(b => b.classList.toggle("active", b.dataset.mode === state.viewMode));
-            document.body.classList.toggle("view-adjusted", state.viewMode === "adjusted");
-        };
-        applyClass();
-        buttons.forEach(b => b.addEventListener("click", () => {
-            if (b.dataset.mode === state.viewMode) return;
-            state.viewMode = b.dataset.mode;
-            // Invalidate the returns-buckets cache so the next render walks credit memos again.
-            state._returnsBuckets = null;
-            applyClass();
-            try { localStorage.setItem("bcViewMode", state.viewMode); } catch (e) { /* storage blocked */ }
-            renderCurrentTab();
-        }));
-    })();
+    // Per-chart view-mode pill click delegation. Each chart card head
+    // carries `<div class="chart-view-toggle" data-chart="brTrend">…</div>`;
+    // clicking a button flips that chart's mode, persists, and re-renders
+    // the active tab so the swapped data is picked up.
+    document.addEventListener("click", e => {
+        const btn = e.target && e.target.closest && e.target.closest(".chart-view-toggle button");
+        if (!btn) return;
+        const wrap = btn.parentElement;
+        const chartId = wrap && wrap.dataset && wrap.dataset.chart;
+        const mode = btn.dataset.mode;
+        if (!chartId || !mode) return;
+        if (state.chartViewModes[chartId] === mode) return;
+        state.chartViewModes[chartId] = mode;
+        // Paint active state immediately so the click feels responsive.
+        wrap.querySelectorAll("button").forEach(b => b.classList.toggle("active", b.dataset.mode === mode));
+        saveChartViewModes();
+        // Returns buckets are filter-keyed so they don't need a flush here.
+        renderCurrentTab();
+    });
 
     document.getElementById("locationFilter").addEventListener("change", e => {
         state.filters.location = e.target.value; rebuildFiltered(); renderCurrentTab();
@@ -15539,6 +15653,9 @@ function hideThemePicker() {
     const el = document.getElementById("themePicker");
     if (el) el.style.display = "none";
 }
+
+// Restore per-chart view modes from localStorage on startup.
+loadChartViewModes();
 
 document.querySelectorAll("#themePicker .opt").forEach(opt => {
     opt.addEventListener("click", () => {
