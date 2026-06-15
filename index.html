@@ -2071,30 +2071,51 @@
                 </div>
                 <div class="chart-grid">
                     <div class="card span-12">
-                        <div class="head"><h3>Sales flow · salesperson → category</h3><div class="meta">click a salesperson on the left to highlight only their flows · click a category on the right to drill into Sales by Item · click again to clear</div></div>
+                        <div class="head">
+                            <h3>Sales flow · salesperson → category</h3>
+                            <div style="display:flex; gap:10px; align-items:center;">
+                                <div class="meta">click a salesperson on the left to highlight only their flows · click a category on the right to drill into Sales by Item · click again to clear</div>
+                                <div class="chart-view-toggle" data-chart="diSankey" title="Gross | Adjusted (net of credit-memo returns)"><button type="button" data-mode="gross" class="active">Gross</button><button type="button" data-mode="adjusted">Adj</button></div>
+                            </div>
+                        </div>
                         <div class="chart-wrap" style="min-height:440px;"><canvas id="diSankey"></canvas></div>
                     </div>
 
                     <div class="card span-6">
-                        <div class="head"><h3>Sales hierarchy · sunburst</h3><div class="meta">inner ring = salesperson (click to highlight) · outer ring = item category (click to drill into Sales by Item) · hover for revenue</div></div>
+                        <div class="head">
+                            <h3>Sales hierarchy · sunburst</h3>
+                            <div style="display:flex; gap:10px; align-items:center;">
+                                <div class="meta">inner ring = salesperson (click to highlight) · outer ring = item category (click to drill into Sales by Item) · hover for revenue</div>
+                                <div class="chart-view-toggle" data-chart="diSunburst" title="Gross | Adjusted (net of credit-memo returns)"><button type="button" data-mode="gross" class="active">Gross</button><button type="button" data-mode="adjusted">Adj</button></div>
+                            </div>
+                        </div>
                         <div id="diSunburst" style="padding: 14px 18px 18px; display:flex; justify-content:center;"></div>
                     </div>
                     <div class="card span-6">
                         <div class="head">
                             <div><h3>Salesperson performance radar</h3><div class="meta">6 normalised axes · larger polygon = stronger overall · spikes show specialisation</div></div>
-                            <select id="diRadarPeriod" class="mini-select">
-                                <option value="all" selected>All loaded data</option>
-                                <option value="365">Last 12 months</option>
-                                <option value="90">Last 90 days</option>
-                                <option value="30">Last 30 days</option>
-                                <option value="filtered">Current toolbar range</option>
-                            </select>
+                            <div style="display:flex; gap:10px; align-items:center;">
+                                <select id="diRadarPeriod" class="mini-select">
+                                    <option value="all" selected>All loaded data</option>
+                                    <option value="365">Last 12 months</option>
+                                    <option value="90">Last 90 days</option>
+                                    <option value="30">Last 30 days</option>
+                                    <option value="filtered">Current toolbar range</option>
+                                </select>
+                                <div class="chart-view-toggle" data-chart="diRadar" title="Gross | Adjusted (net of credit-memo returns)"><button type="button" data-mode="gross" class="active">Gross</button><button type="button" data-mode="adjusted">Adj</button></div>
+                            </div>
                         </div>
                         <div class="chart-wrap" style="min-height:380px;"><canvas id="diRadar"></canvas></div>
                     </div>
 
                     <div class="card span-6">
-                        <div class="head"><h3>Sales pipeline funnel</h3><div class="meta">documents at each stage · conversion % shown between stages · click any bar to view the underlying customers / invoices on Overview</div></div>
+                        <div class="head">
+                            <h3>Sales pipeline funnel</h3>
+                            <div style="display:flex; gap:10px; align-items:center;">
+                                <div class="meta">documents at each stage · conversion % shown between stages · click any bar to view the underlying customers / invoices on Overview</div>
+                                <div class="chart-view-toggle" data-chart="diFunnel" title="Gross | Adjusted (net of credit-memo returns)"><button type="button" data-mode="gross" class="active">Gross</button><button type="button" data-mode="adjusted">Adj</button></div>
+                            </div>
+                        </div>
                         <div class="chart-wrap" style="min-height:380px;"><canvas id="diFunnel"></canvas></div>
                     </div>
                     <div class="card span-6">
@@ -2103,17 +2124,17 @@
                     </div>
 
                     <div class="card span-12">
-                        <div class="head"><h3>Sales treemap · category → item</h3><div class="meta">area = sales · colour = GP% (red < 0% · orange 0–10% · amber 10–20% · light green 20–30% · dark green 30%+) · click to drill into Sales by Item</div></div>
+                        <div class="head">
+                            <h3>Sales treemap · category → item</h3>
+                            <div style="display:flex; gap:10px; align-items:center;">
+                                <div class="meta">area = sales · colour = GP% (red < 0% · orange 0–10% · amber 10–20% · light green 20–30% · dark green 30%+) · click to drill into Sales by Item</div>
+                                <div class="chart-view-toggle" data-chart="diTreemap" title="Gross | Adjusted (net of credit-memo returns)"><button type="button" data-mode="gross" class="active">Gross</button><button type="button" data-mode="adjusted">Adj</button></div>
+                            </div>
+                        </div>
                         <div class="chart-wrap" style="min-height:560px;"><canvas id="diTreemap"></canvas></div>
                     </div>
                     <div class="card span-4">
-                        <div class="head">
-                            <h3>Customer concentration</h3>
-                            <div style="display:flex; gap:10px; align-items:center;">
-                                <div class="meta">how lopsided your customer base is — a few big fish vs many small ones</div>
-                                <div class="chart-view-toggle" data-chart="diLorenz" title="Gross | Adjusted (net of credit-memo returns)"><button type="button" data-mode="gross" class="active">Gross</button><button type="button" data-mode="adjusted">Adj</button></div>
-                            </div>
-                        </div>
+                        <div class="head"><h3>Customer concentration</h3><div class="meta">how lopsided your customer base is — a few big fish vs many small ones</div></div>
                         <div class="kpi-row" style="grid-template-columns: 1fr; padding: 0 18px;">
                             <div class="kpi k-rev"><div class="label" id="diConcentrationLabel">Top 20% of customers drive…</div><div class="value" id="diGini">—</div><div class="sub" id="diGiniSub">&nbsp;</div></div>
                         </div>
@@ -2131,15 +2152,33 @@
                         <div class="chart-wrap" style="min-height:380px;"><canvas id="diBubble"></canvas></div>
                     </div>
                     <div class="card span-6">
-                        <div class="head"><h3 id="diWaterfallTitle">Period-over-period waterfall</h3><div class="meta" id="diWaterfallMeta">left bar = prior period total · floating bars show what added (green) or subtracted (red) · right bar = current period</div></div>
+                        <div class="head">
+                            <h3 id="diWaterfallTitle">Period-over-period waterfall</h3>
+                            <div style="display:flex; gap:10px; align-items:center;">
+                                <div class="meta" id="diWaterfallMeta">left bar = prior period total · floating bars show what added (green) or subtracted (red) · right bar = current period</div>
+                                <div class="chart-view-toggle" data-chart="diWaterfall" title="Gross | Adjusted (net of credit-memo returns)"><button type="button" data-mode="gross" class="active">Gross</button><button type="button" data-mode="adjusted">Adj</button></div>
+                            </div>
+                        </div>
                         <div class="chart-wrap" style="min-height:340px;"><canvas id="diWaterfall"></canvas></div>
                     </div>
                     <div class="card span-6">
-                        <div class="head"><h3>Top customers · slope chart</h3><div class="meta">prior period (left) vs current (right) · slope = growth direction</div></div>
+                        <div class="head">
+                            <h3>Top customers · slope chart</h3>
+                            <div style="display:flex; gap:10px; align-items:center;">
+                                <div class="meta">prior period (left) vs current (right) · slope = growth direction</div>
+                                <div class="chart-view-toggle" data-chart="diSlope" title="Gross | Adjusted (net of credit-memo returns)"><button type="button" data-mode="gross" class="active">Gross</button><button type="button" data-mode="adjusted">Adj</button></div>
+                            </div>
+                        </div>
                         <div class="chart-wrap" style="min-height:340px;"><canvas id="diSlope"></canvas></div>
                     </div>
                     <div class="card span-6">
-                        <div class="head"><h3>Seasonality polar chart</h3><div class="meta">each ring = one year · spikes show busy months · rings overlapping = consistent seasonal pattern · rings diverging = year-over-year drift</div></div>
+                        <div class="head">
+                            <h3>Seasonality polar chart</h3>
+                            <div style="display:flex; gap:10px; align-items:center;">
+                                <div class="meta">each ring = one year · spikes show busy months · rings overlapping = consistent seasonal pattern · rings diverging = year-over-year drift</div>
+                                <div class="chart-view-toggle" data-chart="diPolar" title="Gross | Adjusted (net of credit-memo returns)"><button type="button" data-mode="gross" class="active">Gross</button><button type="button" data-mode="adjusted">Adj</button></div>
+                            </div>
+                        </div>
                         <div class="chart-wrap" style="min-height:380px;"><canvas id="diPolar"></canvas></div>
                     </div>
                     <div class="card span-6">
@@ -2150,13 +2189,16 @@
                     <div class="card span-12">
                         <div class="head">
                             <div><h3>RFM customer segmentation</h3><div class="meta">X = days since last purchase (recency, log) · Y = # invoices (frequency) · bubble size = total spend · colour = segment</div></div>
-                            <select id="diRfmTopN" class="mini-select">
-                                <option value="25">Top 25</option>
-                                <option value="50">Top 50</option>
-                                <option value="100" selected>Top 100</option>
-                                <option value="500">Top 500</option>
-                                <option value="all">All customers</option>
-                            </select>
+                            <div style="display:flex; gap:10px; align-items:center;">
+                                <select id="diRfmTopN" class="mini-select">
+                                    <option value="25">Top 25</option>
+                                    <option value="50">Top 50</option>
+                                    <option value="100" selected>Top 100</option>
+                                    <option value="500">Top 500</option>
+                                    <option value="all">All customers</option>
+                                </select>
+                                <div class="chart-view-toggle" data-chart="diRfm" title="Gross | Adjusted (net of credit-memo returns)"><button type="button" data-mode="gross" class="active">Gross</button><button type="button" data-mode="adjusted">Adj</button></div>
+                            </div>
                         </div>
                         <div class="chart-wrap" style="min-height:420px;"><canvas id="diRfm"></canvas></div>
                     </div>
@@ -2180,7 +2222,13 @@
                         <div id="diLifecycleDetail" style="padding: 0 18px 14px; font-size:11px; opacity:0.85;"></div>
                     </div>
                     <div class="card span-6">
-                        <div class="head"><h3>Geographic sales · Australia by state</h3><div class="meta">state fill intensity = revenue · click a state to highlight · hover for details</div></div>
+                        <div class="head">
+                            <h3>Geographic sales · Australia by state</h3>
+                            <div style="display:flex; gap:10px; align-items:center;">
+                                <div class="meta">state fill intensity = revenue · click a state to highlight · hover for details</div>
+                                <div class="chart-view-toggle" data-chart="diGeo" title="Gross | Adjusted (net of credit-memo returns)"><button type="button" data-mode="gross" class="active">Gross</button><button type="button" data-mode="adjusted">Adj</button></div>
+                            </div>
+                        </div>
                         <div id="diGeo" style="padding: 14px 18px 18px;"></div>
                     </div>
 
@@ -2199,13 +2247,7 @@
                     </div>
 
                     <div class="card span-6">
-                        <div class="head">
-                            <h3>Daily sales calendar heatmap</h3>
-                            <div style="display:flex; gap:10px; align-items:center;">
-                                <div class="meta">click a day to drill in · use the back button to restore the previous range · dark cells = high revenue · view scrolled to most-recent end</div>
-                                <div class="chart-view-toggle" data-chart="diCalendar" title="Gross | Adjusted (net of credit-memo returns)"><button type="button" data-mode="gross" class="active">Gross</button><button type="button" data-mode="adjusted">Adj</button></div>
-                            </div>
-                        </div>
+                        <div class="head"><h3>Daily sales calendar heatmap</h3><div class="meta">click a day to drill in · use the back button to restore the previous range · dark cells = high revenue · view scrolled to most-recent end</div></div>
                         <div id="diCalendarHeatmap" style="padding: 14px 18px 18px;"></div>
                     </div>
                     <div class="card span-6">
@@ -6543,6 +6585,31 @@ function diMonthDiff(a, b) {
     return (by - ay) * 12 + (bm - am);
 }
 
+// Shared helper for DI charts that subtract credit-memo returns inline.
+// Each renderer scopes returns to the same date window it uses for
+// invoices, so per-chart Adjusted mode stays consistent with the chart's
+// own data source (state.filtered vs state.invoices vs a sub-period).
+//
+// includeCm(cm) → boolean: false to skip the whole credit memo
+// lineCb(cm, ln, sales, qty, cost) → called for each line that passes
+// the same toolbar filters that invoice lines do.
+function forEachReturnLine(includeCm, lineCb) {
+    for (const cm of (state.creditMemos || [])) {
+        if (!includeCm(cm)) continue;
+        if (state.filters.salesperson && (cm.salesperson || "(unassigned)") !== state.filters.salesperson) continue;
+        if (state.filters.customer && cm.customerNumber !== state.filters.customer) continue;
+        for (const ln of (cm.salesCreditMemoLines || [])) {
+            if (!lineMatchesFilters(ln)) continue;
+            const code = locationCode(ln.locationId);
+            if (state.filters.location && code !== state.filters.location) continue;
+            const sales = lineNetAmount(ln);
+            const qty   = num(ln.quantity);
+            const cost  = totalCostFromLine(ln, 1, cm.postingDate, cm.customerNumber, cm.number);
+            lineCb(cm, ln, sales, qty, cost);
+        }
+    }
+}
+
 // Chart #1 — Daily sales calendar heatmap (GitHub-style grid).
 // One cell per day in the loaded range, coloured by daily revenue.
 // Hovering shows date + $; click filters the toolbar date inputs
@@ -6560,18 +6627,6 @@ function renderDiCalendarHeatmap() {
         if (!minDate || d < minDate) minDate = d;
         if (!maxDate || d > maxDate) maxDate = d;
         daily.set(d, (daily.get(d) || 0) + invoiceSalesAmount(inv));
-    }
-    // Per-chart pill: subtract credit-memo sales bucketed by date when
-    // this chart is on Adjusted. Other charts on the page are unaffected
-    // because `daily` is local.
-    if (chartViewMode("diCalendar") === "adjusted") {
-        const bucket = getReturnsBuckets().byDate;
-        for (const [d, ret] of bucket) {
-            if (!ret) continue;
-            const cur = daily.get(d) || 0;
-            const next = cur - ret.sales;
-            if (next !== 0 || daily.has(d)) daily.set(d, next);
-        }
     }
     if (!minDate || !maxDate) {
         host.innerHTML = '<div class="empty" style="padding: 18px;">No invoices in the selected range.</div>';
@@ -6740,6 +6795,19 @@ function renderDiTreemap() {
             cats.set(cat, c);
         }
     }
+    // Per-chart pill: net per-category returns. Categories whose value
+    // goes ≤ 0 are filtered out by the existing > 0 guard below.
+    if (chartViewMode("diTreemap") === "adjusted") {
+        const inRange = getDateRangePredicate();
+        forEachReturnLine(cm => inRange(cm.postingDate), (cm, ln, sales, qty, cost) => {
+            const it = ln.lineObjectNumber || ln.itemId || "";
+            const cat = (state.itemCategory && state.itemCategory.get(it)) || "(uncat)";
+            const c = cats.get(cat);
+            if (!c) return;
+            c.value -= sales;
+            c.cost  -= cost;
+        });
+    }
     const allRows = [...cats.values()].filter(c => c.value > 0).sort((a, b) => b.value - a.value);
     const total = allRows.reduce((s, r) => s + r.value, 0);
     if (!total) {
@@ -6870,18 +6938,8 @@ function renderDiLorenz() {
     destroyChart("diLorenz");
     const canvas = document.getElementById("diLorenz");
     if (!canvas) return;
-    // Per-chart pill: subtract returns from each customer's revenue
-    // before measuring concentration. Clone first so state.byCustomer
-    // stays gross — KPI tiles on other tabs read straight from it.
-    const groups = (() => {
-        const src = [...(state.byCustomer || new Map()).values()];
-        if (chartViewMode("diLorenz") !== "adjusted") return src.map(g => g.revenue).filter(v => v > 0).sort((a, b) => a - b);
-        const bucket = getReturnsBuckets().byCustomer;
-        return src.map(g => {
-            const ret = bucket.get(g.number);
-            return (g.revenue || 0) - (ret ? ret.sales : 0);
-        }).filter(v => v > 0).sort((a, b) => a - b);
-    })();
+    const groups = [...(state.byCustomer || new Map()).values()]
+        .map(g => g.revenue).filter(v => v > 0).sort((a, b) => a - b);
     if (!groups.length) return;
     const total = groups.reduce((s, v) => s + v, 0);
     const n = groups.length;
@@ -6954,6 +7012,25 @@ function renderDiSankey() {
             spTot.set(sp, (spTot.get(sp) || 0) + v);
             catTot.set(cat, (catTot.get(cat) || 0) + v);
         }
+    }
+    // Per-chart pill: net out per (salesperson × category) returns over
+    // the same toolbar window the invoice loop above used.
+    if (chartViewMode("diSankey") === "adjusted") {
+        const inRange = getDateRangePredicate();
+        forEachReturnLine(cm => inRange(cm.postingDate), (cm, ln, sales) => {
+            const sp = cm.salesperson || "(unassigned)";
+            const it = ln.lineObjectNumber || ln.itemId || "";
+            const cat = (state.itemCategory && state.itemCategory.get(it)) || "(uncat)";
+            const k = sp + "||" + cat;
+            flows.set(k, (flows.get(k) || 0) - sales);
+            spTot.set(sp, (spTot.get(sp) || 0) - sales);
+            catTot.set(cat, (catTot.get(cat) || 0) - sales);
+        });
+        // Strip flows that go non-positive after the subtraction; the
+        // ribbon layout assumes positive values.
+        for (const [k, v] of [...flows]) if (v <= 0) flows.delete(k);
+        for (const [k, v] of [...spTot]) if (v <= 0) spTot.delete(k);
+        for (const [k, v] of [...catTot]) if (v <= 0) catTot.delete(k);
     }
     const topNodes = (m, n, otherName = "Other") => {
         const sorted = [...m.entries()].sort((a, b) => b[1] - a[1]);
@@ -7070,6 +7147,22 @@ function renderDiWaterfall() {
         if (d >= p.prevFromISO && d <= p.prevToISO) prior.set(inv.customerNumber, (prior.get(inv.customerNumber) || 0) + s);
         if (d >= p.fromISO     && d <= p.toISO)     current.set(inv.customerNumber, (current.get(inv.customerNumber) || 0) + s);
     }
+    // Per-chart pill: net per-customer returns into both prior AND current
+    // buckets symmetrically. Skipping one side would tilt the delta and
+    // misclassify customers as growing / declining when they're not.
+    if (chartViewMode("diWaterfall") === "adjusted") {
+        for (const cm of (state.creditMemos || [])) {
+            const d = (cm.postingDate || "").toString().slice(0, 10);
+            if (!d || !cm.customerNumber) continue;
+            const inPrior = d >= p.prevFromISO && d <= p.prevToISO;
+            const inCur   = d >= p.fromISO     && d <= p.toISO;
+            if (!inPrior && !inCur) continue;
+            let cmAmt = 0;
+            for (const ln of (cm.salesCreditMemoLines || [])) cmAmt += lineNetAmount(ln);
+            if (inPrior) prior.set(cm.customerNumber, (prior.get(cm.customerNumber) || 0) - cmAmt);
+            if (inCur)   current.set(cm.customerNumber, (current.get(cm.customerNumber) || 0) - cmAmt);
+        }
+    }
     let priorTot = 0, curTot = 0, newAmt = 0, lostAmt = 0, growthAmt = 0, declineAmt = 0;
     const all = new Set([...prior.keys(), ...current.keys()]);
     for (const c of all) {
@@ -7130,6 +7223,22 @@ function renderDiSlope() {
         names.set(inv.customerNumber, inv.customerName || inv.customerNumber);
         if (d >= p.prevFromISO && d <= p.prevToISO) prior.set(inv.customerNumber, (prior.get(inv.customerNumber) || 0) + s);
         if (d >= p.fromISO     && d <= p.toISO)     current.set(inv.customerNumber, (current.get(inv.customerNumber) || 0) + s);
+    }
+    // Per-chart pill: net per-customer returns into both periods so the
+    // slope direction stays honest. Without this the "growth" line could
+    // be entirely from credit memos sitting in only one of the two windows.
+    if (chartViewMode("diSlope") === "adjusted") {
+        for (const cm of (state.creditMemos || [])) {
+            const d = (cm.postingDate || "").toString().slice(0, 10);
+            if (!d || !cm.customerNumber) continue;
+            const inPrior = d >= p.prevFromISO && d <= p.prevToISO;
+            const inCur   = d >= p.fromISO     && d <= p.toISO;
+            if (!inPrior && !inCur) continue;
+            let cmAmt = 0;
+            for (const ln of (cm.salesCreditMemoLines || [])) cmAmt += lineNetAmount(ln);
+            if (inPrior) prior.set(cm.customerNumber, (prior.get(cm.customerNumber) || 0) - cmAmt);
+            if (inCur)   current.set(cm.customerNumber, (current.get(cm.customerNumber) || 0) - cmAmt);
+        }
     }
     const allKeys = new Set([...prior.keys(), ...current.keys()]);
     const rows = [...allKeys].map(c => ({ c, name: names.get(c) || c, prior: prior.get(c) || 0, current: current.get(c) || 0 }))
@@ -7273,6 +7382,20 @@ function renderDiPolar() {
         if (!byYearMonth.has(y)) byYearMonth.set(y, new Array(12).fill(0));
         byYearMonth.get(y)[m] += invoiceSalesAmount(inv);
     }
+    // Per-chart pill: net every credit memo into its own year×month bucket
+    // so the seasonality rings match adjusted revenue, all-time. Each
+    // credit memo is dropped into the month it was posted in.
+    if (chartViewMode("diPolar") === "adjusted") {
+        for (const cm of (state.creditMemos || [])) {
+            const d = cm.postingDate; if (!d) continue;
+            const dt = new Date(d);
+            const y = dt.getFullYear(); const m = dt.getMonth();
+            if (!byYearMonth.has(y)) byYearMonth.set(y, new Array(12).fill(0));
+            let cmAmt = 0;
+            for (const ln of (cm.salesCreditMemoLines || [])) cmAmt += lineNetAmount(ln);
+            byYearMonth.get(y)[m] -= cmAmt;
+        }
+    }
     const years = [...byYearMonth.keys()].sort();
     if (!years.length) return;
     const palette = ["#3949ab","#00897b","#fb8c00","#e53935","#8e24aa"];
@@ -7398,6 +7521,28 @@ function renderDiFunnel() {
         const s = invoiceSalesAmount(inv); invAmt += s;
         if ((inv.status || "").toLowerCase() === "paid") { paidCount++; paidAmt += s; }
     }
+    // Per-chart pill: subtract credit-memo $ and credit-memo doc count
+    // from the Invoiced + Paid stages only. Upstream stages (quotes,
+    // outstanding orders, shipments) are pre-invoice and don't carry a
+    // returns concept, so they stay gross.
+    if (chartViewMode("diFunnel") === "adjusted") {
+        const inRange = getDateRangePredicate();
+        let cmDocs = 0, cmAmt = 0;
+        for (const cm of (state.creditMemos || [])) {
+            if (!inRange(cm.postingDate)) continue;
+            if (state.filters.salesperson && (cm.salesperson || "(unassigned)") !== state.filters.salesperson) continue;
+            if (state.filters.customer && cm.customerNumber !== state.filters.customer) continue;
+            let perDocAmt = 0;
+            for (const ln of (cm.salesCreditMemoLines || [])) {
+                if (!lineMatchesFilters(ln)) continue;
+                if (state.filters.location && locationCode(ln.locationId) !== state.filters.location) continue;
+                perDocAmt += lineNetAmount(ln);
+            }
+            if (perDocAmt > 0) { cmDocs++; cmAmt += perDocAmt; }
+        }
+        invCount = Math.max(0, invCount - cmDocs); invAmt -= cmAmt;
+        paidCount = Math.max(0, paidCount - cmDocs); paidAmt -= cmAmt;
+    }
     const stages = [
         { name: "Quotes",                 count: qCount + boCount, amt: qAmt + boAmt, breakdown: { qCount, qAmt, boCount, boAmt } },
         { name: "Outstanding orders",     count: openOrders, amt: openOrdersAmt },
@@ -7518,6 +7663,21 @@ function renderDiSunburst() {
             spTot.set(sp, (spTot.get(sp) || 0) + v);
         }
     }
+    // Per-chart pill: net returns per sp×cat. Drop any sp or flow that
+    // goes non-positive — the arc layout requires positive sweeps.
+    if (chartViewMode("diSunburst") === "adjusted") {
+        const inRange = getDateRangePredicate();
+        forEachReturnLine(cm => inRange(cm.postingDate), (cm, ln, sales) => {
+            const sp = cm.salesperson || "(unassigned)";
+            const it = ln.lineObjectNumber || ln.itemId || "";
+            const cat = (state.itemCategory && state.itemCategory.get(it)) || "(uncat)";
+            const k = sp + "||" + cat;
+            flows.set(k, (flows.get(k) || 0) - sales);
+            spTot.set(sp, (spTot.get(sp) || 0) - sales);
+        });
+        for (const [k, v] of [...flows]) if (v <= 0) flows.delete(k);
+        for (const [k, v] of [...spTot]) if (v <= 0) spTot.delete(k);
+    }
     const sps = [...spTot.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
     const total = sps.reduce((s, [, v]) => s + v, 0);
     if (!total) { host.innerHTML = '<div class="empty" style="padding:18px;">No data.</div>'; return; }
@@ -7622,6 +7782,22 @@ function renderDiRfm() {
         e.count++;
         e.total += invoiceSalesAmount(inv);
         map.set(inv.customerNumber, e);
+    }
+    // Per-chart pill: net per-customer credit memos out of the monetary
+    // axis. Recency (last purchase date) and frequency (invoice count)
+    // are intentionally NOT decremented — a credit memo isn't a separate
+    // "transaction" in the customer-relationship sense, just a value
+    // adjustment to a prior sale. Adjusted moves bubble Y and bubble size,
+    // not bubble X, which is the right semantic for segmentation.
+    if (chartViewMode("diRfm") === "adjusted") {
+        for (const cm of (state.creditMemos || [])) {
+            if (!cm.customerNumber) continue;
+            const e = map.get(cm.customerNumber);
+            if (!e) continue;
+            let cmAmt = 0;
+            for (const ln of (cm.salesCreditMemoLines || [])) cmAmt += lineNetAmount(ln);
+            e.total -= cmAmt;
+        }
     }
     if (!map.size) return;
     let rows = [...map.values()].filter(r => r.total > 0).map(r => ({
@@ -8633,6 +8809,26 @@ function renderDiGeo() {
         if (inv.customerNumber) e.custs.add(inv.customerNumber);
         agg.set(st, e);
     }
+    // Per-chart pill: subtract per-state credit-memo $ and cost. Invoice
+    // counts + unique-customer sets are left alone — a credit memo isn't
+    // an extra customer visit, just a value correction on a prior one.
+    if (chartViewMode("diGeo") === "adjusted") {
+        const inRange = getDateRangePredicate();
+        for (const cm of (state.creditMemos || [])) {
+            if (!inRange(cm.postingDate)) continue;
+            if (state.filters.salesperson && (cm.salesperson || "(unassigned)") !== state.filters.salesperson) continue;
+            if (state.filters.customer && cm.customerNumber !== state.filters.customer) continue;
+            const st = norm(custState.get(cm.customerNumber));
+            const e = agg.get(st);
+            if (!e) continue;
+            for (const ln of (cm.salesCreditMemoLines || [])) {
+                if (!lineMatchesFilters(ln)) continue;
+                if (state.filters.location && locationCode(ln.locationId) !== state.filters.location) continue;
+                e.sales -= lineNetAmount(ln);
+                e.cost  -= totalCostFromLine(ln, 1, cm.postingDate, cm.customerNumber, cm.number);
+            }
+        }
+    }
     // Real Australian state SVG paths from Wikimedia Commons
     // (Australia map, States-simple.svg — public domain). viewBox is
     // 200x186, scales cleanly to any canvas via attribute width/height.
@@ -8754,6 +8950,42 @@ function renderDiRadar() {
         e.invoices += 1;
         if (inv.customerNumber) e.customers.add(inv.customerNumber);
         map.set(sp, e);
+    }
+    // Per-chart pill: net credit memos into the same period the chart
+    // is drawing. Match `subset`'s scope via a predicate so the axes
+    // stay consistent. Invoice count and customer set are left alone —
+    // a credit memo isn't a separate sale.
+    if (chartViewMode("diRadar") === "adjusted") {
+        let predicate;
+        if (period === "filtered") {
+            const inRange = getDateRangePredicate();
+            predicate = cm => inRange(cm.postingDate);
+        } else if (period === "all") {
+            predicate = () => true;
+        } else {
+            const days = parseInt(period, 10);
+            if (Number.isFinite(days)) {
+                const cutoff = new Date(today.getTime() - days * 86400000).toISOString().slice(0, 10);
+                predicate = cm => (cm.postingDate || "").toString().slice(0, 10) >= cutoff;
+            } else {
+                predicate = () => true;
+            }
+        }
+        for (const cm of (state.creditMemos || [])) {
+            if (!predicate(cm)) continue;
+            const sp = cm.salesperson || "(unassigned)";
+            const e = map.get(sp);
+            if (!e) continue;
+            let cmAmt = 0, cmQty = 0, cmCost = 0;
+            for (const ln of (cm.salesCreditMemoLines || [])) {
+                cmAmt += lineNetAmount(ln);
+                cmQty += num(ln.quantity);
+                cmCost += totalCostFromLine(ln, 1, cm.postingDate, cm.customerNumber, cm.number);
+            }
+            e.revenue -= cmAmt;
+            e.gp     -= (cmAmt - cmCost);
+            e.qty    -= cmQty;
+        }
     }
     const rows = [...map.values()].filter(s => s.revenue > 0).map(s => ({
         code: s.code, revenue: s.revenue,
