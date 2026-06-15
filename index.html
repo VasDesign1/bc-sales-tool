@@ -5200,9 +5200,7 @@ function aggregateByCustomer(invoices) {
         g.gp    = g.revenue - g.cost;
         g.gpPct = g.revenue ? g.gp / g.revenue : 0;
     }
-    const custRows = [...map.values()];
-    scaleEntityCostsToVE(custRows, "cost");
-    applyViewMode(custRows, getReturnsBuckets().byCustomer, r => r.customerNumber || "(unknown)", "revenue");
+    scaleEntityCostsToVE([...map.values()], "cost");
     return map;
 }
 
@@ -5232,9 +5230,7 @@ function aggregateByItem(invoices) {
         g.gp    = g.revenue - g.cost;
         g.gpPct = g.revenue ? g.gp / g.revenue : 0;
     }
-    const itemRows = [...map.values()];
-    scaleEntityCostsToVE(itemRows, "cost");
-    applyViewMode(itemRows, getReturnsBuckets().byItem, r => r.key, "revenue");
+    scaleEntityCostsToVE([...map.values()], "cost");
     return map;
 }
 
@@ -5305,9 +5301,7 @@ function aggregateBranchMonthly(invoices) {
         }
     }
     const rows = [...map.values()].map(g => ({ ...g, customerCount: g.customers.size, gp: g.sales - g.cost, gpPct: g.sales ? (g.sales - g.cost) / g.sales : 0 }));
-    scaleEntityCostsToVE(rows);
-    applyViewMode(rows, getReturnsBuckets().byBranchMonth, r => r.fy + "|" + r.monthKey + "|" + r.branch);
-    return rows;
+    return scaleEntityCostsToVE(rows);
 }
 
 function aggregateSalespersonMonthly(invoices) {
@@ -5326,9 +5320,7 @@ function aggregateSalespersonMonthly(invoices) {
         if (inv.customerNumber) g.customers.add(inv.customerNumber);
     }
     const rows = [...map.values()].map(g => ({ ...g, customerCount: g.customers.size, gp: g.sales - g.cost, gpPct: g.sales ? (g.sales - g.cost) / g.sales : 0 }));
-    scaleEntityCostsToVE(rows);
-    applyViewMode(rows, getReturnsBuckets().bySalespersonMonth, r => r.fy + "|" + r.monthKey + "|" + r.salesperson);
-    return rows;
+    return scaleEntityCostsToVE(rows);
 }
 
 // EOM line-level rows
@@ -5600,6 +5592,8 @@ function getReturnsBuckets() {
     const buckets = {
         byBranchMonth:      new Map(),  // "fy|mk|branch"
         bySalespersonMonth: new Map(),  // "fy|mk|sp"
+        byBranch:           new Map(),  // branch code (Overview Sales-by-branch chart keys by this)
+        bySalesperson:      new Map(),  // sp code     (Overview Sales-by-salesperson chart keys by this)
         byItem:             new Map(),  // itemNo or "(non-item) ..."
         byCustomer:         new Map(),  // custNo
         byMonth:            new Map(),  // monthKey
@@ -5633,6 +5627,8 @@ function getReturnsBuckets() {
             const itemKey = itemNo || ("(non-item) " + (ln.lineType || "?"));
             addTo(buckets.byBranchMonth,      fy + "|" + mk + "|" + code, sales, qty, cost);
             addTo(buckets.bySalespersonMonth, fy + "|" + mk + "|" + sp,   sales, qty, cost);
+            addTo(buckets.byBranch,           code,                       sales, qty, cost);
+            addTo(buckets.bySalesperson,      sp,                         sales, qty, cost);
             addTo(buckets.byItem,             itemKey,                    sales, qty, cost);
             addTo(buckets.byCustomer,         custKey,                    sales, qty, cost);
             addTo(buckets.byMonth,            mk,                         sales, qty, cost);
@@ -5677,6 +5673,20 @@ function applyViewMode(rows, bucketMap, keyFn, revField) {
         r.gpPct     = (r[revField] || 0) ? r.gp / r[revField] : 0;
     }
     return rows;
+}
+
+// Chart-side view-mode hook. Keeps the source aggregations (and the
+// KPI-tile calculations that read them) on GROSS values; returns a
+// cloned array with returns subtracted only when the toggle is on.
+// Use this at every render site that feeds rows into a chart dataset.
+function viewRowsForCharts(rows, dim, keyFn, revField) {
+    if (state.viewMode !== "adjusted") return rows;
+    if (!rows || !rows.length) return rows;
+    const clone = rows.map(r => ({ ...r }));
+    const buckets = getReturnsBuckets();
+    const bucketMap = buckets[dim];
+    if (!bucketMap) return rows;
+    return applyViewMode(clone, bucketMap, keyFn, revField);
 }
 
 // Return credit-memo totals respecting the current toolbar filters —
@@ -9086,7 +9096,8 @@ function buildOverviewSingleSeriesConfig(chartType, opts) {
 
 function renderTopCustomersChart() {
     destroyChart("topCustomers");
-    const top = [...state.byCustomer.values()].sort((a, b) => b.revenue - a.revenue).slice(0, 10);
+    const all = viewRowsForCharts([...state.byCustomer.values()], "byCustomer", r => r.customerNumber || "(unknown)", "revenue");
+    const top = all.sort((a, b) => b.revenue - a.revenue).slice(0, 10);
     const ctx = document.getElementById("topCustomersChart").getContext("2d");
     state.charts.topCustomers = new Chart(ctx, buildOverviewSingleSeriesConfig(state.topCustomersChartType, {
         labels: top.map(g => truncate(g.customerName || g.customerNumber, 28)),
@@ -9099,7 +9110,8 @@ function renderTopCustomersChart() {
 
 function renderTopItemsChart() {
     destroyChart("topItems");
-    const top = [...state.byItem.values()].filter(it => it.revenue > 0).sort((a, b) => b.revenue - a.revenue).slice(0, 10);
+    const all = viewRowsForCharts([...state.byItem.values()], "byItem", r => r.key, "revenue");
+    const top = all.filter(it => it.revenue > 0).sort((a, b) => b.revenue - a.revenue).slice(0, 10);
     const ctx = document.getElementById("topItemsChart").getContext("2d");
     state.charts.topItems = new Chart(ctx, buildOverviewSingleSeriesConfig(state.topItemsChartType, {
         labels: top.map(it => truncate((it.number ? it.number + " — " : "") + (it.description || ""), 30)),
@@ -9112,7 +9124,8 @@ function renderTopItemsChart() {
 
 function renderLocationChart() {
     destroyChart("location");
-    const rows = [...state.byLocation.values()].filter(r => r.revenue > 0).sort((a, b) => b.revenue - a.revenue);
+    const all = viewRowsForCharts([...state.byLocation.values()], "byBranch", r => r.code, "revenue");
+    const rows = all.filter(r => r.revenue > 0).sort((a, b) => b.revenue - a.revenue);
     const ctx = document.getElementById("locationChart").getContext("2d");
     state.charts.location = new Chart(ctx, buildOverviewSingleSeriesConfig(state.locationChartType, {
         labels: rows.map(r => r.code),
@@ -9130,7 +9143,8 @@ function renderLocationChart() {
 
 function renderSalespersonChart() {
     destroyChart("salesperson");
-    const rows = [...state.bySalesperson.values()].filter(r => r.revenue > 0).sort((a, b) => b.revenue - a.revenue);
+    const all = viewRowsForCharts([...state.bySalesperson.values()], "bySalesperson", r => r.code, "revenue");
+    const rows = all.filter(r => r.revenue > 0).sort((a, b) => b.revenue - a.revenue);
     const ctx = document.getElementById("salespersonChart").getContext("2d");
     state.charts.salesperson = new Chart(ctx, buildOverviewSingleSeriesConfig(state.salespersonChartType, {
         labels: rows.map(r => r.code),
@@ -9511,7 +9525,12 @@ function renderBranch() {
     document.getElementById("brKpiGpp").textContent   = fmtPct(totSales ? totGp / totSales : 0);
     paintAdjustedKpis("brKpi", totSales, totGp);
 
-    renderEntityCharts(rows, { entityField: "branch", prefix: "br", filterKey: "location", filterEl: "locationFilter", paletteBase: "#3949ab" });
+    // Clone + adjust rows ONLY for the charts when view mode = adjusted.
+    // KPI tiles above keep reading gross from `rows` so the
+    // "Sales (excl. tax)" tile stays gross and the Adjusted-row tiles
+    // compute once via paintAdjustedKpis (no double-subtraction).
+    const chartRows = viewRowsForCharts(rows, "byBranchMonth", r => r.fy + "|" + r.monthKey + "|" + r.branch);
+    renderEntityCharts(chartRows, { entityField: "branch", prefix: "br", filterKey: "location", filterEl: "locationFilter", paletteBase: "#3949ab" });
 
     const sorted = sortRowsBy([...rows], state.sortBranchTable);
     paintSortHeaders("#branchTable", state.sortBranchTable);
@@ -9558,7 +9577,8 @@ function renderSalesperson() {
     document.getElementById("spKpiGpp").textContent   = fmtPct(totSales ? totGp / totSales : 0);
     paintAdjustedKpis("spKpi", totSales, totGp);
 
-    renderEntityCharts(rows, { entityField: "salesperson", prefix: "sp", filterKey: "salesperson", filterEl: "salespersonFilter", paletteBase: "#00897b" });
+    const chartRows = viewRowsForCharts(rows, "bySalespersonMonth", r => r.fy + "|" + r.monthKey + "|" + r.salesperson);
+    renderEntityCharts(chartRows, { entityField: "salesperson", prefix: "sp", filterKey: "salesperson", filterEl: "salespersonFilter", paletteBase: "#00897b" });
 
     const sorted = sortRowsBy([...rows], state.sortSalespersonTable);
     paintSortHeaders("#salespersonTable", state.sortSalespersonTable);
@@ -10239,10 +10259,13 @@ function renderByItem() {
     document.getElementById("itKpiGpp").textContent   = fmtPct(totSales ? totGp / totSales : 0);
     paintAdjustedKpis("itKpi", totSales, totGp);
 
+    // Clone + adjust rows for the charts only — KPI tiles above keep
+    // reading gross from `rows` so paintAdjustedKpis nets returns once.
+    const chartRows = viewRowsForCharts(rows, "byItem", r => r.key, "revenue");
     // ---------- Charts (computed off the filtered rows so they honour the cross-filter) ----------
     // Top 20 items by sales
     destroyChart("itTopItems");
-    const top20 = [...rows].filter(r => r.revenue > 0).sort((a, b) => b.revenue - a.revenue).slice(0, 20);
+    const top20 = [...chartRows].filter(r => r.revenue > 0).sort((a, b) => b.revenue - a.revenue).slice(0, 20);
     const topCtx = document.getElementById("itTopItemsChart");
     if (topCtx) {
         state.charts.itTopItems = new Chart(topCtx.getContext("2d"), {
@@ -10272,7 +10295,7 @@ function renderByItem() {
     // Sales by item category (doughnut)
     destroyChart("itCategory");
     const catMap = new Map();
-    for (const r of rows) {
+    for (const r of chartRows) {
         const cur = catMap.get(r.category) || { name: r.category, amount: 0, count: 0 };
         cur.amount += r.revenue; cur.count++;
         catMap.set(r.category, cur);
@@ -10309,7 +10332,7 @@ function renderByItem() {
 
     // Pareto: cumulative % of sales
     destroyChart("itPareto");
-    const sortedForPareto = [...rows].filter(r => r.revenue > 0).sort((a, b) => b.revenue - a.revenue);
+    const sortedForPareto = [...chartRows].filter(r => r.revenue > 0).sort((a, b) => b.revenue - a.revenue);
     const sumP = sortedForPareto.reduce((s, r) => s + r.revenue, 0);
     let cum = 0;
     const paretoTop = sortedForPareto.slice(0, 50);
