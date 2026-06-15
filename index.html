@@ -1954,6 +1954,7 @@
                                     <button data-bucket="week">Week</button>
                                     <button data-bucket="month">Month</button>
                                 </div>
+                                <div class="chart-view-toggle" data-chart="trend" title="Gross | Adjusted (net of credit-memo returns)"><button type="button" data-mode="gross" class="active">Gross</button><button type="button" data-mode="adjusted">Adj</button></div>
                             </div>
                         </div>
                         <div class="chart-wrap" style="min-height:320px;"><canvas id="trendChart"></canvas></div>
@@ -1967,6 +1968,7 @@
                                 <option value="doughnut">Doughnut</option>
                                 <option value="pie">Pie</option>
                             </select>
+                            <div class="chart-view-toggle" data-chart="topCustomers" title="Gross | Adjusted (net of credit-memo returns)"><button type="button" data-mode="gross" class="active">Gross</button><button type="button" data-mode="adjusted">Adj</button></div>
                             <button class="more-btn" data-topn="customers">Show more…</button>
                         </div>
                         <div class="chart-wrap" style="min-height:340px;"><canvas id="topCustomersChart"></canvas></div>
@@ -1980,6 +1982,7 @@
                                 <option value="doughnut">Doughnut</option>
                                 <option value="pie">Pie</option>
                             </select>
+                            <div class="chart-view-toggle" data-chart="topItems" title="Gross | Adjusted (net of credit-memo returns)"><button type="button" data-mode="gross" class="active">Gross</button><button type="button" data-mode="adjusted">Adj</button></div>
                             <button class="more-btn" data-topn="items">Show more…</button>
                         </div>
                         <div class="chart-wrap" style="min-height:340px;"><canvas id="topItemsChart"></canvas></div>
@@ -1993,6 +1996,7 @@
                                 <option value="doughnut">Doughnut</option>
                                 <option value="pie">Pie</option>
                             </select>
+                            <div class="chart-view-toggle" data-chart="location" title="Gross | Adjusted (net of credit-memo returns)"><button type="button" data-mode="gross" class="active">Gross</button><button type="button" data-mode="adjusted">Adj</button></div>
                             <button class="more-btn" data-topn="branches">Show more…</button>
                         </div>
                         <div class="chart-wrap" style="min-height:300px;"><canvas id="locationChart"></canvas></div>
@@ -2006,6 +2010,7 @@
                                 <option value="doughnut">Doughnut</option>
                                 <option value="pie">Pie</option>
                             </select>
+                            <div class="chart-view-toggle" data-chart="salesperson" title="Gross | Adjusted (net of credit-memo returns)"><button type="button" data-mode="gross" class="active">Gross</button><button type="button" data-mode="adjusted">Adj</button></div>
                             <button class="more-btn" data-topn="salespeople">Show more…</button>
                         </div>
                         <div class="chart-wrap" style="min-height:300px;"><canvas id="salespersonChart"></canvas></div>
@@ -2030,12 +2035,15 @@
                     <div class="card span-8">
                         <div class="head">
                             <h3>Posting pattern by day of week</h3>
-                            <select id="dowChartType" class="mini-select" title="Chart type">
-                                <option value="bar" selected>Bar + line</option>
-                                <option value="line">Line</option>
-                                <option value="radar">Radar</option>
-                                <option value="polarArea">Polar area</option>
-                            </select>
+                            <div style="display:flex; gap:10px; align-items:center;">
+                                <select id="dowChartType" class="mini-select" title="Chart type">
+                                    <option value="bar" selected>Bar + line</option>
+                                    <option value="line">Line</option>
+                                    <option value="radar">Radar</option>
+                                    <option value="polarArea">Polar area</option>
+                                </select>
+                                <div class="chart-view-toggle" data-chart="dow" title="Gross | Adjusted (net of credit-memo returns)"><button type="button" data-mode="gross" class="active">Gross</button><button type="button" data-mode="adjusted">Adj</button></div>
+                            </div>
                         </div>
                         <div class="chart-wrap"><canvas id="dowChart"></canvas></div>
                     </div>
@@ -2109,13 +2117,7 @@
                     </div>
 
                     <div class="card span-6">
-                        <div class="head">
-                            <h3>Sales pipeline funnel</h3>
-                            <div style="display:flex; gap:10px; align-items:center;">
-                                <div class="meta">documents at each stage · conversion % shown between stages · click any bar to view the underlying customers / invoices on Overview</div>
-                                <div class="chart-view-toggle" data-chart="diFunnel" title="Gross | Adjusted (net of credit-memo returns)"><button type="button" data-mode="gross" class="active">Gross</button><button type="button" data-mode="adjusted">Adj</button></div>
-                            </div>
-                        </div>
+                        <div class="head"><h3>Sales pipeline funnel</h3><div class="meta">documents at each stage · conversion % shown between stages · click any bar to view the underlying customers / invoices on Overview</div></div>
                         <div class="chart-wrap" style="min-height:380px;"><canvas id="diFunnel"></canvas></div>
                     </div>
                     <div class="card span-6">
@@ -6148,33 +6150,69 @@ function setPeriodBadge() {
 // ============================================================
 // TOP N MODAL
 // ============================================================
+// Each Top-N modal mirrors the Gross/Adjusted state of the chart it
+// opens from. netRow() pulls the matching returns bucket once and
+// subtracts in place so the modal table and the chart agree.
+function topNNetRow(row, ret) {
+    const sales = (row.sales || 0) - ret.sales;
+    const gp    = (row.gp || 0) - (ret.sales - ret.cost);
+    const qty   = (row.qty || 0) - ret.qty;
+    return { ...row, sales, gp, qty, gpPct: sales ? gp / sales : 0 };
+}
 const TOPN_DEFS = {
     customers: {
         title: "Top customers",
-        get: () => [...state.byCustomer.values()].map(c => ({
-            key: c.customerNumber, name: c.customerName, num: c.customerNumber,
-            sales: c.revenue, gp: c.gp, gpPct: c.gpPct, qty: c.qty, invoiceCount: c.invoiceCount,
-        })),
+        chartId: "topCustomers",
+        get: () => {
+            const adj = chartViewMode("topCustomers") === "adjusted";
+            const bucket = adj ? getReturnsBuckets().byCustomer : null;
+            return [...state.byCustomer.values()].map(c => {
+                const row = {
+                    key: c.customerNumber, name: c.customerName, num: c.customerNumber,
+                    sales: c.revenue, gp: c.gp, gpPct: c.gpPct, qty: c.qty, invoiceCount: c.invoiceCount,
+                };
+                const ret = bucket && bucket.get(c.customerNumber);
+                return ret ? topNNetRow(row, ret) : row;
+            });
+        },
         columns: ["Customer No", "Name", "Invoices", "Sales", "GP $", "GP %", "Qty", ""],
         sortKey: "sales",
         action: { label: "Drill in", run: r => { closeTopNModal(); showCustomer(r.key); } },
     },
     items: {
         title: "Top items",
-        get: () => [...state.byItem.values()].map(it => ({
-            key: it.key, name: it.description, num: it.number,
-            sales: it.revenue, gp: it.gp, gpPct: it.gpPct, qty: it.qty,
-        })),
+        chartId: "topItems",
+        get: () => {
+            const adj = chartViewMode("topItems") === "adjusted";
+            const bucket = adj ? getReturnsBuckets().byItem : null;
+            return [...state.byItem.values()].map(it => {
+                const row = {
+                    key: it.key, name: it.description, num: it.number,
+                    sales: it.revenue, gp: it.gp, gpPct: it.gpPct, qty: it.qty,
+                };
+                const ret = bucket && bucket.get(it.key);
+                return ret ? topNNetRow(row, ret) : row;
+            });
+        },
         columns: ["Item No", "Description", "Sales", "GP $", "GP %", "Qty", ""],
         sortKey: "sales",
         action: { label: "Drill in", run: r => { closeTopNModal(); showItemDetail({ key: r.key, number: r.num, description: r.name }); } },
     },
     branches: {
         title: "Top branches",
-        get: () => [...state.byLocation.values()].map(b => ({
-            key: b.code, name: b.code,
-            sales: b.revenue, gp: b.gp, gpPct: b.gpPct, qty: b.qty,
-        })),
+        chartId: "location",
+        get: () => {
+            const adj = chartViewMode("location") === "adjusted";
+            const bucket = adj ? getReturnsBuckets().byBranch : null;
+            return [...state.byLocation.values()].map(b => {
+                const row = {
+                    key: b.code, name: b.code,
+                    sales: b.revenue, gp: b.gp, gpPct: b.gpPct, qty: b.qty,
+                };
+                const ret = bucket && bucket.get(b.code);
+                return ret ? topNNetRow(row, ret) : row;
+            });
+        },
         columns: ["Branch", "Sales", "GP $", "GP %", "Qty", ""],
         sortKey: "sales",
         action: { label: "Filter to this", run: r => {
@@ -6185,11 +6223,20 @@ const TOPN_DEFS = {
     },
     salespeople: {
         title: "Top salespeople",
-        get: () => [...state.bySalesperson.values()].map(s => ({
-            key: s.code, name: s.code,
-            sales: s.revenue, gp: s.gp, gpPct: s.gpPct, qty: s.qty,
-            invoiceCount: s.invoiceCount, custCount: s.customers ? s.customers.size : 0,
-        })),
+        chartId: "salesperson",
+        get: () => {
+            const adj = chartViewMode("salesperson") === "adjusted";
+            const bucket = adj ? getReturnsBuckets().bySalesperson : null;
+            return [...state.bySalesperson.values()].map(s => {
+                const row = {
+                    key: s.code, name: s.code,
+                    sales: s.revenue, gp: s.gp, gpPct: s.gpPct, qty: s.qty,
+                    invoiceCount: s.invoiceCount, custCount: s.customers ? s.customers.size : 0,
+                };
+                const ret = bucket && bucket.get(s.code);
+                return ret ? topNNetRow(row, ret) : row;
+            });
+        },
         columns: ["Salesperson", "Customers", "Invoices", "Sales", "GP $", "GP %", "Qty", ""],
         sortKey: "sales",
         action: { label: "Filter to this", run: r => {
@@ -6228,7 +6275,10 @@ function openTopNModal(dimension) {
     topNState.search = "";
     topNState.sortKey = def.sortKey;
     topNState.sortDir = "desc";
-    document.getElementById("topNTitle").textContent = def.title;
+    // Show "(Adjusted)" in the title when the linked chart's pill is on
+    // Adj, so the user can tell at a glance the modal mirrors the chart.
+    const isAdj = def.chartId && chartViewMode(def.chartId) === "adjusted";
+    document.getElementById("topNTitle").textContent = def.title + (isAdj ? " · Adjusted (net of returns)" : "");
     document.getElementById("topNSearch").value = "";
     document.getElementById("topNSearch").placeholder = "Search " + def.title.toLowerCase() + "…";
     renderTopNTable();
@@ -7521,28 +7571,6 @@ function renderDiFunnel() {
         const s = invoiceSalesAmount(inv); invAmt += s;
         if ((inv.status || "").toLowerCase() === "paid") { paidCount++; paidAmt += s; }
     }
-    // Per-chart pill: subtract credit-memo $ and credit-memo doc count
-    // from the Invoiced + Paid stages only. Upstream stages (quotes,
-    // outstanding orders, shipments) are pre-invoice and don't carry a
-    // returns concept, so they stay gross.
-    if (chartViewMode("diFunnel") === "adjusted") {
-        const inRange = getDateRangePredicate();
-        let cmDocs = 0, cmAmt = 0;
-        for (const cm of (state.creditMemos || [])) {
-            if (!inRange(cm.postingDate)) continue;
-            if (state.filters.salesperson && (cm.salesperson || "(unassigned)") !== state.filters.salesperson) continue;
-            if (state.filters.customer && cm.customerNumber !== state.filters.customer) continue;
-            let perDocAmt = 0;
-            for (const ln of (cm.salesCreditMemoLines || [])) {
-                if (!lineMatchesFilters(ln)) continue;
-                if (state.filters.location && locationCode(ln.locationId) !== state.filters.location) continue;
-                perDocAmt += lineNetAmount(ln);
-            }
-            if (perDocAmt > 0) { cmDocs++; cmAmt += perDocAmt; }
-        }
-        invCount = Math.max(0, invCount - cmDocs); invAmt -= cmAmt;
-        paidCount = Math.max(0, paidCount - cmDocs); paidAmt -= cmAmt;
-    }
     const stages = [
         { name: "Quotes",                 count: qCount + boCount, amt: qAmt + boAmt, breakdown: { qCount, qAmt, boCount, boAmt } },
         { name: "Outstanding orders",     count: openOrders, amt: openOrdersAmt },
@@ -8569,6 +8597,24 @@ async function renderDiGeoStateSuburb(host, stateCode, lgaName) {
         e.count++; if (inv.customerNumber) e.custs.add(inv.customerNumber);
         agg.set(sub, e);
     }
+    if (chartViewMode("diGeo") === "adjusted") {
+        const inRange = getDateRangePredicate();
+        for (const cm of (state.creditMemos || [])) {
+            if (!inRange(cm.postingDate)) continue;
+            if (state.filters.salesperson && (cm.salesperson || "(unassigned)") !== state.filters.salesperson) continue;
+            if (state.filters.customer && cm.customerNumber !== state.filters.customer) continue;
+            const sub = custSuburb.get(cm.customerNumber);
+            if (!sub) continue;
+            const e = agg.get(sub);
+            if (!e) continue;
+            for (const ln of (cm.salesCreditMemoLines || [])) {
+                if (!lineMatchesFilters(ln)) continue;
+                if (state.filters.location && locationCode(ln.locationId) !== state.filters.location) continue;
+                e.sales -= lineNetAmount(ln);
+                e.cost  -= totalCostFromLine(ln, 1, cm.postingDate, cm.customerNumber, cm.number);
+            }
+        }
+    }
     const maxSales = [...agg.values()].reduce((m, e) => Math.max(m, e.sales), 0) || 1;
     // Project + render
     const bbox = lgaBbox;
@@ -8688,6 +8734,26 @@ async function renderDiGeoStateLGAs(host, stateCode) {
         e.count++;
         if (inv.customerNumber) e.custs.add(inv.customerNumber);
         agg.set(lga, e);
+    }
+    // Honour the top-level Geo pill in the LGA drill view too — without
+    // this, drilling in to a state silently flipped the data back to gross.
+    if (chartViewMode("diGeo") === "adjusted") {
+        const inRange = getDateRangePredicate();
+        for (const cm of (state.creditMemos || [])) {
+            if (!inRange(cm.postingDate)) continue;
+            if (state.filters.salesperson && (cm.salesperson || "(unassigned)") !== state.filters.salesperson) continue;
+            if (state.filters.customer && cm.customerNumber !== state.filters.customer) continue;
+            const lga = custLga.get(cm.customerNumber);
+            if (!lga) continue;
+            const e = agg.get(lga);
+            if (!e) continue;
+            for (const ln of (cm.salesCreditMemoLines || [])) {
+                if (!lineMatchesFilters(ln)) continue;
+                if (state.filters.location && locationCode(ln.locationId) !== state.filters.location) continue;
+                e.sales -= lineNetAmount(ln);
+                e.cost  -= totalCostFromLine(ln, 1, cm.postingDate, cm.customerNumber, cm.number);
+            }
+        }
     }
     const maxSales = [...agg.values()].reduce((m, e) => Math.max(m, e.sales), 0) || 1;
     // Compute bbox over all VIC features so we can project to SVG.
@@ -9270,12 +9336,46 @@ function renderTrendChart() {
     paintBucketToggle("trendToggle");
     const ctx = document.getElementById("trendChart").getContext("2d");
     const ct = state.trendChartType || "line";
+    const adj = chartViewMode("trend") === "adjusted";
     if (state.trendSplit) {
         // Split mode: re-shape the per-series datasets to honour the same
         // chart-type vocabulary as the non-split path. column / bar stay
         // stacked; lines/areas swap to type=line; "combo" falls back to
         // stacked column (combo doesn't really apply to multi-series).
         const raw = bucketInvoicesSplitBy(state.filtered, state.bucket, state.trendSplit);
+        // Adjusted: walk credit memos and subtract per (bucketKey × dim).
+        // Mirrors bucketInvoicesSplitBy's grouping logic so the dataset
+        // indices line up.
+        if (adj) {
+            const inRange = getDateRangePredicate();
+            const labelIdx = new Map(raw.labels.map((l, i) => [l, i]));
+            const dsIdx    = new Map(raw.datasets.map((d, i) => [d.label, i]));
+            for (const cm of (state.creditMemos || [])) {
+                if (!inRange(cm.postingDate)) continue;
+                if (state.filters.salesperson && (cm.salesperson || "(unassigned)") !== state.filters.salesperson) continue;
+                if (state.filters.customer && cm.customerNumber !== state.filters.customer) continue;
+                const k = bucketKey(cm.postingDate, state.bucket);
+                const li = labelIdx.get(k); if (li == null) continue;
+                if (state.trendSplit === "salesperson") {
+                    const di = dsIdx.get(cm.salesperson || "(unassigned)"); if (di == null) continue;
+                    let cmAmt = 0;
+                    for (const ln of (cm.salesCreditMemoLines || [])) {
+                        if (!lineMatchesFilters(ln)) continue;
+                        if (state.filters.location && locationCode(ln.locationId) !== state.filters.location) continue;
+                        cmAmt += lineNetAmount(ln);
+                    }
+                    raw.datasets[di].data[li] -= cmAmt;
+                } else if (state.trendSplit === "location") {
+                    for (const ln of (cm.salesCreditMemoLines || [])) {
+                        if (!lineMatchesFilters(ln)) continue;
+                        const dk = locationCode(ln.locationId);
+                        if (state.filters.location && dk !== state.filters.location) continue;
+                        const di = dsIdx.get(dk); if (di == null) continue;
+                        raw.datasets[di].data[li] -= lineNetAmount(ln);
+                    }
+                }
+            }
+        }
         const labels = raw.labels;
         const seriesColors = raw.datasets.map(d => d.backgroundColor || d.borderColor || "#3f51b5");
         let chartType, datasets, scales;
@@ -9364,6 +9464,25 @@ function renderTrendChart() {
         return;
     }
     const buckets = bucketInvoices(state.filtered, state.bucket);
+    // Adjusted: subtract per-bucketKey credit-memo sales from the revenue
+    // series. Invoice count stays gross — credit memos are separate docs,
+    // not a removal of the original invoice.
+    if (adj) {
+        const idx = new Map(buckets.map((b, i) => [b.key, i]));
+        const inRange = getDateRangePredicate();
+        for (const cm of (state.creditMemos || [])) {
+            if (!inRange(cm.postingDate)) continue;
+            if (state.filters.salesperson && (cm.salesperson || "(unassigned)") !== state.filters.salesperson) continue;
+            if (state.filters.customer && cm.customerNumber !== state.filters.customer) continue;
+            const k = bucketKey(cm.postingDate, state.bucket);
+            const i = idx.get(k); if (i == null) continue;
+            for (const ln of (cm.salesCreditMemoLines || [])) {
+                if (!lineMatchesFilters(ln)) continue;
+                if (state.filters.location && locationCode(ln.locationId) !== state.filters.location) continue;
+                buckets[i].revenue -= lineNetAmount(ln);
+            }
+        }
+    }
     const cfg = buildTrendChartConfig(ct, {
         labels: buckets.map(b => b.key),
         primary: buckets.map(b => b.revenue),
@@ -9433,7 +9552,21 @@ function buildOverviewSingleSeriesConfig(chartType, opts) {
 
 function renderTopCustomersChart() {
     destroyChart("topCustomers");
-    const top = [...state.byCustomer.values()].sort((a, b) => b.revenue - a.revenue).slice(0, 10);
+    // Per-chart pill: clone byCustomer rows and net out returns before
+    // ranking. state.byCustomer stays gross so other charts and KPI tiles
+    // aren't affected.
+    const adj = chartViewMode("topCustomers") === "adjusted";
+    const bucket = adj ? getReturnsBuckets().byCustomer : null;
+    const top = [...state.byCustomer.values()]
+        .map(g => {
+            const ret = bucket && bucket.get(g.number);
+            if (!ret) return g;
+            const revenue = (g.revenue || 0) - ret.sales;
+            const gp      = (g.gp || 0) - (ret.sales - ret.cost);
+            return { ...g, revenue, gp, gpPct: revenue ? gp / revenue : 0 };
+        })
+        .filter(g => g.revenue > 0)
+        .sort((a, b) => b.revenue - a.revenue).slice(0, 10);
     const ctx = document.getElementById("topCustomersChart").getContext("2d");
     state.charts.topCustomers = new Chart(ctx, buildOverviewSingleSeriesConfig(state.topCustomersChartType, {
         labels: top.map(g => truncate(g.customerName || g.customerNumber, 28)),
@@ -9446,7 +9579,19 @@ function renderTopCustomersChart() {
 
 function renderTopItemsChart() {
     destroyChart("topItems");
-    const top = [...state.byItem.values()].filter(it => it.revenue > 0).sort((a, b) => b.revenue - a.revenue).slice(0, 10);
+    const adj = chartViewMode("topItems") === "adjusted";
+    const bucket = adj ? getReturnsBuckets().byItem : null;
+    const top = [...state.byItem.values()]
+        .map(it => {
+            const ret = bucket && bucket.get(it.key);
+            if (!ret) return it;
+            const revenue = (it.revenue || 0) - ret.sales;
+            const qty     = (it.qty || 0)     - ret.qty;
+            const gp      = (it.gp || 0)      - (ret.sales - ret.cost);
+            return { ...it, revenue, qty, gp, gpPct: revenue ? gp / revenue : 0 };
+        })
+        .filter(it => it.revenue > 0)
+        .sort((a, b) => b.revenue - a.revenue).slice(0, 10);
     const ctx = document.getElementById("topItemsChart").getContext("2d");
     state.charts.topItems = new Chart(ctx, buildOverviewSingleSeriesConfig(state.topItemsChartType, {
         labels: top.map(it => truncate((it.number ? it.number + " — " : "") + (it.description || ""), 30)),
@@ -9459,7 +9604,18 @@ function renderTopItemsChart() {
 
 function renderLocationChart() {
     destroyChart("location");
-    const rows = [...state.byLocation.values()].filter(r => r.revenue > 0).sort((a, b) => b.revenue - a.revenue);
+    const adj = chartViewMode("location") === "adjusted";
+    const bucket = adj ? getReturnsBuckets().byBranch : null;
+    const rows = [...state.byLocation.values()]
+        .map(r => {
+            const ret = bucket && bucket.get(r.code);
+            if (!ret) return r;
+            const revenue = (r.revenue || 0) - ret.sales;
+            const qty     = (r.qty || 0)     - ret.qty;
+            const gp      = (r.gp || 0)      - (ret.sales - ret.cost);
+            return { ...r, revenue, qty, gp, gpPct: revenue ? gp / revenue : 0 };
+        })
+        .filter(r => r.revenue > 0).sort((a, b) => b.revenue - a.revenue);
     const ctx = document.getElementById("locationChart").getContext("2d");
     state.charts.location = new Chart(ctx, buildOverviewSingleSeriesConfig(state.locationChartType, {
         labels: rows.map(r => r.code),
@@ -9477,7 +9633,18 @@ function renderLocationChart() {
 
 function renderSalespersonChart() {
     destroyChart("salesperson");
-    const rows = [...state.bySalesperson.values()].filter(r => r.revenue > 0).sort((a, b) => b.revenue - a.revenue);
+    const adj = chartViewMode("salesperson") === "adjusted";
+    const bucket = adj ? getReturnsBuckets().bySalesperson : null;
+    const rows = [...state.bySalesperson.values()]
+        .map(r => {
+            const ret = bucket && bucket.get(r.code);
+            if (!ret) return r;
+            const revenue = (r.revenue || 0) - ret.sales;
+            const qty     = (r.qty || 0)     - ret.qty;
+            const gp      = (r.gp || 0)      - (ret.sales - ret.cost);
+            return { ...r, revenue, qty, gp, gpPct: revenue ? gp / revenue : 0 };
+        })
+        .filter(r => r.revenue > 0).sort((a, b) => b.revenue - a.revenue);
     const ctx = document.getElementById("salespersonChart").getContext("2d");
     state.charts.salesperson = new Chart(ctx, buildOverviewSingleSeriesConfig(state.salespersonChartType, {
         labels: rows.map(r => r.code),
@@ -9567,6 +9734,18 @@ function renderStatusChart() {
 function renderDayOfWeekChart() {
     destroyChart("dow");
     const { rev, cnt } = dayOfWeekCounts(state.filtered);
+    // Per-chart pill: net per-DOW revenue from the byDow returns bucket.
+    // Invoice counts stay gross — a credit memo isn't a removed invoice,
+    // it's a separate value-adjustment document.
+    if (chartViewMode("dow") === "adjusted") {
+        const bucket = getReturnsBuckets().byDow;
+        for (const [dowStr, ret] of bucket) {
+            const sundayBased = parseInt(dowStr, 10);
+            if (!Number.isFinite(sundayBased)) continue;
+            const idx = (sundayBased + 6) % 7;
+            rev[idx] -= ret.sales;
+        }
+    }
     const labels = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
     const ctx = document.getElementById("dowChart").getContext("2d");
     const ct = state.dowChartType || "bar";
