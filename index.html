@@ -9559,7 +9559,7 @@ function renderTopCustomersChart() {
     const bucket = adj ? getReturnsBuckets().byCustomer : null;
     const top = [...state.byCustomer.values()]
         .map(g => {
-            const ret = bucket && bucket.get(g.number);
+            const ret = bucket && bucket.get(g.customerNumber);
             if (!ret) return g;
             const revenue = (g.revenue || 0) - ret.sales;
             const gp      = (g.gp || 0) - (ret.sales - ret.cost);
@@ -9782,13 +9782,23 @@ function renderDayOfWeekChart() {
         });
         return;
     }
-    // default: bar (with invoice-count line overlay)
+    // default: bar (with invoice-count line overlay) — uses the same
+    // visibility recipe as the Branch GP $ vs GP % combo: translucent
+    // bars (order 2), thicker line with white-filled / bold-bordered
+    // points (order 1) so a line point landing inside a bar still reads
+    // clearly against the dark fill.
     state.charts.dow = new Chart(ctx, {
         type: "bar",
         data: { labels, datasets: [
-            { label: "Revenue", data: rev, backgroundColor: "#3f51b5", borderRadius: 4, yAxisID: "y" },
-            { label: "Invoices", data: cnt, type: "line", borderColor: "#e91e63",
-              backgroundColor: "rgba(233,30,99,0.15)", fill: false, tension: 0.3, yAxisID: "y1", borderWidth: 2, pointRadius: 3 }
+            { label: "Revenue", data: rev,
+              backgroundColor: "rgba(63,81,181,0.78)", borderColor: "#3f51b5", borderWidth: 1,
+              borderRadius: 4, yAxisID: "y", order: 2 },
+            { label: "Invoices", data: cnt, type: "line",
+              borderColor: "#e91e63", backgroundColor: "rgba(233,30,99,0.18)",
+              borderWidth: 2.5, tension: 0.25, fill: false,
+              pointRadius: 6, pointHoverRadius: 8,
+              pointBackgroundColor: "#fff", pointBorderColor: "#e91e63", pointBorderWidth: 2,
+              yAxisID: "y1", order: 1 }
         ] },
         options: chartBase({
             plugins: { legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } },
@@ -15358,6 +15368,18 @@ function wireEvents() {
         saveChartViewModes();
         // Returns buckets are filter-keyed so they don't need a flush here.
         renderCurrentTab();
+        // If a Top-N modal is open and it's linked to this chart, repaint
+        // its title + table so the modal data tracks the chart pill in
+        // real time without the user having to close + reopen.
+        const openDim = topNState.dim;
+        if (openDim) {
+            const def = TOPN_DEFS[openDim];
+            if (def && def.chartId === chartId) {
+                document.getElementById("topNTitle").textContent =
+                    def.title + (mode === "adjusted" ? " · Adjusted (net of returns)" : "");
+                renderTopNTable();
+            }
+        }
     });
 
     document.getElementById("locationFilter").addEventListener("change", e => {
