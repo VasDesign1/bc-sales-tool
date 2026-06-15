@@ -221,6 +221,10 @@
             font-size: 12px; font-weight: 600; cursor: pointer;
         }
         .toggle button.active { background: linear-gradient(135deg, #3f51b5, #5c6bc0); color: white; }
+        /* Amber highlight when Adjusted view mode is active — makes it
+           obvious at a glance that charts are showing net-of-returns data. */
+        #viewModeToggle button[data-mode="adjusted"].active { background: linear-gradient(135deg, #f57c00, #fb8c00); }
+        body.view-adjusted #viewModeToggle { box-shadow: 0 0 0 2px rgba(245,124,0,0.35); border-color: #fb8c00; }
         .toggle button + button { border-left: 1px solid #d6d8eb; }
         .mini-select {
             padding: 5px 8px; border: 1px solid #d6d8eb; border-radius: 8px;
@@ -1621,6 +1625,13 @@
                 <div class="field" title="Hide documents modified after this timestamp — useful for matching a stale Power BI refresh">
                     <label for="snapshotAsOf">Compare as of</label>
                     <input type="datetime-local" id="snapshotAsOf">
+                </div>
+                <div class="field" title="Toggle every chart in the tool between gross figures and figures net of credit-memo returns. KPI tiles always show both — only the graphs switch.">
+                    <label>View mode</label>
+                    <div class="toggle" id="viewModeToggle">
+                        <button type="button" data-mode="gross" class="active">Gross</button>
+                        <button type="button" data-mode="adjusted">Adjusted</button>
+                    </div>
                 </div>
             </div>
 
@@ -4536,6 +4547,8 @@ const state = {
     custFilter: "", itemFilter: "", eomFilter: "", customerItemFilter: "",
     filters: { location: "", salesperson: "", customer: "", customerName: "", item: "", itemDesc: "", status: "" },
     snapshotAsOf: null,
+    // "gross" (default) or "adjusted" — see scaleEntityViewMode() / applyViewModeToCharts() / etc.
+    viewMode: "gross",
     valueEntries: [],
     salesOrders: [],
     salesOrderOutstandingLines: [],
@@ -5187,7 +5200,9 @@ function aggregateByCustomer(invoices) {
         g.gp    = g.revenue - g.cost;
         g.gpPct = g.revenue ? g.gp / g.revenue : 0;
     }
-    scaleEntityCostsToVE([...map.values()], "cost");
+    const custRows = [...map.values()];
+    scaleEntityCostsToVE(custRows, "cost");
+    applyViewMode(custRows, getReturnsBuckets().byCustomer, r => r.customerNumber || "(unknown)", "revenue");
     return map;
 }
 
@@ -5217,7 +5232,9 @@ function aggregateByItem(invoices) {
         g.gp    = g.revenue - g.cost;
         g.gpPct = g.revenue ? g.gp / g.revenue : 0;
     }
-    scaleEntityCostsToVE([...map.values()], "cost");
+    const itemRows = [...map.values()];
+    scaleEntityCostsToVE(itemRows, "cost");
+    applyViewMode(itemRows, getReturnsBuckets().byItem, r => r.key, "revenue");
     return map;
 }
 
@@ -5288,7 +5305,9 @@ function aggregateBranchMonthly(invoices) {
         }
     }
     const rows = [...map.values()].map(g => ({ ...g, customerCount: g.customers.size, gp: g.sales - g.cost, gpPct: g.sales ? (g.sales - g.cost) / g.sales : 0 }));
-    return scaleEntityCostsToVE(rows);
+    scaleEntityCostsToVE(rows);
+    applyViewMode(rows, getReturnsBuckets().byBranchMonth, r => r.fy + "|" + r.monthKey + "|" + r.branch);
+    return rows;
 }
 
 function aggregateSalespersonMonthly(invoices) {
@@ -5307,7 +5326,9 @@ function aggregateSalespersonMonthly(invoices) {
         if (inv.customerNumber) g.customers.add(inv.customerNumber);
     }
     const rows = [...map.values()].map(g => ({ ...g, customerCount: g.customers.size, gp: g.sales - g.cost, gpPct: g.sales ? (g.sales - g.cost) / g.sales : 0 }));
-    return scaleEntityCostsToVE(rows);
+    scaleEntityCostsToVE(rows);
+    applyViewMode(rows, getReturnsBuckets().bySalespersonMonth, r => r.fy + "|" + r.monthKey + "|" + r.salesperson);
+    return rows;
 }
 
 // EOM line-level rows
@@ -5362,7 +5383,33 @@ function bucketInvoices(invoices, bucket) {
         cur.count += 1;
         map.set(k, cur);
     }
-    return [...map.values()].sort((a, b) => a.key < b.key ? -1 : 1);
+    const rows = [...map.values()].sort((a, b) => a.key < b.key ? -1 : 1);
+    // View-mode adjustment — subtract bucketed credit-memo revenue per
+    // time bucket so the Overview revenue-over-time and any other
+    // bucket-driven trend chart honours the global Adjusted toggle.
+    if (state.viewMode === "adjusted") {
+        const returnsMap = bucket === "day"   ? getReturnsBuckets().byDate
+                         : bucket === "week"  ? null                   /* sum-on-the-fly below */
+                         :                       getReturnsBuckets().byMonth;
+        if (returnsMap) {
+            for (const r of rows) {
+                const ret = returnsMap.get(r.key);
+                if (ret) r.revenue -= ret.sales;
+            }
+        } else if (bucket === "week") {
+            // Re-bucket date-keyed returns into week keys.
+            const weekly = new Map();
+            for (const [dk, v] of getReturnsBuckets().byDate) {
+                const wk = bucketKey(dk, "week");
+                weekly.set(wk, (weekly.get(wk) || 0) + v.sales);
+            }
+            for (const r of rows) {
+                const sub = weekly.get(r.key);
+                if (sub) r.revenue -= sub;
+            }
+        }
+    }
+    return rows;
 }
 function bucketInvoicesSplitBy(invoices, bucket, dimension) {
     const matrix = new Map(), dims = new Set();
@@ -5406,6 +5453,14 @@ function dayOfWeekCounts(invoices) {
         const d = new Date(inv.postingDate); if (isNaN(d)) continue;
         const idx = (d.getUTCDay() + 6) % 7;
         rev[idx] += invoiceSalesAmount(inv); cnt[idx] += 1;
+    }
+    // View-mode adjustment — subtract returns per day-of-week. credit
+    // memos use the same Mon=0..Sun=6 reordering applied to invoices.
+    if (state.viewMode === "adjusted") {
+        for (const [dowStr, v] of getReturnsBuckets().byDow) {
+            const idx = ((parseInt(dowStr, 10) || 0) + 6) % 7;
+            rev[idx] -= v.sales;
+        }
     }
     return { rev, cnt };
 }
@@ -5519,6 +5574,110 @@ document.addEventListener("mouseout", e => {
     if (related && related.closest && related.closest("[data-tip]")) return;
     if (_diTipEl) _diTipEl.style.display = "none";
 });
+
+// =========================================================================
+// VIEW MODE: gross vs adjusted (net of credit-memo returns)
+// =========================================================================
+// One global state.viewMode flag — when "adjusted", every aggregator
+// subtracts the matching credit-memo totals from its per-entity rows so
+// every chart in the tool reads as net-of-returns. KPI tiles keep
+// showing both side-by-side regardless of the toggle, per the user spec.
+//
+// All credit memos in the current toolbar window are bucketed into a
+// shared object so each render path can pluck just the dimension it
+// needs (by branch+month, by salesperson+month, by item, by customer,
+// by month, by date, by DOW). Cost is included so GP / GP% recompute
+// cleanly. Each bucket also tracks qty so Qty-axis charts adjust too.
+//
+// IMPORTANT — applyViewMode mutates the rows in place. Aggregators
+// rebuild their rows on every render, so this is safe.
+
+function getReturnsBuckets() {
+    if (state._returnsBuckets && state._returnsBucketsKey === _returnsCacheKey()) {
+        return state._returnsBuckets;
+    }
+    const inRange = getDateRangePredicate();
+    const buckets = {
+        byBranchMonth:      new Map(),  // "fy|mk|branch"
+        bySalespersonMonth: new Map(),  // "fy|mk|sp"
+        byItem:             new Map(),  // itemNo or "(non-item) ..."
+        byCustomer:         new Map(),  // custNo
+        byMonth:            new Map(),  // monthKey
+        byDate:             new Map(),  // YYYY-MM-DD
+        byDow:              new Map(),  // 0..6
+    };
+    const addTo = (map, key, sales, qty, cost) => {
+        const cur = map.get(key) || { sales: 0, qty: 0, cost: 0 };
+        cur.sales += sales; cur.qty += qty; cur.cost += cost;
+        map.set(key, cur);
+    };
+    for (const cm of (state.creditMemos || [])) {
+        if (!inRange(cm.postingDate)) continue;
+        if (state.filters.salesperson && (cm.salesperson || "(unassigned)") !== state.filters.salesperson) continue;
+        if (state.filters.customer && cm.customerNumber !== state.filters.customer) continue;
+        const fy = fiscalYear(cm.postingDate);
+        const mk = monthKey(cm.postingDate);
+        const date = (cm.postingDate || "").toString().slice(0, 10);
+        const dow = cm.postingDate ? new Date(cm.postingDate).getDay() : 0;
+        const sp = cm.salesperson || "(unassigned)";
+        const custKey = cm.customerNumber || "(unknown)";
+        // Walk lines for per-branch and per-item allocation.
+        for (const ln of (cm.salesCreditMemoLines || [])) {
+            if (!lineMatchesFilters(ln)) continue;
+            const code = locationCode(ln.locationId);
+            if (state.filters.location && code !== state.filters.location) continue;
+            const sales = lineNetAmount(ln);
+            const qty   = num(ln.quantity);
+            const cost  = totalCostFromLine(ln, 1, cm.postingDate, cm.customerNumber, cm.number);
+            const itemNo = ln.lineObjectNumber || ln.itemId || "";
+            const itemKey = itemNo || ("(non-item) " + (ln.lineType || "?"));
+            addTo(buckets.byBranchMonth,      fy + "|" + mk + "|" + code, sales, qty, cost);
+            addTo(buckets.bySalespersonMonth, fy + "|" + mk + "|" + sp,   sales, qty, cost);
+            addTo(buckets.byItem,             itemKey,                    sales, qty, cost);
+            addTo(buckets.byCustomer,         custKey,                    sales, qty, cost);
+            addTo(buckets.byMonth,            mk,                         sales, qty, cost);
+            addTo(buckets.byDate,             date,                       sales, qty, cost);
+            addTo(buckets.byDow,              String(dow),                sales, qty, cost);
+        }
+    }
+    state._returnsBuckets = buckets;
+    state._returnsBucketsKey = _returnsCacheKey();
+    return buckets;
+}
+// Cache key that invalidates when filters / view mode change.
+function _returnsCacheKey() {
+    return JSON.stringify([
+        state.from || (document.getElementById("fromDate") || {}).value || "",
+        state.to   || (document.getElementById("toDate")   || {}).value || "",
+        state.filters.salesperson,
+        state.filters.customer,
+        state.filters.location,
+        state.filters.item,
+        (state.creditMemos || []).length,
+    ]);
+}
+
+// Subtract returns from per-row aggregated values in place, then
+// recompute gp / gpPct so the row stays internally consistent.
+// keyFn(row) → bucket key; revField is the column that holds revenue
+// (most rows use "sales", aggregateByItem and aggregateByCustomer use
+// "revenue").
+function applyViewMode(rows, bucketMap, keyFn, revField) {
+    if (state.viewMode !== "adjusted") return rows;
+    if (!rows || !rows.length) return rows;
+    revField = revField || "sales";
+    for (const r of rows) {
+        const k = keyFn(r);
+        const ret = bucketMap.get(k);
+        if (!ret) continue;
+        r[revField] = (r[revField] || 0) - ret.sales;
+        r.qty       = (r.qty       || 0) - ret.qty;
+        r.cost      = (r.cost      || 0) - ret.cost;
+        r.gp        = (r[revField] || 0) - (r.cost || 0);
+        r.gpPct     = (r[revField] || 0) ? r.gp / r[revField] : 0;
+    }
+    return rows;
+}
 
 // Return credit-memo totals respecting the current toolbar filters —
 // used to compute "Adjusted Sales / Profit / Margin" on every tab that
@@ -13427,6 +13586,15 @@ function renderMTD() {
     }
     // Normalise costs against the MTD-window VE total (not toolbar range).
     scaleEntityCostsToVE([...byDate.values()], "cost", haveMtdVE ? mtdVECost : null);
+    // View-mode adjustment — subtract returns per day in the MTD window
+    // so the cumulative line + daily bar honour the global Adjusted toggle.
+    if (state.viewMode === "adjusted") {
+        const dateMap = getReturnsBuckets().byDate;
+        for (const cur of byDate.values()) {
+            const ret = dateMap.get(cur.day);
+            if (ret) { cur.sales -= ret.sales; cur.cost -= ret.cost; }
+        }
+    }
     for (const cur of byDate.values()) {
         cur.gp = cur.sales - cur.cost;
     }
@@ -14621,6 +14789,28 @@ function wireEvents() {
             if (state.invoices && state.invoices.length) { rebuildFiltered(); renderCurrentTab(); }
         });
     });
+
+    // View mode toggle (Gross | Adjusted) — global, affects every chart.
+    // Persists in localStorage so a reload remembers the last choice.
+    (function wireViewMode() {
+        const stored = (() => { try { return localStorage.getItem("bcViewMode") || ""; } catch (e) { return ""; } })();
+        if (stored === "adjusted" || stored === "gross") state.viewMode = stored;
+        const buttons = document.querySelectorAll("#viewModeToggle button");
+        const applyClass = () => {
+            buttons.forEach(b => b.classList.toggle("active", b.dataset.mode === state.viewMode));
+            document.body.classList.toggle("view-adjusted", state.viewMode === "adjusted");
+        };
+        applyClass();
+        buttons.forEach(b => b.addEventListener("click", () => {
+            if (b.dataset.mode === state.viewMode) return;
+            state.viewMode = b.dataset.mode;
+            // Invalidate the returns-buckets cache so the next render walks credit memos again.
+            state._returnsBuckets = null;
+            applyClass();
+            try { localStorage.setItem("bcViewMode", state.viewMode); } catch (e) { /* storage blocked */ }
+            renderCurrentTab();
+        }));
+    })();
 
     document.getElementById("locationFilter").addEventListener("change", e => {
         state.filters.location = e.target.value; rebuildFiltered(); renderCurrentTab();
