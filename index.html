@@ -224,18 +224,35 @@
         /* Per-chart Gross | Adjusted pill — sits in the chart-card .head
            alongside chart-type selectors. Amber Adjusted state so the
            user can scan a tab and see which charts are netted. */
+        /* Per-chart Gross|Adj pill. Visuals come from CSS variables that
+           every theme overrides, so the pill matches its theme's accent
+           the same way .mini-select / .btn-primary do. Padding and
+           line-height are set so the uppercase letters fit cleanly
+           inside the buttons in every theme's font. */
+        :root {
+            --pill-bg:            transparent;
+            --pill-border:        #d6d8eb;
+            --pill-divider:       #d6d8eb;
+            --pill-text:          #455a64;
+            --pill-gross-bg:      linear-gradient(135deg, #3f51b5, #5c6bc0);
+            --pill-gross-text:    #fff;
+            --pill-adj-bg:        linear-gradient(135deg, #f57c00, #fb8c00);
+            --pill-adj-text:      #fff;
+        }
         .chart-view-toggle {
-            display: inline-flex; border: 1px solid #d6d8eb; border-radius: 6px;
-            overflow: hidden; font-size: 10px;
+            display: inline-flex; background: var(--pill-bg);
+            border: 1px solid var(--pill-border); border-radius: 6px;
+            overflow: hidden; font-size: 11px; line-height: 1;
         }
         .chart-view-toggle button {
-            background: transparent; border: none; padding: 3px 8px;
-            font-weight: 700; cursor: pointer; color: #455a64; letter-spacing: 0.3px;
-            text-transform: uppercase;
+            background: transparent; border: none; padding: 6px 12px;
+            font-weight: 700; cursor: pointer; color: var(--pill-text);
+            letter-spacing: 0.3px; text-transform: uppercase;
+            line-height: 1; min-width: 44px;
         }
-        .chart-view-toggle button + button { border-left: 1px solid #d6d8eb; }
-        .chart-view-toggle button.active { background: linear-gradient(135deg, #3f51b5, #5c6bc0); color: #fff; }
-        .chart-view-toggle button[data-mode="adjusted"].active { background: linear-gradient(135deg, #f57c00, #fb8c00); }
+        .chart-view-toggle button + button { border-left: 1px solid var(--pill-divider); }
+        .chart-view-toggle button.active                       { background: var(--pill-gross-bg); color: var(--pill-gross-text); }
+        .chart-view-toggle button[data-mode="adjusted"].active { background: var(--pill-adj-bg);   color: var(--pill-adj-text); }
         .card .head .chart-view-toggle { margin-left: 4px; }
         .toggle button + button { border-left: 1px solid #d6d8eb; }
         .mini-select {
@@ -699,6 +716,11 @@
         html.theme-onyx .toggle button.active { background: #d4af7a; color: #0a0a0b; }
         html.theme-onyx .toggle button + button { border-left-color: #2a2820; }
         html.theme-onyx .mini-select { background: #141416; color: #d4af7a; border-color: #2a2820; }
+        html.theme-onyx {
+            --pill-border: #2a2820; --pill-divider: #2a2820; --pill-text: #c8c4bb;
+            --pill-gross-bg: #d4af7a; --pill-gross-text: #0a0a0b;
+            --pill-adj-bg:   #c2864a; --pill-adj-text:   #0a0a0b;
+        }
         html.theme-onyx .badge-open { background: rgba(255,180,80,0.15); color: #e0bf90; }
         html.theme-onyx .badge-paid { background: rgba(123,156,142,0.15); color: #7b9c8e; }
         html.theme-onyx .badge-draft { background: #1c1b18; color: #88837a; }
@@ -791,6 +813,11 @@
         html.theme-linen .toggle button.active { background: #5b6e3f; color: #f4f1eb; }
         html.theme-linen .toggle button + button { border-left-color: rgba(45,42,36,0.24); }
         html.theme-linen .mini-select { background: transparent; color: #1a1a1a; border-color: rgba(45,42,36,0.24); }
+        html.theme-linen {
+            --pill-border: rgba(45,42,36,0.24); --pill-divider: rgba(45,42,36,0.18); --pill-text: #1a1a1a;
+            --pill-gross-bg: #5b6e3f; --pill-gross-text: #f4f1eb;
+            --pill-adj-bg:   #a87938; --pill-adj-text:   #f4f1eb;
+        }
         html.theme-linen .badge-open { background: rgba(160,74,46,0.12); color: #a04a2e; }
         html.theme-linen .badge-paid { background: rgba(91,110,63,0.12); color: #4a6b3d; }
         html.theme-linen .badge-draft { background: rgba(45,42,36,0.08); color: #6e6a60; }
@@ -916,6 +943,11 @@
         html.theme-aurora .toggle button.active { background: linear-gradient(135deg, #b57bff, #6be0ff); color: #08081b; }
         html.theme-aurora .toggle button + button { border-left-color: rgba(255,255,255,0.12); }
         html.theme-aurora .mini-select { background: transparent; color: #d4baff; border-color: rgba(255,255,255,0.12); }
+        html.theme-aurora {
+            --pill-border: rgba(255,255,255,0.16); --pill-divider: rgba(255,255,255,0.16); --pill-text: #d4baff;
+            --pill-gross-bg: linear-gradient(135deg, #b57bff, #6be0ff); --pill-gross-text: #1a1226;
+            --pill-adj-bg:   linear-gradient(135deg, #ff6b9d, #b57bff); --pill-adj-text:   #1a1226;
+        }
         html.theme-aurora .badge-open { background: rgba(255,77,109,0.18); color: #ff8fa3; }
         html.theme-aurora .badge-paid { background: rgba(63,224,168,0.18); color: #3fe0a8; }
         html.theme-aurora .badge-draft { background: rgba(255,255,255,0.06); color: #b8b6cc; }
@@ -1007,6 +1039,14 @@
         html.theme-atelier .toggle button.active { background: #000; color: #fff; }
         html.theme-atelier .toggle button + button { border-left: 2px solid #000; }
         html.theme-atelier .mini-select { background: #fff; color: #000; border: 2px solid #000; border-radius: 0; font-weight: 700; }
+        html.theme-atelier {
+            --pill-border: #000; --pill-divider: #000; --pill-text: #000;
+            --pill-gross-bg: #000;     --pill-gross-text: #fff;
+            --pill-adj-bg:   #ff4400;  --pill-adj-text:   #fff;
+        }
+        /* Atelier is a square-corner / hard-edge theme — match its
+           dropdown / button shape so the pill blends in. */
+        html.theme-atelier .chart-view-toggle { border-radius: 0; border-width: 2px; }
         html.theme-atelier .badge { border-radius: 0; }
         html.theme-atelier .badge-open { background: #ff4400; color: #fff; }
         html.theme-atelier .badge-paid { background: #000; color: #fff; }
@@ -1104,6 +1144,11 @@
         html.theme-concierge .toggle button.active { background: #0e4d3f; color: #f3eee5; }
         html.theme-concierge .toggle button + button { border-left-color: rgba(44,42,38,0.18); }
         html.theme-concierge .mini-select { background: #f3eee5; color: #0e4d3f; border-color: rgba(44,42,38,0.18); }
+        html.theme-concierge {
+            --pill-border: rgba(44,42,38,0.18); --pill-divider: rgba(44,42,38,0.14); --pill-text: #0e4d3f;
+            --pill-gross-bg: #0e4d3f; --pill-gross-text: #f3eee5;
+            --pill-adj-bg:   #b88a3d; --pill-adj-text:   #1a1410;
+        }
         html.theme-concierge .badge-open { background: rgba(156,122,60,0.18); color: #6e5526; }
         html.theme-concierge .badge-paid { background: rgba(14,77,63,0.12); color: #0e4d3f; }
         html.theme-concierge .badge-draft { background: rgba(44,42,38,0.08); color: #7a7368; }
@@ -1183,6 +1228,11 @@
         html.theme-marble .toggle button.active { background: #1e3a5f; color: #f9fafb; }
         html.theme-marble .toggle button + button { border-left-color: rgba(28,40,51,0.14); }
         html.theme-marble .mini-select { background: #ffffff; color: #1e3a5f; border-color: rgba(28,40,51,0.14); }
+        html.theme-marble {
+            --pill-border: rgba(28,40,51,0.14); --pill-divider: rgba(28,40,51,0.12); --pill-text: #1e3a5f;
+            --pill-gross-bg: #1e3a5f; --pill-gross-text: #f9fafb;
+            --pill-adj-bg:   #a07434; --pill-adj-text:   #f9fafb;
+        }
         html.theme-marble .badge-open { background: rgba(184,142,60,0.16); color: #6e5526; }
         html.theme-marble .badge-paid { background: rgba(46,94,60,0.14); color: #2e5e3c; }
         html.theme-marble .badge-draft { background: rgba(28,40,51,0.08); color: #6a7681; }
@@ -1259,6 +1309,11 @@
         html.theme-velvet .toggle button.active { background: #c9a04a; color: #1a0a0f; }
         html.theme-velvet .toggle button + button { border-left-color: rgba(201,160,74,0.20); }
         html.theme-velvet .mini-select { background: #1a0a0f; color: #c9a04a; border-color: rgba(201,160,74,0.20); }
+        html.theme-velvet {
+            --pill-border: rgba(201,160,74,0.30); --pill-divider: rgba(201,160,74,0.20); --pill-text: #c9a04a;
+            --pill-gross-bg: #c9a04a; --pill-gross-text: #1a0a0f;
+            --pill-adj-bg:   #8b2839; --pill-adj-text:   #f6efdd;
+        }
         html.theme-velvet .badge-open { background: rgba(201,160,74,0.18); color: #c9a04a; }
         html.theme-velvet .badge-paid { background: rgba(184,198,116,0.16); color: #b8c674; }
         html.theme-velvet .badge-draft { background: rgba(240,230,210,0.10); color: rgba(240,230,210,0.62); }
@@ -1335,6 +1390,11 @@
         html.theme-glacier .toggle button.active { background: #1b4f7e; color: #f6f9fb; }
         html.theme-glacier .toggle button + button { border-left-color: rgba(26,39,56,0.14); }
         html.theme-glacier .mini-select { background: #f6f9fb; color: #1b4f7e; border-color: rgba(26,39,56,0.14); }
+        html.theme-glacier {
+            --pill-border: rgba(26,39,56,0.14); --pill-divider: rgba(26,39,56,0.12); --pill-text: #1b4f7e;
+            --pill-gross-bg: #1b4f7e; --pill-gross-text: #f6f9fb;
+            --pill-adj-bg:   #d97a1f; --pill-adj-text:   #f6f9fb;
+        }
         html.theme-glacier .badge-open { background: rgba(184,142,60,0.16); color: #6e5526; }
         html.theme-glacier .badge-paid { background: rgba(46,109,92,0.14); color: #2e6d5c; }
         html.theme-glacier .badge-draft { background: rgba(26,39,56,0.08); color: #5e7286; }
@@ -1411,6 +1471,11 @@
         html.theme-bibliotheque .toggle button.active { background: #7a1f2b; color: #f6efdd; }
         html.theme-bibliotheque .toggle button + button { border-left-color: rgba(42,28,14,0.18); }
         html.theme-bibliotheque .mini-select { background: #f6efdd; color: #7a1f2b; border-color: rgba(42,28,14,0.18); }
+        html.theme-bibliotheque {
+            --pill-border: rgba(42,28,14,0.18); --pill-divider: rgba(42,28,14,0.14); --pill-text: #7a1f2b;
+            --pill-gross-bg: #7a1f2b; --pill-gross-text: #f6efdd;
+            --pill-adj-bg:   #a07434; --pill-adj-text:   #f6efdd;
+        }
         html.theme-bibliotheque .badge-open { background: rgba(184,146,60,0.18); color: #6e5526; }
         html.theme-bibliotheque .badge-paid { background: rgba(74,110,45,0.14); color: #4a6e2d; }
         html.theme-bibliotheque .badge-draft { background: rgba(42,28,14,0.08); color: #6e5526; }
@@ -1487,6 +1552,11 @@
         html.theme-pavilion .toggle button.active { background: #6e7d5e; color: #f9f5ec; }
         html.theme-pavilion .toggle button + button { border-left-color: rgba(46,51,41,0.18); }
         html.theme-pavilion .mini-select { background: #f9f5ec; color: #2e3329; border-color: rgba(46,51,41,0.18); }
+        html.theme-pavilion {
+            --pill-border: rgba(46,51,41,0.20); --pill-divider: rgba(46,51,41,0.16); --pill-text: #2e3329;
+            --pill-gross-bg: #6e7d5e; --pill-gross-text: #f9f5ec;
+            --pill-adj-bg:   #a88a4c; --pill-adj-text:   #1a1410;
+        }
         html.theme-pavilion .badge-open { background: rgba(168,138,76,0.16); color: #6e5526; }
         html.theme-pavilion .badge-paid { background: rgba(74,110,45,0.14); color: #4a6e2d; }
         html.theme-pavilion .badge-draft { background: rgba(46,51,41,0.08); color: #6e7561; }
