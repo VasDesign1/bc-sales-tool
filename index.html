@@ -5763,27 +5763,20 @@ function viewRowsForCharts(rows, dim, keyFn, revField, chartId) {
 }
 
 // =========================================================================
-// Per-chart view mode: state + persistence + pill HTML helper
+// Per-chart view mode: state + pill HTML helper
 // =========================================================================
 // Each chart card head carries a small Gross | Adjusted pill. Mode is
-// stored under state.chartViewModes[chartId] and persisted as one
-// localStorage JSON blob so a reload remembers each chart's setting.
+// kept in-memory under state.chartViewModes[chartId] for the current
+// session only — every fresh page load starts with all pills on Gross
+// (per user spec).
 function chartViewMode(chartId) {
     if (!chartId) return "gross";
     return state.chartViewModes[chartId] === "adjusted" ? "adjusted" : "gross";
 }
-function loadChartViewModes() {
-    try {
-        const raw = localStorage.getItem("bcChartViewModes");
-        if (!raw) return;
-        const parsed = JSON.parse(raw);
-        if (parsed && typeof parsed === "object") state.chartViewModes = parsed;
-    } catch (e) { /* ignore */ }
-}
-function saveChartViewModes() {
-    try { localStorage.setItem("bcChartViewModes", JSON.stringify(state.chartViewModes)); }
-    catch (e) { /* storage blocked */ }
-}
+// Pill state lives only in memory — every fresh page load resets to
+// Gross. saveChartViewModes is kept as a no-op so existing call sites
+// (e.g. the pill click handler) don't need to change.
+function saveChartViewModes() { /* intentionally no-op */ }
 // Apply the current mode to every chart-view-toggle button on the page.
 // Called by renderCurrentTab so freshly-rendered cards get the right state.
 function paintChartViewToggles() {
@@ -16087,8 +16080,12 @@ function hideThemePicker() {
     if (el) el.style.display = "none";
 }
 
-// Restore per-chart view modes from localStorage on startup.
-loadChartViewModes();
+// Per the user spec, every chart pill starts on Gross when the tool is
+// freshly opened. state.chartViewModes begins as {} (chartViewMode()
+// treats anything other than "adjusted" as gross), so we only need to
+// clear any pill state left behind by an earlier version that was
+// persisting to localStorage.
+try { localStorage.removeItem("bcChartViewModes"); } catch (e) { /* ignore */ }
 
 document.querySelectorAll("#themePicker .opt").forEach(opt => {
     opt.addEventListener("click", () => {
