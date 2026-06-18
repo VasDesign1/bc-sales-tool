@@ -5871,15 +5871,19 @@ function chartViewTogglePillHTML(chartId) {
 // used to compute "Adjusted Sales / Profit / Margin" on every tab that
 // shows a sales-KPI row. Credit revenue and the implied cost are
 // subtracted from gross totals to give "net of returns" figures.
-function getAdjustments() {
+function getAdjustments(dateOverride) {
     // Sales side always comes from Document mode (invoice lines), which
     // is gross of credit memos — so we ALWAYS subtract `credit` from
     // sales. Cost side comes from Value Entries when they're loaded;
     // VE already nets credit-memo cost rows, so we zero `cost` in that
     // case. Otherwise (no VE data) cost comes from ILE-derived line
     // costs which are gross, and we subtract the credit-memo cost too.
+    //
+    // dateOverride (optional): predicate(postingDate) → boolean. MTD
+    // passes its own [1st of month … today] predicate so the Adjusted
+    // KPI tiles are scoped to the MTD window, not the toolbar range.
     const veCostInUse = state.valueEntries && state.valueEntries.length > 0;
-    const inRange = getDateRangePredicate();
+    const inRange = dateOverride || getDateRangePredicate();
     let credit = 0, qty = 0, cost = 0;
     for (const cm of (state.creditMemos || [])) {
         if (!inRange(cm.postingDate)) continue;
@@ -5983,8 +5987,8 @@ function getValueEntryTotals() {
 // identified by the given prefix (e.g. "kpi", "brKpi", "spKpi").
 // Gross cost is derived from sales − GP so call sites don't have to
 // track it separately.
-function paintAdjustedKpis(prefix, grossSales, grossGp) {
-    const adj = getAdjustments();
+function paintAdjustedKpis(prefix, grossSales, grossGp, dateOverride) {
+    const adj = getAdjustments(dateOverride);
     const grossCost = grossSales - grossGp;
     const adjSales = grossSales - adj.credit;
     const adjCost  = grossCost - adj.cost;
@@ -14166,9 +14170,16 @@ function renderMTD() {
     renderFilterChips();
     const today = new Date();
     const mStart = startOfMonth(today);
-    const rows = state.filtered.filter(inv => {
+    // MTD owns its own date scope — 1st of this month → now — so the
+    // toolbar From/To doesn't matter here. We still honour the
+    // non-date filters (salesperson / customer / location / item /
+    // status) because those are user-applied filters the user expects
+    // to apply everywhere, not date-range scope.
+    const rows = state.invoices.filter(inv => {
         const d = new Date(inv.postingDate);
-        return d >= mStart && d <= today;
+        if (!(d >= mStart && d <= today)) return false;
+        if (!docInSnapshot(inv)) return false;
+        return invoiceMatchesFilters(inv);
     });
     // VE totals scoped to the MTD window — NOT the toolbar From/To,
     // which can span 12 months and would scale the MTD cost to the
@@ -14250,8 +14261,15 @@ function renderMTD() {
     document.getElementById("mtdGpp").textContent = fmtPct(totSales ? totGp / totSales : 0);
     document.getElementById("mtdQty").textContent = fmtInt(totQty);
     document.getElementById("mtdMeta").textContent = daily.length + " day" + (daily.length === 1 ? "" : "s") + " with sales";
-    // Adjusted KPIs — same shape as Overview / Branch / Salesperson / Item.
-    paintAdjustedKpis("mtdKpi", totSales, totGp);
+    // Adjusted KPIs — same shape as Overview / Branch / Salesperson / Item,
+    // but scoped to the MTD window so credit memos posted outside this
+    // month don't get netted into the tiles.
+    const mtdAdjPredicate = postingDate => {
+        if (!postingDate) return false;
+        const d = new Date(postingDate);
+        return d >= mStart && d <= today;
+    };
+    paintAdjustedKpis("mtdKpi", totSales, totGp, mtdAdjPredicate);
 
     destroyChart("mtd");
     const ctx = document.getElementById("mtdChart").getContext("2d");
