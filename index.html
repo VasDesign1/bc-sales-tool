@@ -15879,6 +15879,10 @@ function wireEvents() {
                 state.quoteListCache = rows.map(c => ({
                     key: c.customerNumber, number: c.customerNumber, customer: c.customer, customerNumber: c.customerNumber,
                     salesperson: "", date: "", status: c.count + " quote" + (c.count === 1 ? "" : "s"),
+                    // Separate numeric `count` so the "Quotes" column header
+                    // sorts as a number (12 > 3) instead of the string
+                    // "12 quotes" which lex-sorts after "3 quotes".
+                    count: c.count,
                     qty: 0, amount: c.amount,
                 }));
                 TOPN_DEFS.quoteList = {
@@ -15886,8 +15890,8 @@ function wireEvents() {
                     get: () => state.quoteListCache,
                     columns: ["Customer No", "Customer", "", "", "Quotes", "", "Amount", ""],
                     sortKey: "amount",
-                    headerKeys: { "Customer No": "number", "Customer": "customer", "Quotes": "status", "Amount": "amount" },
-                    headerNumeric: new Set(["Amount"]),
+                    headerKeys: { "Customer No": "number", "Customer": "customer", "Quotes": "count", "Amount": "amount" },
+                    headerNumeric: new Set(["Quotes", "Amount"]),
                     action: { label: "Quotes for this customer", run: r => {
                         closeTopNModal();
                         openQuoteList(q => (q.customerNumber || "") === r.customerNumber, "Quotes for " + r.customer);
@@ -15989,6 +15993,10 @@ function wireEvents() {
                 state.quoteListCache = rows.map(c => ({
                     key: c.customerNumber, number: c.customerNumber, customer: c.customer, customerNumber: c.customerNumber,
                     salesperson: "", date: "", status: c.count + " order" + (c.count === 1 ? "" : "s"),
+                    // Separate numeric `count` so the "Orders" column header
+                    // sorts as a number (12 > 3) instead of the string
+                    // "12 orders" which lex-sorts after "3 orders".
+                    count: c.count,
                     qty: 0, amount: c.amount,
                 }));
                 TOPN_DEFS.quoteList = {
@@ -15996,8 +16004,8 @@ function wireEvents() {
                     get: () => state.quoteListCache,
                     columns: ["Customer No", "Customer", "", "", "Orders", "", "Amount", ""],
                     sortKey: "amount",
-                    headerKeys: { "Customer No": "number", "Customer": "customer", "Orders": "status", "Amount": "amount" },
-                    headerNumeric: new Set(["Amount"]),
+                    headerKeys: { "Customer No": "number", "Customer": "customer", "Orders": "count", "Amount": "amount" },
+                    headerNumeric: new Set(["Orders", "Amount"]),
                     action: { label: "Drill customer", run: r => { closeTopNModal(); if (r.customerNumber) showCustomer(r.customerNumber); } },
                 };
                 openTopNModal("quoteList");
