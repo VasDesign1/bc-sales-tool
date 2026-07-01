@@ -5188,10 +5188,26 @@ function invoiceCost(inv) {
 // same ratio so relative per-entity differences (margins, mix) are
 // preserved; only the absolute total moves into agreement.
 // Pass the field name used for cost on each row (default "cost").
+// VE (Value Entry) rows carry item + customer + date but NOT the
+// salesperson code and NOT a line-level location code — see the
+// caveat in getValueEntryTotals() at ~5936. When a filter narrows the
+// invoice set by one of those two dimensions, VE totals reflect the
+// full unfiltered universe, so we CAN'T compare a filtered sales
+// numerator against a VE cost denominator without producing an
+// impossible negative GP (invoice sales for PB vs. cost for
+// everyone). In that case we skip the VE-based cost path entirely
+// and fall back to per-line ILE-derived cost, which honours every
+// toolbar filter.
+function veUsableForCurrentFilters() {
+    return !state.filters.salesperson && !state.filters.location;
+}
 function scaleEntityCostsToVE(rows, costField, veTotalOverride) {
     costField = costField || "cost";
     if (!rows || !rows.length) return rows;
     if (!state.valueEntries || !state.valueEntries.length) return rows;
+    // Skip the VE scaling entirely when the current filters can't be
+    // mirrored in VE — leaves per-line ILE cost intact.
+    if (!veUsableForCurrentFilters()) return rows;
     const totalCost = rows.reduce((s, g) => s + (g[costField] || 0), 0);
     if (totalCost <= 0) return rows;
     // veTotalOverride lets MTD (or any narrower window) pass in its own
@@ -5882,7 +5898,12 @@ function getAdjustments(dateOverride) {
     // dateOverride (optional): predicate(postingDate) → boolean. MTD
     // passes its own [1st of month … today] predicate so the Adjusted
     // KPI tiles are scoped to the MTD window, not the toolbar range.
-    const veCostInUse = state.valueEntries && state.valueEntries.length > 0;
+    // veCostInUse must also require VE-usability. When a salesperson /
+    // location filter is active the aggregate gross cost is per-line
+    // ILE (not VE), so it does NOT already net returns — we must
+    // subtract return cost from it. Otherwise Adjusted Profit gets the
+    // same over-count as the plain GP tile.
+    const veCostInUse = state.valueEntries && state.valueEntries.length > 0 && veUsableForCurrentFilters();
     const inRange = dateOverride || getDateRangePredicate();
     let credit = 0, qty = 0, cost = 0;
     for (const cm of (state.creditMemos || [])) {
@@ -9362,7 +9383,7 @@ function renderOverview() {
     let subRev = totalInv + " invoices";
     let subGp  = totalInv ? fmtMoney(totalGp / totalInv) + " avg/inv" : "";
 
-    if (state.valueEntries && state.valueEntries.length) {
+    if (state.valueEntries && state.valueEntries.length && veUsableForCurrentFilters()) {
         // Cost from BC Value Entries (table 5802) — same flow PBI's
         // Adjusted Cost reads. Sales stays on the Document/invoice-line
         // sum because VE's Sales_Amount_Actual only covers Item lines
@@ -9374,6 +9395,11 @@ function renderOverview() {
         totalGp  = totalRev - veCost;
         totalQty = ve.qty;
         subGp  = "cost from VE: " + fmtMoneyFull(veCost);
+    } else if (state.valueEntries && state.valueEntries.length) {
+        // VE loaded but filter can't be scoped to it — keep the aggregate
+        // GP (per-line cost, respects every filter). Say so in the sub so
+        // the user knows this KPI isn't the PBI-aligned VE number.
+        subGp = "cost per-line · VE can't scope salesperson/branch filter";
     }
 
     document.getElementById("kpiRevenue").textContent  = fmtMoneyFull(totalRev);
@@ -10117,15 +10143,19 @@ function renderBranch() {
     const rows = aggregateBranchMonthly(state.filtered);
     const totSales = rows.reduce((s, r) => s + r.sales, 0);
     const totGp    = rows.reduce((s, r) => s + r.gp, 0);
-    // Match Overview's Quantity sold (VE invoiced-quantity) when VE is loaded.
-    const totQty   = state.valueEntries && state.valueEntries.length
+    // Match Overview's Quantity sold (VE invoiced-quantity) when VE is
+    // loaded AND the current filters can be scoped to VE. Falls back to
+    // per-line qty when a salesperson filter is active (VE lacks that
+    // field, so VE.qty would leak other salespeople's units).
+    const veOk = state.valueEntries && state.valueEntries.length && veUsableForCurrentFilters();
+    const totQty   = veOk
         ? getValueEntryTotals().qty
         : rows.reduce((s, r) => s + r.qty, 0);
     document.getElementById("brKpiSales").textContent = fmtMoneyFull(totSales);
     document.getElementById("brKpiSalesSub").textContent = fmtInt(state.filtered.length) + " invoices";
     document.getElementById("brKpiQty").textContent   = fmtInt(totQty);
     document.getElementById("brKpiGp").textContent    = fmtMoneyFull(totGp);
-    document.getElementById("brKpiGpSub").textContent = state.valueEntries && state.valueEntries.length ? ("cost from VE: " + fmtMoneyFull(totSales - totGp)) : "";
+    document.getElementById("brKpiGpSub").textContent = veOk ? ("cost from VE: " + fmtMoneyFull(totSales - totGp)) : (state.valueEntries && state.valueEntries.length ? "cost per-line · VE can't scope salesperson filter" : "");
     document.getElementById("brKpiGpp").textContent   = fmtPct(totSales ? totGp / totSales : 0);
     paintAdjustedKpis("brKpi", totSales, totGp);
 
@@ -10173,14 +10203,15 @@ function renderSalesperson() {
     const rows = aggregateSalespersonMonthly(state.filtered);
     const totSales = rows.reduce((s, r) => s + r.sales, 0);
     const totGp    = rows.reduce((s, r) => s + r.gp, 0);
-    const totQty   = state.valueEntries && state.valueEntries.length
+    const veOk = state.valueEntries && state.valueEntries.length && veUsableForCurrentFilters();
+    const totQty   = veOk
         ? getValueEntryTotals().qty
         : rows.reduce((s, r) => s + r.qty, 0);
     document.getElementById("spKpiSales").textContent = fmtMoneyFull(totSales);
     document.getElementById("spKpiSalesSub").textContent = fmtInt(state.filtered.length) + " invoices";
     document.getElementById("spKpiQty").textContent   = fmtInt(totQty);
     document.getElementById("spKpiGp").textContent    = fmtMoneyFull(totGp);
-    document.getElementById("spKpiGpSub").textContent = state.valueEntries && state.valueEntries.length ? ("cost from VE: " + fmtMoneyFull(totSales - totGp)) : "";
+    document.getElementById("spKpiGpSub").textContent = veOk ? ("cost from VE: " + fmtMoneyFull(totSales - totGp)) : (state.valueEntries && state.valueEntries.length ? "cost per-line · VE can't scope salesperson filter" : "");
     document.getElementById("spKpiGpp").textContent   = fmtPct(totSales ? totGp / totSales : 0);
     paintAdjustedKpis("spKpi", totSales, totGp);
 
@@ -10859,14 +10890,15 @@ function renderByItem() {
 
     const totSales = rows.reduce((s, r) => s + r.revenue, 0);
     const totGp    = rows.reduce((s, r) => s + r.gp, 0);
-    const totQty   = state.valueEntries && state.valueEntries.length
+    const veOk = state.valueEntries && state.valueEntries.length && veUsableForCurrentFilters();
+    const totQty   = veOk
         ? getValueEntryTotals().qty
         : rows.reduce((s, r) => s + r.qty, 0);
     document.getElementById("itKpiSales").textContent = fmtMoneyFull(totSales);
     document.getElementById("itKpiSalesSub").textContent = fmtInt(state.filtered.length) + " invoices";
     document.getElementById("itKpiQty").textContent   = fmtInt(totQty);
     document.getElementById("itKpiGp").textContent    = fmtMoneyFull(totGp);
-    document.getElementById("itKpiGpSub").textContent = state.valueEntries && state.valueEntries.length ? ("cost from VE: " + fmtMoneyFull(totSales - totGp)) : "";
+    document.getElementById("itKpiGpSub").textContent = veOk ? ("cost from VE: " + fmtMoneyFull(totSales - totGp)) : (state.valueEntries && state.valueEntries.length ? "cost per-line · VE can't scope salesperson/branch filter" : "");
     document.getElementById("itKpiGpp").textContent   = fmtPct(totSales ? totGp / totSales : 0);
     paintAdjustedKpis("itKpi", totSales, totGp);
 
