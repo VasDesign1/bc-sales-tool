@@ -2769,6 +2769,7 @@
                                 <th data-sort="itemNumber">Item No</th>
                                 <th class="num" data-sort="qty">Qty</th>
                                 <th class="num" data-sort="lineAmount">Line Amount</th>
+                                <th class="num" data-sort="unitCost">Unit Cost</th>
                                 <th class="num" data-sort="sales">Sales $</th>
                                 <th class="num" data-sort="gp">GP $</th>
                                 <th class="num" data-sort="gpPct">GP %</th>
@@ -5657,6 +5658,9 @@ function buildEOMRows(invoices) {
             const lineAmount = (unitPrice && qty)
                 ? unitPrice * qty
                 : num(ln.amountExcludingTax);
+            // Unit cost — cost ÷ qty. Blank for qty=0 lines (comment,
+            // discount headers) so the column doesn't show noisy zeros.
+            const unitCost = qty ? cost / qty : 0;
             rows.push({
                 customer:    inv.customerName || inv.customerNumber || "(unknown)",
                 customerNumber: inv.customerNumber || "",
@@ -5666,7 +5670,7 @@ function buildEOMRows(invoices) {
                 itemCategory: state.itemCategory.get(itemNo) || "—",
                 itemNumber:  itemNo,
                 description: ln.description || "",
-                qty, unitPrice, lineAmount,
+                qty, unitPrice, lineAmount, unitCost,
                 sales, cost,
                 gp: sales - cost,
                 gpPct: sales ? (sales - cost) / sales : 0,
@@ -11377,13 +11381,14 @@ function renderEOM() {
             <td>${escapeHtml(r.itemNumber)}</td>
             <td class="num">${r.qty ? fmtQty(r.qty) : ""}</td>
             <td class="num">${r.lineAmount ? fmtMoneyFull(r.lineAmount) : ""}</td>
+            <td class="num">${r.unitCost ? fmtMoneyFull(r.unitCost) : ""}</td>
             <td class="num">${fmtMoneyFull(r.sales)}</td>
             <td class="num ${r.gp >= 0 ? "pos" : "neg"}">${fmtMoneyFull(r.gp)}</td>
             <td class="num">${fmtPct(r.gpPct)}</td>
             <td>${escapeHtml(r.month)}</td>
             <td class="num">${r.fy}</td>
         </tr>
-    `).join("") || '<tr><td colspan="13" class="empty">No rows.</td></tr>';
+    `).join("") || '<tr><td colspan="14" class="empty">No rows.</td></tr>';
     document.getElementById("eomMeta").textContent = rows.length + " line" + (rows.length === 1 ? "" : "s") + (rows.length > 2000 ? " (showing top 2000 — narrow with filters)" : "");
     renderEOMDrillTree();
 }
@@ -11405,6 +11410,7 @@ function exportEomToCSV() {
         "Qty":           r.qty != null ? r.qty : 0,
         "Unit Price":    r.unitPrice != null ? r.unitPrice : 0,
         "Line Amount":   r.lineAmount != null ? r.lineAmount : 0,
+        "Unit Cost":     r.unitCost != null ? r.unitCost : 0,
         "Sales $":       r.sales || 0,
         "Cost $":        r.cost || 0,
         "GP $":          r.gp || 0,
@@ -11415,7 +11421,7 @@ function exportEomToCSV() {
     const tag = (state.eomGpLow ? "_lt20" : "") + (state.eomGpHigh ? "_gt90" : "");
     const baseName = "eom" + tag + "_" + new Date().toISOString().slice(0, 10);
     downloadXLSX(detail, "EOM", baseName, {
-        money:   ["Unit Price", "Line Amount", "Sales $", "Cost $", "GP $"],
+        money:   ["Unit Price", "Line Amount", "Unit Cost", "Sales $", "Cost $", "GP $"],
         percent: ["GP %"],
         integer: ["FY"],
     });
