@@ -797,7 +797,7 @@
             color: #1a1a1a; font-family: 'Fraunces', serif; font-weight: 500; font-size: 20px;
         }
         html.theme-linen .card .head .meta, html.theme-linen .panel-header .meta { color: #6e6a60; }
-        html.theme-linen .panel-header { border-bottom: 1px solid rgba(45,42,36,0.16); padding-left: 0; padding-right: 0; }
+        html.theme-linen .panel-header { border-bottom: 1px solid rgba(45,42,36,0.16); padding-left: 0; padding-right: 0; background: #f4f1eb; }
         html.theme-linen .panel-header input.search { background: #f4f1eb; color: #1a1a1a; border-color: rgba(45,42,36,0.24); }
         html.theme-linen th { background: #ebe7df; color: #6e6a60; border-bottom: 1px solid rgba(45,42,36,0.4); padding-top: 14px; padding-bottom: 10px; }
         html.theme-linen th:hover { background: rgba(45,42,36,0.04); }
@@ -927,7 +927,7 @@
             color: #eaeaf2; font-weight: 700; font-size: 14px;
         }
         html.theme-aurora .card .head .meta, html.theme-aurora .panel-header .meta { color: #b8b6cc; }
-        html.theme-aurora .panel-header { border-bottom-color: rgba(255,255,255,0.06); }
+        html.theme-aurora .panel-header { border-bottom-color: rgba(255,255,255,0.06); background: #08081b; }
         html.theme-aurora .panel-header input.search { background: rgba(8,8,20,0.6); color: #eaeaf2; border-color: rgba(255,255,255,0.12); }
         html.theme-aurora th { background: #0d0d24; color: #d4baff; border-bottom: 1px solid rgba(255,255,255,0.12); }
         html.theme-aurora th:hover { background: rgba(181,123,255,0.12); }
@@ -2540,6 +2540,10 @@
                     <div class="kpi k-avg"><div class="label">Adjusted Profit Margin</div><div class="value" id="itKpiAdjGpp">—</div><div class="sub" id="itKpiAdjGppSub">after credit memos</div></div>
                 </div>
 
+                <div class="hint" id="itParentCategoryFilterBanner" style="display:none; background:#fff8e1; border-left-color:#ffb300;">
+                    Filtered by parent category: <strong id="itParentCategoryFilterName"></strong>
+                    <a href="#" id="itParentCategoryFilterClear" style="margin-left:10px;">clear ✕</a>
+                </div>
                 <div class="hint" id="itCategoryFilterBanner" style="display:none; background:#e8f5e9; border-left-color:#43a047;">
                     Filtered by category: <strong id="itCategoryFilterName"></strong>
                     <a href="#" id="itCategoryFilterClear" style="margin-left:10px;">clear ✕</a>
@@ -2548,13 +2552,13 @@
                 <div class="chart-grid">
                     <div class="card span-6">
                         <div class="head">
-                            <h3>Top 20 items by sales</h3>
+                            <h3>Sales by parent category</h3>
                             <div style="display:flex; gap:10px; align-items:center;">
-                                <div class="meta">click a bar to filter table</div>
-                                <div class="chart-view-toggle" data-chart="itTopItems" title="Gross | Adjusted (net of credit-memo returns)"><button type="button" data-mode="gross" class="active">Gross</button><button type="button" data-mode="adjusted">Adj</button></div>
+                                <div class="meta">click a slice to drill into subcategories</div>
+                                <div class="chart-view-toggle" data-chart="itParentCategory" title="Gross | Adjusted (net of credit-memo returns)"><button type="button" data-mode="gross" class="active">Gross</button><button type="button" data-mode="adjusted">Adj</button></div>
                             </div>
                         </div>
-                        <div class="chart-wrap" style="min-height:440px;"><canvas id="itTopItemsChart"></canvas></div>
+                        <div class="chart-wrap" style="min-height:440px;"><canvas id="itParentCategoryChart"></canvas></div>
                     </div>
                     <div class="card span-6">
                         <div class="head">
@@ -2565,6 +2569,16 @@
                             </div>
                         </div>
                         <div class="chart-wrap" style="min-height:440px;"><canvas id="itCategoryChart"></canvas></div>
+                    </div>
+                    <div class="card span-12">
+                        <div class="head">
+                            <h3>Top 20 items by sales</h3>
+                            <div style="display:flex; gap:10px; align-items:center;">
+                                <div class="meta">click a bar to filter table</div>
+                                <div class="chart-view-toggle" data-chart="itTopItems" title="Gross | Adjusted (net of credit-memo returns)"><button type="button" data-mode="gross" class="active">Gross</button><button type="button" data-mode="adjusted">Adj</button></div>
+                            </div>
+                        </div>
+                        <div class="chart-wrap" style="min-height:440px;"><canvas id="itTopItemsChart"></canvas></div>
                     </div>
                     <div class="card span-12">
                         <div class="head">
@@ -2772,6 +2786,7 @@
                                 <th>Customer / Doc Type / Doc / Item</th>
                                 <th class="num" data-tree-sort="sales">Sales (LCY)</th>
                                 <th class="num" data-tree-sort="qty">Qty</th>
+                                <th class="num" data-tree-sort="lineAmount">Line Amount</th>
                                 <th class="num" data-tree-sort="cost">Adj Cost</th>
                                 <th class="num" data-tree-sort="costNonInv">Cost Non-Inv</th>
                                 <th class="num" data-tree-sort="gp">Adj Profit</th>
@@ -4106,6 +4121,55 @@ async function fetchItems() {
         return data;
     } catch (e) { console.warn("Could not fetch items:", e.message); return []; }
 }
+// Item category hierarchy — v2.0 REST exposes /itemCategories with
+// parentCategoryId (GUID → root walk gives us the parent code). Falls
+// back to OData $metadata discovery if the v2.0 endpoint is disabled
+// on the tenant. Returned rows are already normalised to
+// { id, code, displayName, parentId } so callers don't care which
+// source produced them.
+async function fetchItemCategories() {
+    const compId = await bcGetCompanyId();
+    try {
+        const data = await bcFetchAll(BC_API_URL + "/companies(" + compId + ")/itemCategories?$top=10000&$select=id,code,displayName,parentCategoryId", "Item Categories");
+        return (data || []).map(r => ({
+            id: r.id || "",
+            code: r.code || "",
+            displayName: r.displayName || "",
+            parentId: r.parentCategoryId || "",
+        }));
+    } catch (e) {
+        console.warn("[Item Categories] v2.0 REST fetch failed, trying OData:", e.message);
+        try {
+            const md = await bcGetODataMetadata();
+            const allSets = Object.keys(md.entitySets);
+            const cand = allSets.filter(n => /item.?categor/i.test(n));
+            for (const entity of cand) {
+                const typeName = md.entitySets[entity];
+                const fields = md.entityTypes[typeName] || [];
+                const fCode   = bcFindField(fields, [/^code$/i, /^No$/i, /^No_$/i]);
+                const fDesc   = bcFindField(fields, [/^description$/i, /^displayName$/i, /^Name$/i]);
+                const fParent = bcFindField(fields, [/^parent.?category$/i, /^parent.?item.?category$/i, /^parent.?code$/i, /^Parent_Category$/i]);
+                if (!fCode) continue;
+                const token = await bcGetToken();
+                const cname = await bcGetCompanyInternalName();
+                const url = BC_ODATA_URL + "/Company('" + encodeURIComponent(cname) + "')/" + entity + "?$top=10000";
+                const resp = await fetch(url, { headers: { "Authorization": "Bearer " + token } });
+                if (!resp.ok) continue;
+                const j = await resp.json();
+                return (j.value || []).map(r => ({
+                    id: "",
+                    code: r[fCode] || "",
+                    displayName: fDesc ? (r[fDesc] || "") : "",
+                    // OData usually stores parent as a code string, not a GUID
+                    parentCode: fParent ? (r[fParent] || "") : "",
+                }));
+            }
+        } catch (e2) {
+            console.warn("[Item Categories] OData fallback also failed:", e2.message);
+        }
+        return [];
+    }
+}
 async function fetchInvoiceLines(invoiceId) {
     const compId = await bcGetCompanyId();
     return bcFetchAll(BC_API_URL + "/companies(" + compId + ")/salesInvoices(" + invoiceId + ")/salesInvoiceLines?$top=10000", "Invoice lines");
@@ -4669,7 +4733,11 @@ const state = {
     invoices: [], filtered: [], iles: [], items: [], customers: [],
     creditMemos: [], shipments: [], returnReceipts: [], quotes: [],
     locations: new Map(),    // locId -> code
-    itemCategory: new Map(), // itemNumber -> category code
+    itemCategory: new Map(), // itemNumber -> leaf category code
+    itemCategoryDisplay: new Map(), // categoryCode -> displayName
+    itemCategoryParent:  new Map(), // childCode -> immediate parentCode (see fetchItemCategories)
+    byItemCategoryFilter:  "",      // active leaf-category filter (set by pie click)
+    byParentCategoryFilter:"",      // active parent-category filter (set by new parent pie)
     custPostingGroup: new Map(), // customerNumber -> posting group code
     custCity: new Map(),     // customerNumber -> city
     expandedMatrix: new Set(), // keys of expanded matrix rows
@@ -4711,7 +4779,6 @@ const state = {
     sortSalespersonTable: { key: "sales", dir: "desc" },
     sortEom: { key: "sales", dir: "desc" },
     sortReturns: { key: "postingDate", dir: "desc" },
-    byItemCategoryFilter: "",
     eomGpLow: false,
     eomGpHigh: false,
     eomLastFilteredRows: [],
@@ -5031,6 +5098,39 @@ function buildCostMaps(iles) {
 // invoice that had an invoice-level discount applied.
 function lineNetAmount(line) {
     return num(line.amountExcludingTax) - num(line.invoiceDiscountAllocation);
+}
+// Count unique invoices in state.filtered that contain at least one
+// line whose itemNo is in `visibleItems`. Used by the Sales-by-Item
+// tab so the "N invoices" sub-label reflects the same rows the tab
+// is actually showing after category/search cross-filters.
+function countInvoicesWithVisibleItem(visibleItems) {
+    if (!visibleItems) return state.filtered.length;
+    if (!visibleItems.size) return 0;
+    let n = 0;
+    for (const inv of state.filtered) {
+        const hit = (inv.salesInvoiceLines || []).some(ln => {
+            const itemNo = ln.lineObjectNumber || ln.itemId || "";
+            return itemNo && visibleItems.has(itemNo);
+        });
+        if (hit) n++;
+    }
+    return n;
+}
+// Walk item-category parent chain up to the root, cap at 20 hops so a
+// cyclic BC category graph can't hang the browser. If a code has no
+// parent recorded it's already top-level → return it as-is.
+function parentCategoryOf(leafCode) {
+    if (!leafCode) return "";
+    let cur = leafCode;
+    const seen = new Set();
+    for (let i = 0; i < 20; i++) {
+        if (seen.has(cur)) break;
+        seen.add(cur);
+        const p = state.itemCategoryParent && state.itemCategoryParent.get(cur);
+        if (!p || p === cur) break;
+        cur = p;
+    }
+    return cur;
 }
 
 // Item-line check used by cost-from-line (cost only flows for stock items).
@@ -5887,7 +5987,7 @@ function chartViewTogglePillHTML(chartId) {
 // used to compute "Adjusted Sales / Profit / Margin" on every tab that
 // shows a sales-KPI row. Credit revenue and the implied cost are
 // subtracted from gross totals to give "net of returns" figures.
-function getAdjustments(dateOverride) {
+function getAdjustments(dateOverride, visibleItems) {
     // Sales side always comes from Document mode (invoice lines), which
     // is gross of credit memos — so we ALWAYS subtract `credit` from
     // sales. Cost side comes from Value Entries when they're loaded;
@@ -5914,14 +6014,29 @@ function getAdjustments(dateOverride) {
             const hit = (cm.salesCreditMemoLines || []).some(ln => locationCode(ln.locationId) === state.filters.location);
             if (!hit) continue;
         }
-        let cmAmount = 0, cmQty = 0, cmCost = 0;
+        let cmAmount = 0, cmQty = 0, cmCost = 0, matchedAny = false;
         for (const ln of (cm.salesCreditMemoLines || [])) {
             if (!lineMatchesFilters(ln)) continue;
+            // Sales-by-Item tab passes a visible-items set so the "returns"
+            // subtraction stays scoped to the same items whose sales the
+            // Adjusted tile is netting from — otherwise a $30k item view
+            // gets $190k of unrelated returns subtracted (image #6 bug).
+            if (visibleItems && visibleItems.size) {
+                const itemNo = ln.lineObjectNumber || ln.itemId || "";
+                if (!itemNo || !visibleItems.has(itemNo)) continue;
+            }
+            matchedAny = true;
             cmAmount += lineNetAmount(ln);
             cmQty    += num(ln.quantity);
             cmCost   += totalCostFromLine(ln, 1, cm.postingDate, cm.customerNumber, cm.number);
         }
-        if (!cmAmount && cm.totalAmountExcludingTax != null) cmAmount = num(cm.totalAmountExcludingTax);
+        // Only fall back to the header total when NO line-level filter
+        // is active — otherwise the fallback undoes the whole point of
+        // the item scoping (would add back the un-scoped header total).
+        if (!matchedAny && !visibleItems && !state.filters.item && !state.filters.location
+            && !cmAmount && cm.totalAmountExcludingTax != null) {
+            cmAmount = num(cm.totalAmountExcludingTax);
+        }
         credit += cmAmount; qty += cmQty; cost += cmCost;
     }
     const adjCost = veCostInUse ? 0 : cost;
@@ -6008,8 +6123,12 @@ function getValueEntryTotals() {
 // identified by the given prefix (e.g. "kpi", "brKpi", "spKpi").
 // Gross cost is derived from sales − GP so call sites don't have to
 // track it separately.
-function paintAdjustedKpis(prefix, grossSales, grossGp, dateOverride) {
-    const adj = getAdjustments(dateOverride);
+// visibleItems (optional) — when passed, credit-memo lines are also
+// restricted to those item numbers. The Sales-by-Item tab uses it so
+// Adjusted Sales/Cost/Profit stay honest under a category / search
+// cross-filter that doesn't propagate to state.filters.item.
+function paintAdjustedKpis(prefix, grossSales, grossGp, dateOverride, visibleItems) {
+    const adj = getAdjustments(dateOverride, visibleItems);
     const grossCost = grossSales - grossGp;
     const adjSales = grossSales - adj.credit;
     const adjCost  = grossCost - adj.cost;
@@ -10862,18 +10981,38 @@ function renderByItem() {
             if (cust) s.add(cust);
         }
     }
-    // Enrich byItem rows with category + customer count
-    let rows = [...state.byItem.values()].map(r => ({
-        ...r,
-        category: r.number ? (state.itemCategory.get(r.number) || "(no category)") : "(non-item)",
-        customerCount: (customersByItem.get(r.key) || new Set()).size,
-    }));
+    // Enrich byItem rows with category + parent category + customer count
+    let rows = [...state.byItem.values()].map(r => {
+        const category = r.number ? (state.itemCategory.get(r.number) || "(no category)") : "(non-item)";
+        const parentCategory = category === "(no category)" || category === "(non-item)"
+            ? category
+            : parentCategoryOf(category);
+        return {
+            ...r,
+            category,
+            parentCategory,
+            customerCount: (customersByItem.get(r.key) || new Set()).size,
+        };
+    });
 
-    // Apply category cross-filter (from category chart click)
+    // Parent-category cross-filter (from the new pie click) — applied
+    // BEFORE the leaf-category filter so a parent + leaf combo like
+    // parent=UNITS + leaf=UNITS-17 keeps the intersection.
+    if (state.byParentCategoryFilter) {
+        rows = rows.filter(r => r.parentCategory === state.byParentCategoryFilter);
+    }
+    // Leaf-category cross-filter (from the existing item-category pie)
     if (state.byItemCategoryFilter) {
         rows = rows.filter(r => r.category === state.byItemCategoryFilter);
     }
-    // Toggle banner
+    // Toggle banners
+    const parentBanner = document.getElementById("itParentCategoryFilterBanner");
+    if (parentBanner) {
+        if (state.byParentCategoryFilter) {
+            parentBanner.style.display = "block";
+            document.getElementById("itParentCategoryFilterName").textContent = state.byParentCategoryFilter;
+        } else parentBanner.style.display = "none";
+    }
     const banner = document.getElementById("itCategoryFilterBanner");
     if (banner) {
         if (state.byItemCategoryFilter) {
@@ -10888,6 +11027,13 @@ function renderByItem() {
         rows = rows.filter(r => (r.number || "").toLowerCase().includes(q) || (r.description || "").toLowerCase().includes(q));
     }
 
+    // At this point `rows` is the fully-filtered set the tab is showing.
+    // KPI sub-labels & Adjusted KPIs must scope to it — image #6 bug was
+    // that the sub said "1,980 invoices" (unscoped state.filtered.length)
+    // and Adjusted Sales subtracted un-scoped credit-memo returns from
+    // scoped Sales, giving nonsensical negative totals.
+    const visibleItems = new Set(rows.map(r => r.number).filter(Boolean));
+    const visibleInvCount = countInvoicesWithVisibleItem(visibleItems);
     const totSales = rows.reduce((s, r) => s + r.revenue, 0);
     const totGp    = rows.reduce((s, r) => s + r.gp, 0);
     const veOk = state.valueEntries && state.valueEntries.length && veUsableForCurrentFilters();
@@ -10895,18 +11041,22 @@ function renderByItem() {
         ? getValueEntryTotals().qty
         : rows.reduce((s, r) => s + r.qty, 0);
     document.getElementById("itKpiSales").textContent = fmtMoneyFull(totSales);
-    document.getElementById("itKpiSalesSub").textContent = fmtInt(state.filtered.length) + " invoices";
+    document.getElementById("itKpiSalesSub").textContent = fmtInt(visibleInvCount) + " invoices";
     document.getElementById("itKpiQty").textContent   = fmtInt(totQty);
     document.getElementById("itKpiGp").textContent    = fmtMoneyFull(totGp);
     document.getElementById("itKpiGpSub").textContent = veOk ? ("cost from VE: " + fmtMoneyFull(totSales - totGp)) : (state.valueEntries && state.valueEntries.length ? "cost per-line · VE can't scope salesperson/branch filter" : "");
     document.getElementById("itKpiGpp").textContent   = fmtPct(totSales ? totGp / totSales : 0);
-    paintAdjustedKpis("itKpi", totSales, totGp);
+    // Pass the visible-item set so Adjusted Sales/Cost/Profit subtract
+    // only credit memos matching the visible items instead of every
+    // credit memo in the date range.
+    paintAdjustedKpis("itKpi", totSales, totGp, null, visibleItems);
 
     // Each item chart gets its own clone — when its pill is on Gross
     // (default) viewRowsForCharts returns `rows` unchanged at no cost.
-    const topItemsRows = viewRowsForCharts(rows, "byItem", r => r.key, "revenue", "itTopItems");
-    const categoryRows = viewRowsForCharts(rows, "byItem", r => r.key, "revenue", "itCategory");
-    const paretoRows   = viewRowsForCharts(rows, "byItem", r => r.key, "revenue", "itPareto");
+    const topItemsRows       = viewRowsForCharts(rows, "byItem", r => r.key, "revenue", "itTopItems");
+    const categoryRows       = viewRowsForCharts(rows, "byItem", r => r.key, "revenue", "itCategory");
+    const parentCategoryRows = viewRowsForCharts(rows, "byItem", r => r.key, "revenue", "itParentCategory");
+    const paretoRows         = viewRowsForCharts(rows, "byItem", r => r.key, "revenue", "itPareto");
     // ---------- Charts (computed off the filtered rows so they honour the cross-filter) ----------
     // Top 20 items by sales
     destroyChart("itTopItems");
@@ -10932,6 +11082,54 @@ function renderByItem() {
                     state.filters.itemDesc = state.filters.item ? (r.description || "") : "";
                     const box = document.getElementById("itemFilterBox"); if (box) box.value = state.filters.item;
                     rebuildFiltered(); renderCurrentTab();
+                },
+            })
+        });
+    }
+
+    // Sales by parent category (doughnut) — rolls each row's leaf
+    // itemCategoryCode up to its top-level parent via parentCategoryOf.
+    // Click a parent slice → sets byParentCategoryFilter → the leaf pie
+    // and item table below narrow to that parent's children. Click again
+    // clears. If the tenant has no category hierarchy loaded, this pie
+    // ends up identical to the leaf pie (each leaf is its own root) —
+    // still useful as a second click target.
+    destroyChart("itParentCategory");
+    const parentMap = new Map();
+    for (const r of parentCategoryRows) {
+        const p = r.parentCategory || "(no category)";
+        const cur = parentMap.get(p) || { name: p, amount: 0, count: 0 };
+        cur.amount += r.revenue; cur.count++;
+        parentMap.set(p, cur);
+    }
+    const parents = [...parentMap.values()].sort((a, b) => b.amount - a.amount).slice(0, 20);
+    const parentCtx = document.getElementById("itParentCategoryChart");
+    if (parentCtx) {
+        const palette = ["#3949ab", "#00897b", "#f9a825", "#e53935", "#8e24aa", "#039be5", "#6d4c41", "#43a047", "#fb8c00", "#5e35b1", "#00acc1", "#c0ca33", "#d81b60", "#1e88e5", "#7cb342", "#fdd835", "#ff7043", "#3f51b5", "#26a69a", "#9e9e9e"];
+        state.charts.itParentCategory = new Chart(parentCtx.getContext("2d"), {
+            type: "doughnut",
+            data: { labels: parents.map(p => p.name),
+                    datasets: [{ data: parents.map(p => p.amount), backgroundColor: parents.map((_, i) => palette[i % palette.length]) }] },
+            plugins: [ChartDataLabels],
+            options: chartBase({
+                plugins: { legend: { position: "right", labels: { boxWidth: 12 } },
+                           tooltip: { callbacks: { label: c => c.label + ": " + fmtMoneyFull(c.parsed) + " (" + parents[c.dataIndex].count + " items)" } },
+                           datalabels: ringDataLabels({
+                               formatter: (value) => {
+                                   const total = parents.reduce((s, p) => s + p.amount, 0);
+                                   const pct = total ? (value / total * 100) : 0;
+                                   if (pct < 5) return "";
+                                   return fmtMoney(value) + "\n" + pct.toFixed(0) + "%";
+                               }
+                           }) },
+                onClick: (_, els) => {
+                    if (!els.length) return;
+                    const p = parents[els[0].index].name;
+                    state.byParentCategoryFilter = (state.byParentCategoryFilter === p) ? "" : p;
+                    // Clicking a parent invalidates the current leaf drill,
+                    // since the leaf might not belong to the new parent.
+                    if (state.byParentCategoryFilter) state.byItemCategoryFilter = "";
+                    renderByItem();
                 },
             })
         });
@@ -14636,7 +14834,7 @@ function renderDemographics() {
 // DRILL-DOWN TREES (Customer / Branch / Salesperson)
 // ============================================================
 function _newNode(key, label) {
-    return { key, label, sales: 0, qty: 0, cost: 0, costNonInv: 0, children: [] };
+    return { key, label, sales: 0, qty: 0, cost: 0, costNonInv: 0, lineAmount: 0, children: [] };
 }
 // Build a unified list of posted-sales documents.
 // countsTotal=true: contributes to entity totals (Invoice, Credit Memo).
@@ -14695,8 +14893,9 @@ function _finalizeTree(roots, grandTotal) {
     };
     roots.forEach(walk);
 }
-function _accumLine(parents, s, q, c, cn) {
-    for (const p of parents) { p.sales += s; p.qty += q; p.cost += c; p.costNonInv += cn; }
+function _accumLine(parents, s, q, c, cn, la) {
+    la = la || 0;
+    for (const p of parents) { p.sales += s; p.qty += q; p.cost += c; p.costNonInv += cn; p.lineAmount += la; }
 }
 function _grandTotalSales() {
     let t = 0; for (const inv of state.filtered) t += invoiceSalesAmount(inv); return t;
@@ -14794,13 +14993,19 @@ function buildEOMDrillTree() {
             const q = num(ln.quantity) * d.sign * mult;
             const c = costFromLine(ln, d.sign, d.postingDate, d.customerNumber, d.number) * mult;
             const cn = costNonInvFromLine(ln, d.sign, d.postingDate, d.customerNumber, d.number) * mult;
+            // Gross line amount = qty × unit price (before line / invoice
+            // discount). Falls back to amountExcludingTax when unitPrice is
+            // missing (non-Item lines often are).
+            const la = (num(ln.unitPrice) && num(ln.quantity))
+                ? num(ln.unitPrice) * num(ln.quantity) * d.sign * mult
+                : num(ln.amountExcludingTax) * d.sign * mult;
             if (gpFilterActive && !gpMatches(s, c + cn)) continue;
             const leaf = _newNode("et-line-" + custKey + "-" + d.type + "-" + d.id + "-" + (ln.id || ln.sequence || itemNo),
                 (itemNo || "(non-item)") + (ln.description ? " · " + ln.description : ""));
             leaf.children = null;
-            leaf.sales = s; leaf.qty = q; leaf.cost = c; leaf.costNonInv = cn;
+            leaf.sales = s; leaf.qty = q; leaf.cost = c; leaf.costNonInv = cn; leaf.lineAmount = la;
             docNode.children.push(leaf);
-            _accumLine([docNode, dtNode, custNode], s, q, c, cn);
+            _accumLine([docNode, dtNode, custNode], s, q, c, cn, la);
         }
     }
     // Prune empty branches (Doc-types/docs/customers with no surviving lines after GP filter).
@@ -14944,6 +15149,10 @@ function renderDrillTree(roots, tableSelector) {
     const tbody = document.querySelector(tableSelector + " tbody");
     if (!tbody) return;
     _sortNodesRecursive(roots, state.treeSort.key, state.treeSort.dir);
+    // Detect optional Line Amount column so trees that don't opt in stay
+    // at their original 8 columns.
+    const hasLineAmount = !!document.querySelector(tableSelector + ' th[data-tree-sort="lineAmount"]');
+    const colCount = hasLineAmount ? 9 : 8;
     const acc = [];
     function emit(node, depth) {
         const expandable = node.children && node.children.length > 0;
@@ -14953,10 +15162,14 @@ function renderDrillTree(roots, tableSelector) {
         const bg = depth === 0 ? "background:#eef0fb; font-weight:700;"
                  : depth === 1 ? "background:#f7f8fd; font-weight:600;"
                  : depth === 2 ? "background:#fafbff;" : "";
+        const laCell = hasLineAmount
+            ? `<td class="num">${node.lineAmount ? fmtMoneyFull(node.lineAmount) : ""}</td>`
+            : "";
         acc.push(`<tr data-key="${escapeAttr(node.key)}" data-expandable="${expandable ? 1 : 0}" style="${bg}cursor:${expandable ? "pointer" : "default"};">
             <td>${pad}<span style="display:inline-block; width:14px; color:#3f51b5;">${arrow}</span> ${escapeHtml(node.label)}</td>
             <td class="num">${fmtMoneyFull(node.sales)}</td>
             <td class="num">${node.qty ? fmtQty(node.qty) : ""}</td>
+            ${laCell}
             <td class="num neg">${node.cost ? "(" + fmtMoneyFull(node.cost) + ")" : ""}</td>
             <td class="num neg">${node.costNonInv ? "(" + fmtMoneyFull(node.costNonInv) + ")" : ""}</td>
             <td class="num ${node.gp >= 0 ? "pos" : "neg"}">${fmtMoneyFull(node.gp)}</td>
@@ -14966,7 +15179,7 @@ function renderDrillTree(roots, tableSelector) {
         if (expandable && isOpen) for (const c of node.children) emit(c, depth + 1);
     }
     for (const r of roots) emit(r, 0);
-    tbody.innerHTML = acc.join("") || '<tr><td colspan="8" class="empty">No data.</td></tr>';
+    tbody.innerHTML = acc.join("") || `<tr><td colspan="${colCount}" class="empty">No data.</td></tr>`;
     // Refresh sort indicators on the headers of THIS table
     document.querySelectorAll(tableSelector + " th[data-tree-sort]").forEach(th => {
         th.classList.remove("sorted-asc", "sorted-desc");
@@ -15114,9 +15327,10 @@ async function handleLoad() {
     const btn = document.getElementById("loadBtn");
     btn.disabled = true; btn.textContent = "Loading…";
     try {
-        const [locs, items, customers, invoices, iles, creditMemos, shipments, returnReceipts, quotes, quoteExtras, blanketOrders, valueEntries, salesOrders, salesOrderOutstanding, _residentialLookup, _quoteArchive] = await Promise.all([
+        const [locs, items, itemCategories, customers, invoices, iles, creditMemos, shipments, returnReceipts, quotes, quoteExtras, blanketOrders, valueEntries, salesOrders, salesOrderOutstanding, _residentialLookup, _quoteArchive] = await Promise.all([
             fetchLocations(),
             fetchItems(),
+            fetchItemCategories(),
             fetchCustomers(),
             fetchSalesInvoicesWithLines(from, to),
             fetchItemLedgerSales(from, to),
@@ -15360,6 +15574,28 @@ async function handleLoad() {
         state.locations = new Map(locs.map(l => [l.id, l.code || l.displayName || "(unnamed)"]));
         state.items = items;
         state.itemCategory = new Map(items.map(it => [it.number, it.itemCategoryCode || ""]));
+        // Build category-hierarchy maps so leaf codes can be rolled up
+        // to their top-level parent (image #5 pie is drilled to leaves;
+        // the new "Sales by parent category" pie rolls them up). v2.0
+        // REST stores the parent as a GUID (parentCategoryId); walk id
+        // → code first, then use it. OData fallback stores the parent
+        // as a code string directly (parentCode). Cycles are guarded
+        // in parentCategoryOf() by capping the walk at 20 hops.
+        state.itemCategoryDisplay = new Map();
+        state.itemCategoryParent  = new Map();  // childCode -> immediate parentCode
+        {
+            const idToCode = new Map();
+            for (const c of (itemCategories || [])) if (c.id && c.code) idToCode.set(c.id, c.code);
+            for (const c of (itemCategories || [])) {
+                if (!c.code) continue;
+                state.itemCategoryDisplay.set(c.code, c.displayName || c.code);
+                let parent = "";
+                if (c.parentId && idToCode.has(c.parentId)) parent = idToCode.get(c.parentId);
+                else if (c.parentCode) parent = c.parentCode;
+                if (parent && parent !== c.code) state.itemCategoryParent.set(c.code, parent);
+            }
+            console.log("[Item Categories] loaded " + (itemCategories || []).length + " · " + state.itemCategoryParent.size + " have a parent");
+        }
         state.customers = customers;
         state.custPostingGroup = new Map(customers.map(c => [
             c.number || c.id,
@@ -15591,6 +15827,9 @@ function wireEvents() {
     document.getElementById("itemSearch").addEventListener("input", e => { state.itemFilter = e.target.value; renderByItem(); });
     document.getElementById("itCategoryFilterClear").addEventListener("click", e => {
         e.preventDefault(); state.byItemCategoryFilter = ""; renderByItem();
+    });
+    document.getElementById("itParentCategoryFilterClear").addEventListener("click", e => {
+        e.preventDefault(); state.byParentCategoryFilter = ""; renderByItem();
     });
 
     // Customer × Item tab controls
