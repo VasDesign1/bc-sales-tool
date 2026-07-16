@@ -4131,58 +4131,71 @@ async function fetchItems() {
 // source produced them.
 async function fetchItemCategories() {
     const compId = await bcGetCompanyId();
-    try {
-        // No $select — different BC tenants surface the parent link
-        // under different names (parentCategoryId, parentCategory,
-        // parentId, parent), and $select would drop the one that's
-        // actually populated. Category rows are small.
-        const data = await bcFetchAll(BC_API_URL + "/companies(" + compId + ")/itemCategories?$top=10000", "Item Categories");
-        if (data && data.length) {
-            console.log("[Item Categories] sample fields:", Object.keys(data[0]).join(", "));
-            console.log("[Item Categories] sample rows:", data.slice(0, 3));
-        }
-        return (data || []).map(r => ({
-            id: r.id || "",
-            code: r.code || r.Code || "",
-            displayName: r.displayName || r.description || r.name || "",
-            // parentCategoryId is BC's stock name (GUID → resolved via
-            // idToCode). parentCategory / parent / parentId are seen
-            // on custom / older exposures — try each in order.
-            parentId:   r.parentCategoryId || r.parentId || "",
-            parentCode: r.parentCategory   || r.parent   || "",
-        }));
-    } catch (e) {
-        console.warn("[Item Categories] v2.0 REST fetch failed, trying OData:", e.message);
-        try {
-            const md = await bcGetODataMetadata();
-            const allSets = Object.keys(md.entitySets);
-            const cand = allSets.filter(n => /item.?categor/i.test(n));
-            for (const entity of cand) {
-                const typeName = md.entitySets[entity];
-                const fields = md.entityTypes[typeName] || [];
-                const fCode   = bcFindField(fields, [/^code$/i, /^No$/i, /^No_$/i]);
-                const fDesc   = bcFindField(fields, [/^description$/i, /^displayName$/i, /^Name$/i]);
-                const fParent = bcFindField(fields, [/^parent.?category$/i, /^parent.?item.?category$/i, /^parent.?code$/i, /^Parent_Category$/i]);
-                if (!fCode) continue;
-                const token = await bcGetToken();
-                const cname = await bcGetCompanyInternalName();
-                const url = BC_ODATA_URL + "/Company('" + encodeURIComponent(cname) + "')/" + entity + "?$top=10000";
-                const resp = await fetch(url, { headers: { "Authorization": "Bearer " + token } });
-                if (!resp.ok) continue;
-                const j = await resp.json();
-                return (j.value || []).map(r => ({
-                    id: "",
-                    code: r[fCode] || "",
-                    displayName: fDesc ? (r[fDesc] || "") : "",
-                    // OData usually stores parent as a code string, not a GUID
-                    parentCode: fParent ? (r[fParent] || "") : "",
-                }));
-            }
-        } catch (e2) {
-            console.warn("[Item Categories] OData fallback also failed:", e2.message);
-        }
-        return [];
+    // BC v2.0 REST /itemCategories DROPS the parent link (its schema is
+    // literally just id, code, displayName, lastModifiedDateTime — the
+    // Vic Air tenant confirmed this in console). To get Parent_Category
+    // we must hit the OData Item_Category page directly. Fire both in
+    // parallel — REST for stable id/displayName, OData for parent — and
+    // merge by code so we're robust to either side failing.
+    const [restRows, odataRows] = await Promise.all([
+        (async () => {
+            try {
+                const data = await bcFetchAll(BC_API_URL + "/companies(" + compId + ")/itemCategories?$top=10000", "Item Categories");
+                if (data && data.length) console.log("[Item Categories] REST sample fields:", Object.keys(data[0]).join(", "));
+                return data || [];
+            } catch (e) { console.warn("[Item Categories] REST failed:", e.message); return []; }
+        })(),
+        (async () => {
+            try {
+                const md = await bcGetODataMetadata();
+                const allSets = Object.keys(md.entitySets);
+                const cand = allSets.filter(n => /item.?categor/i.test(n));
+                console.log("[Item Categories] OData candidate entities:", cand.join(", ") || "(none)");
+                for (const entity of cand) {
+                    const typeName = md.entitySets[entity];
+                    const fields = md.entityTypes[typeName] || [];
+                    const fCode   = bcFindField(fields, [/^code$/i, /^No$/i, /^No_$/i]);
+                    const fDesc   = bcFindField(fields, [/^description$/i, /^displayName$/i, /^Name$/i]);
+                    const fParent = bcFindField(fields, [/^parent.?category$/i, /^Parent_Category$/i, /^parent.?item.?category$/i, /^parent.?code$/i]);
+                    if (!fCode) { console.log("[Item Categories] OData " + entity + ": no code field, skipping"); continue; }
+                    console.log("[Item Categories] OData " + entity + " fields: code=" + fCode + " desc=" + fDesc + " parent=" + (fParent || "(none)"));
+                    const token = await bcGetToken();
+                    const cname = await bcGetCompanyInternalName();
+                    const url = BC_ODATA_URL + "/Company('" + encodeURIComponent(cname) + "')/" + entity + "?$top=10000";
+                    const resp = await fetch(url, { headers: { "Authorization": "Bearer " + token } });
+                    if (!resp.ok) { console.warn("[Item Categories] OData " + entity + " HTTP " + resp.status); continue; }
+                    const j = await resp.json();
+                    console.log("[Item Categories] OData " + entity + " → " + (j.value || []).length + " rows");
+                    return (j.value || []).map(r => ({
+                        code: r[fCode] || "",
+                        displayName: fDesc ? (r[fDesc] || "") : "",
+                        parentCode: fParent ? (r[fParent] || "") : "",
+                    }));
+                }
+            } catch (e) { console.warn("[Item Categories] OData failed:", e.message); }
+            return [];
+        })(),
+    ]);
+    // Merge by code. REST contributes id (used for chart tooltips one
+    // day) + displayName; OData contributes parentCode. When both have
+    // a displayName, prefer REST's — it's the one BC uses in the UI.
+    const byCode = new Map();
+    for (const r of restRows) {
+        const code = r.code || r.Code || "";
+        if (!code) continue;
+        byCode.set(code, { code, id: r.id || "", displayName: r.displayName || r.description || r.name || "", parentCode: "", parentId: "" });
     }
+    for (const r of odataRows) {
+        if (!r.code) continue;
+        let cur = byCode.get(r.code);
+        if (!cur) { cur = { code: r.code, id: "", displayName: r.displayName || "", parentCode: "", parentId: "" }; byCode.set(r.code, cur); }
+        if (r.parentCode) cur.parentCode = r.parentCode;
+        if (!cur.displayName && r.displayName) cur.displayName = r.displayName;
+    }
+    const merged = [...byCode.values()];
+    const withParent = merged.filter(c => c.parentCode).length;
+    console.log("[Item Categories] merged " + merged.length + " · " + withParent + " have a parent (post-merge)");
+    return merged;
 }
 async function fetchInvoiceLines(invoiceId) {
     const compId = await bcGetCompanyId();
