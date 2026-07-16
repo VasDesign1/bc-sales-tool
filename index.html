@@ -2540,10 +2540,6 @@
                     <div class="kpi k-avg"><div class="label">Adjusted Profit Margin</div><div class="value" id="itKpiAdjGpp">—</div><div class="sub" id="itKpiAdjGppSub">after credit memos</div></div>
                 </div>
 
-                <div class="hint" id="itParentCategoryFilterBanner" style="display:none; background:#fff8e1; border-left-color:#ffb300;">
-                    Filtered by parent category: <strong id="itParentCategoryFilterName"></strong>
-                    <a href="#" id="itParentCategoryFilterClear" style="margin-left:10px;">clear ✕</a>
-                </div>
                 <div class="hint" id="itCategoryFilterBanner" style="display:none; background:#e8f5e9; border-left-color:#43a047;">
                     Filtered by category: <strong id="itCategoryFilterName"></strong>
                     <a href="#" id="itCategoryFilterClear" style="margin-left:10px;">clear ✕</a>
@@ -2552,13 +2548,13 @@
                 <div class="chart-grid">
                     <div class="card span-6">
                         <div class="head">
-                            <h3>Sales by parent category</h3>
+                            <h3>Top 20 items by sales</h3>
                             <div style="display:flex; gap:10px; align-items:center;">
-                                <div class="meta">click a slice to drill into subcategories</div>
-                                <div class="chart-view-toggle" data-chart="itParentCategory" title="Gross | Adjusted (net of credit-memo returns)"><button type="button" data-mode="gross" class="active">Gross</button><button type="button" data-mode="adjusted">Adj</button></div>
+                                <div class="meta">click a bar to filter table</div>
+                                <div class="chart-view-toggle" data-chart="itTopItems" title="Gross | Adjusted (net of credit-memo returns)"><button type="button" data-mode="gross" class="active">Gross</button><button type="button" data-mode="adjusted">Adj</button></div>
                             </div>
                         </div>
-                        <div class="chart-wrap" style="min-height:440px;"><canvas id="itParentCategoryChart"></canvas></div>
+                        <div class="chart-wrap" style="min-height:440px;"><canvas id="itTopItemsChart"></canvas></div>
                     </div>
                     <div class="card span-6">
                         <div class="head">
@@ -2569,16 +2565,6 @@
                             </div>
                         </div>
                         <div class="chart-wrap" style="min-height:440px;"><canvas id="itCategoryChart"></canvas></div>
-                    </div>
-                    <div class="card span-12">
-                        <div class="head">
-                            <h3>Top 20 items by sales</h3>
-                            <div style="display:flex; gap:10px; align-items:center;">
-                                <div class="meta">click a bar to filter table</div>
-                                <div class="chart-view-toggle" data-chart="itTopItems" title="Gross | Adjusted (net of credit-memo returns)"><button type="button" data-mode="gross" class="active">Gross</button><button type="button" data-mode="adjusted">Adj</button></div>
-                            </div>
-                        </div>
-                        <div class="chart-wrap" style="min-height:440px;"><canvas id="itTopItemsChart"></canvas></div>
                     </div>
                     <div class="card span-12">
                         <div class="head">
@@ -4124,80 +4110,6 @@ async function fetchItems() {
         return data;
     } catch (e) { console.warn("Could not fetch items:", e.message); return []; }
 }
-// Item category hierarchy — v2.0 REST exposes /itemCategories with
-// parentCategoryId (GUID → root walk gives us the parent code). Falls
-// back to OData $metadata discovery if the v2.0 endpoint is disabled
-// on the tenant. Returned rows are already normalised to
-// { id, code, displayName, parentId } so callers don't care which
-// source produced them.
-async function fetchItemCategories() {
-    const compId = await bcGetCompanyId();
-    // BC v2.0 REST /itemCategories DROPS the parent link (its schema is
-    // literally just id, code, displayName, lastModifiedDateTime — the
-    // Vic Air tenant confirmed this in console). To get Parent_Category
-    // we must hit the OData Item_Category page directly. Fire both in
-    // parallel — REST for stable id/displayName, OData for parent — and
-    // merge by code so we're robust to either side failing.
-    const [restRows, odataRows] = await Promise.all([
-        (async () => {
-            try {
-                const data = await bcFetchAll(BC_API_URL + "/companies(" + compId + ")/itemCategories?$top=10000", "Item Categories");
-                if (data && data.length) console.log("[Item Categories] REST sample fields:", Object.keys(data[0]).join(", "));
-                return data || [];
-            } catch (e) { console.warn("[Item Categories] REST failed:", e.message); return []; }
-        })(),
-        (async () => {
-            try {
-                const md = await bcGetODataMetadata();
-                const allSets = Object.keys(md.entitySets);
-                const cand = allSets.filter(n => /item.?categor/i.test(n));
-                console.log("[Item Categories] OData candidate entities:", cand.join(", ") || "(none)");
-                for (const entity of cand) {
-                    const typeName = md.entitySets[entity];
-                    const fields = md.entityTypes[typeName] || [];
-                    const fCode   = bcFindField(fields, [/^code$/i, /^No$/i, /^No_$/i]);
-                    const fDesc   = bcFindField(fields, [/^description$/i, /^displayName$/i, /^Name$/i]);
-                    const fParent = bcFindField(fields, [/^parent.?category$/i, /^Parent_Category$/i, /^parent.?item.?category$/i, /^parent.?code$/i]);
-                    if (!fCode) { console.log("[Item Categories] OData " + entity + ": no code field, skipping"); continue; }
-                    console.log("[Item Categories] OData " + entity + " fields: code=" + fCode + " desc=" + fDesc + " parent=" + (fParent || "(none)"));
-                    const token = await bcGetToken();
-                    const cname = await bcGetCompanyInternalName();
-                    const url = BC_ODATA_URL + "/Company('" + encodeURIComponent(cname) + "')/" + entity + "?$top=10000";
-                    const resp = await fetch(url, { headers: { "Authorization": "Bearer " + token } });
-                    if (!resp.ok) { console.warn("[Item Categories] OData " + entity + " HTTP " + resp.status); continue; }
-                    const j = await resp.json();
-                    console.log("[Item Categories] OData " + entity + " → " + (j.value || []).length + " rows");
-                    return (j.value || []).map(r => ({
-                        code: r[fCode] || "",
-                        displayName: fDesc ? (r[fDesc] || "") : "",
-                        parentCode: fParent ? (r[fParent] || "") : "",
-                    }));
-                }
-            } catch (e) { console.warn("[Item Categories] OData failed:", e.message); }
-            return [];
-        })(),
-    ]);
-    // Merge by code. REST contributes id (used for chart tooltips one
-    // day) + displayName; OData contributes parentCode. When both have
-    // a displayName, prefer REST's — it's the one BC uses in the UI.
-    const byCode = new Map();
-    for (const r of restRows) {
-        const code = r.code || r.Code || "";
-        if (!code) continue;
-        byCode.set(code, { code, id: r.id || "", displayName: r.displayName || r.description || r.name || "", parentCode: "", parentId: "" });
-    }
-    for (const r of odataRows) {
-        if (!r.code) continue;
-        let cur = byCode.get(r.code);
-        if (!cur) { cur = { code: r.code, id: "", displayName: r.displayName || "", parentCode: "", parentId: "" }; byCode.set(r.code, cur); }
-        if (r.parentCode) cur.parentCode = r.parentCode;
-        if (!cur.displayName && r.displayName) cur.displayName = r.displayName;
-    }
-    const merged = [...byCode.values()];
-    const withParent = merged.filter(c => c.parentCode).length;
-    console.log("[Item Categories] merged " + merged.length + " · " + withParent + " have a parent (post-merge)");
-    return merged;
-}
 async function fetchInvoiceLines(invoiceId) {
     const compId = await bcGetCompanyId();
     return bcFetchAll(BC_API_URL + "/companies(" + compId + ")/salesInvoices(" + invoiceId + ")/salesInvoiceLines?$top=10000", "Invoice lines");
@@ -4761,11 +4673,8 @@ const state = {
     invoices: [], filtered: [], iles: [], items: [], customers: [],
     creditMemos: [], shipments: [], returnReceipts: [], quotes: [],
     locations: new Map(),    // locId -> code
-    itemCategory: new Map(), // itemNumber -> leaf category code
-    itemCategoryDisplay: new Map(), // categoryCode -> displayName
-    itemCategoryParent:  new Map(), // childCode -> immediate parentCode (see fetchItemCategories)
-    byItemCategoryFilter:  "",      // active leaf-category filter (set by pie click)
-    byParentCategoryFilter:"",      // active parent-category filter (set by new parent pie)
+    itemCategory: new Map(), // itemNumber -> category code
+    byItemCategoryFilter: "",       // active leaf-category filter (set by pie click)
     custPostingGroup: new Map(), // customerNumber -> posting group code
     custCity: new Map(),     // customerNumber -> city
     expandedMatrix: new Set(), // keys of expanded matrix rows
@@ -5143,22 +5052,6 @@ function countInvoicesWithVisibleItem(visibleItems) {
         if (hit) n++;
     }
     return n;
-}
-// Walk item-category parent chain up to the root, cap at 20 hops so a
-// cyclic BC category graph can't hang the browser. If a code has no
-// parent recorded it's already top-level → return it as-is.
-function parentCategoryOf(leafCode) {
-    if (!leafCode) return "";
-    let cur = leafCode;
-    const seen = new Set();
-    for (let i = 0; i < 20; i++) {
-        if (seen.has(cur)) break;
-        seen.add(cur);
-        const p = state.itemCategoryParent && state.itemCategoryParent.get(cur);
-        if (!p || p === cur) break;
-        cur = p;
-    }
-    return cur;
 }
 
 // Item-line check used by cost-from-line (cost only flows for stock items).
@@ -11024,38 +10917,18 @@ function renderByItem() {
             if (cust) s.add(cust);
         }
     }
-    // Enrich byItem rows with category + parent category + customer count
-    let rows = [...state.byItem.values()].map(r => {
-        const category = r.number ? (state.itemCategory.get(r.number) || "(no category)") : "(non-item)";
-        const parentCategory = category === "(no category)" || category === "(non-item)"
-            ? category
-            : parentCategoryOf(category);
-        return {
-            ...r,
-            category,
-            parentCategory,
-            customerCount: (customersByItem.get(r.key) || new Set()).size,
-        };
-    });
+    // Enrich byItem rows with category + customer count
+    let rows = [...state.byItem.values()].map(r => ({
+        ...r,
+        category: r.number ? (state.itemCategory.get(r.number) || "(no category)") : "(non-item)",
+        customerCount: (customersByItem.get(r.key) || new Set()).size,
+    }));
 
-    // Parent-category cross-filter (from the new pie click) — applied
-    // BEFORE the leaf-category filter so a parent + leaf combo like
-    // parent=UNITS + leaf=UNITS-17 keeps the intersection.
-    if (state.byParentCategoryFilter) {
-        rows = rows.filter(r => r.parentCategory === state.byParentCategoryFilter);
-    }
-    // Leaf-category cross-filter (from the existing item-category pie)
+    // Leaf-category cross-filter (from the item-category pie)
     if (state.byItemCategoryFilter) {
         rows = rows.filter(r => r.category === state.byItemCategoryFilter);
     }
-    // Toggle banners
-    const parentBanner = document.getElementById("itParentCategoryFilterBanner");
-    if (parentBanner) {
-        if (state.byParentCategoryFilter) {
-            parentBanner.style.display = "block";
-            document.getElementById("itParentCategoryFilterName").textContent = state.byParentCategoryFilter;
-        } else parentBanner.style.display = "none";
-    }
+    // Toggle banner
     const banner = document.getElementById("itCategoryFilterBanner");
     if (banner) {
         if (state.byItemCategoryFilter) {
@@ -11096,10 +10969,9 @@ function renderByItem() {
 
     // Each item chart gets its own clone — when its pill is on Gross
     // (default) viewRowsForCharts returns `rows` unchanged at no cost.
-    const topItemsRows       = viewRowsForCharts(rows, "byItem", r => r.key, "revenue", "itTopItems");
-    const categoryRows       = viewRowsForCharts(rows, "byItem", r => r.key, "revenue", "itCategory");
-    const parentCategoryRows = viewRowsForCharts(rows, "byItem", r => r.key, "revenue", "itParentCategory");
-    const paretoRows         = viewRowsForCharts(rows, "byItem", r => r.key, "revenue", "itPareto");
+    const topItemsRows = viewRowsForCharts(rows, "byItem", r => r.key, "revenue", "itTopItems");
+    const categoryRows = viewRowsForCharts(rows, "byItem", r => r.key, "revenue", "itCategory");
+    const paretoRows   = viewRowsForCharts(rows, "byItem", r => r.key, "revenue", "itPareto");
     // ---------- Charts (computed off the filtered rows so they honour the cross-filter) ----------
     // Top 20 items by sales
     destroyChart("itTopItems");
@@ -11125,54 +10997,6 @@ function renderByItem() {
                     state.filters.itemDesc = state.filters.item ? (r.description || "") : "";
                     const box = document.getElementById("itemFilterBox"); if (box) box.value = state.filters.item;
                     rebuildFiltered(); renderCurrentTab();
-                },
-            })
-        });
-    }
-
-    // Sales by parent category (doughnut) — rolls each row's leaf
-    // itemCategoryCode up to its top-level parent via parentCategoryOf.
-    // Click a parent slice → sets byParentCategoryFilter → the leaf pie
-    // and item table below narrow to that parent's children. Click again
-    // clears. If the tenant has no category hierarchy loaded, this pie
-    // ends up identical to the leaf pie (each leaf is its own root) —
-    // still useful as a second click target.
-    destroyChart("itParentCategory");
-    const parentMap = new Map();
-    for (const r of parentCategoryRows) {
-        const p = r.parentCategory || "(no category)";
-        const cur = parentMap.get(p) || { name: p, amount: 0, count: 0 };
-        cur.amount += r.revenue; cur.count++;
-        parentMap.set(p, cur);
-    }
-    const parents = [...parentMap.values()].sort((a, b) => b.amount - a.amount).slice(0, 20);
-    const parentCtx = document.getElementById("itParentCategoryChart");
-    if (parentCtx) {
-        const palette = ["#3949ab", "#00897b", "#f9a825", "#e53935", "#8e24aa", "#039be5", "#6d4c41", "#43a047", "#fb8c00", "#5e35b1", "#00acc1", "#c0ca33", "#d81b60", "#1e88e5", "#7cb342", "#fdd835", "#ff7043", "#3f51b5", "#26a69a", "#9e9e9e"];
-        state.charts.itParentCategory = new Chart(parentCtx.getContext("2d"), {
-            type: "doughnut",
-            data: { labels: parents.map(p => p.name),
-                    datasets: [{ data: parents.map(p => p.amount), backgroundColor: parents.map((_, i) => palette[i % palette.length]) }] },
-            plugins: [ChartDataLabels],
-            options: chartBase({
-                plugins: { legend: { position: "right", labels: { boxWidth: 12 } },
-                           tooltip: { callbacks: { label: c => c.label + ": " + fmtMoneyFull(c.parsed) + " (" + parents[c.dataIndex].count + " items)" } },
-                           datalabels: ringDataLabels({
-                               formatter: (value) => {
-                                   const total = parents.reduce((s, p) => s + p.amount, 0);
-                                   const pct = total ? (value / total * 100) : 0;
-                                   if (pct < 5) return "";
-                                   return fmtMoney(value) + "\n" + pct.toFixed(0) + "%";
-                               }
-                           }) },
-                onClick: (_, els) => {
-                    if (!els.length) return;
-                    const p = parents[els[0].index].name;
-                    state.byParentCategoryFilter = (state.byParentCategoryFilter === p) ? "" : p;
-                    // Clicking a parent invalidates the current leaf drill,
-                    // since the leaf might not belong to the new parent.
-                    if (state.byParentCategoryFilter) state.byItemCategoryFilter = "";
-                    renderByItem();
                 },
             })
         });
@@ -15375,10 +15199,9 @@ async function handleLoad() {
     const btn = document.getElementById("loadBtn");
     btn.disabled = true; btn.textContent = "Loading…";
     try {
-        const [locs, items, itemCategories, customers, invoices, iles, creditMemos, shipments, returnReceipts, quotes, quoteExtras, blanketOrders, valueEntries, salesOrders, salesOrderOutstanding, _residentialLookup, _quoteArchive] = await Promise.all([
+        const [locs, items, customers, invoices, iles, creditMemos, shipments, returnReceipts, quotes, quoteExtras, blanketOrders, valueEntries, salesOrders, salesOrderOutstanding, _residentialLookup, _quoteArchive] = await Promise.all([
             fetchLocations(),
             fetchItems(),
-            fetchItemCategories(),
             fetchCustomers(),
             fetchSalesInvoicesWithLines(from, to),
             fetchItemLedgerSales(from, to),
@@ -15622,51 +15445,6 @@ async function handleLoad() {
         state.locations = new Map(locs.map(l => [l.id, l.code || l.displayName || "(unnamed)"]));
         state.items = items;
         state.itemCategory = new Map(items.map(it => [it.number, it.itemCategoryCode || ""]));
-        // Build category-hierarchy maps so leaf codes can be rolled up
-        // to their top-level parent (image #5 pie is drilled to leaves;
-        // the new "Sales by parent category" pie rolls them up). v2.0
-        // REST stores the parent as a GUID (parentCategoryId); walk id
-        // → code first, then use it. OData fallback stores the parent
-        // as a code string directly (parentCode). Cycles are guarded
-        // in parentCategoryOf() by capping the walk at 20 hops.
-        state.itemCategoryDisplay = new Map();
-        state.itemCategoryParent  = new Map();  // childCode -> immediate parentCode
-        {
-            const idToCode = new Map();
-            for (const c of (itemCategories || [])) if (c.id && c.code) idToCode.set(c.id, c.code);
-            for (const c of (itemCategories || [])) {
-                if (!c.code) continue;
-                state.itemCategoryDisplay.set(c.code, c.displayName || c.code);
-                let parent = "";
-                if (c.parentId && idToCode.has(c.parentId)) parent = idToCode.get(c.parentId);
-                else if (c.parentCode) parent = c.parentCode;
-                if (parent && parent !== c.code) state.itemCategoryParent.set(c.code, parent);
-            }
-            const beforeHeuristic = state.itemCategoryParent.size;
-            // Prefix heuristic — Wiise doesn't ship the Item Categories
-            // page as an OData web service AND its v2.0 REST /itemCategories
-            // strips the parent field, so we can't get real parents from BC.
-            // Fall back to splitting the code on its first "-": UNITS-13
-            // → parent UNITS, 01-KIT → parent 01, DUCT-02 → parent DUCT.
-            // Codes without a dash (SPECIALS, FREIGHT, SERVICE) stay as
-            // their own root. Applied only when BC didn't already give us
-            // a real parent — so if the tenant ever publishes the page,
-            // real data automatically wins.
-            if (beforeHeuristic === 0) {
-                const codes = new Set([...(itemCategories || []).map(c => c.code).filter(Boolean),
-                                       ...state.itemCategory.values()].filter(Boolean));
-                for (const code of codes) {
-                    const dash = code.indexOf("-");
-                    if (dash <= 0) continue;
-                    const parent = code.substring(0, dash);
-                    if (parent === code) continue;
-                    if (!state.itemCategoryParent.has(code)) state.itemCategoryParent.set(code, parent);
-                }
-            }
-            console.log("[Item Categories] loaded " + (itemCategories || []).length
-                + " · " + beforeHeuristic + " have a BC-assigned parent"
-                + " · " + state.itemCategoryParent.size + " total after prefix heuristic");
-        }
         state.customers = customers;
         state.custPostingGroup = new Map(customers.map(c => [
             c.number || c.id,
@@ -15898,9 +15676,6 @@ function wireEvents() {
     document.getElementById("itemSearch").addEventListener("input", e => { state.itemFilter = e.target.value; renderByItem(); });
     document.getElementById("itCategoryFilterClear").addEventListener("click", e => {
         e.preventDefault(); state.byItemCategoryFilter = ""; renderByItem();
-    });
-    document.getElementById("itParentCategoryFilterClear").addEventListener("click", e => {
-        e.preventDefault(); state.byParentCategoryFilter = ""; renderByItem();
     });
 
     // Customer × Item tab controls
