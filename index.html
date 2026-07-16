@@ -2767,6 +2767,8 @@
                                 <th data-sort="branch">Branch</th>
                                 <th data-sort="itemCategory">Item Category</th>
                                 <th data-sort="itemNumber">Item No</th>
+                                <th class="num" data-sort="qty">Qty</th>
+                                <th class="num" data-sort="lineAmount">Line Amount</th>
                                 <th class="num" data-sort="sales">Sales $</th>
                                 <th class="num" data-sort="gp">GP $</th>
                                 <th class="num" data-sort="gpPct">GP %</th>
@@ -4130,12 +4132,24 @@ async function fetchItems() {
 async function fetchItemCategories() {
     const compId = await bcGetCompanyId();
     try {
-        const data = await bcFetchAll(BC_API_URL + "/companies(" + compId + ")/itemCategories?$top=10000&$select=id,code,displayName,parentCategoryId", "Item Categories");
+        // No $select — different BC tenants surface the parent link
+        // under different names (parentCategoryId, parentCategory,
+        // parentId, parent), and $select would drop the one that's
+        // actually populated. Category rows are small.
+        const data = await bcFetchAll(BC_API_URL + "/companies(" + compId + ")/itemCategories?$top=10000", "Item Categories");
+        if (data && data.length) {
+            console.log("[Item Categories] sample fields:", Object.keys(data[0]).join(", "));
+            console.log("[Item Categories] sample rows:", data.slice(0, 3));
+        }
         return (data || []).map(r => ({
             id: r.id || "",
-            code: r.code || "",
-            displayName: r.displayName || "",
-            parentId: r.parentCategoryId || "",
+            code: r.code || r.Code || "",
+            displayName: r.displayName || r.description || r.name || "",
+            // parentCategoryId is BC's stock name (GUID → resolved via
+            // idToCode). parentCategory / parent / parentId are seen
+            // on custom / older exposures — try each in order.
+            parentId:   r.parentCategoryId || r.parentId || "",
+            parentCode: r.parentCategory   || r.parent   || "",
         }));
     } catch (e) {
         console.warn("[Item Categories] v2.0 REST fetch failed, trying OData:", e.message);
@@ -5621,6 +5635,15 @@ function buildEOMRows(invoices) {
             const itemNo = ln.lineObjectNumber || ln.itemId || "";
             const sales = lineNetAmount(ln);
             const cost  = totalCostFromLine(ln, 1, inv.postingDate, inv.customerNumber, inv.number);
+            const qty   = num(ln.quantity);
+            const unitPrice = num(ln.unitPrice);
+            // Gross line amount = qty × unit price, before line & invoice
+            // discount. Falls back to amountExcludingTax for non-Item
+            // lines (G/L Account, Comment, Charge) which usually don't
+            // have unitPrice populated.
+            const lineAmount = (unitPrice && qty)
+                ? unitPrice * qty
+                : num(ln.amountExcludingTax);
             rows.push({
                 customer:    inv.customerName || inv.customerNumber || "(unknown)",
                 customerNumber: inv.customerNumber || "",
@@ -5630,7 +5653,7 @@ function buildEOMRows(invoices) {
                 itemCategory: state.itemCategory.get(itemNo) || "—",
                 itemNumber:  itemNo,
                 description: ln.description || "",
-                qty:         num(ln.quantity),
+                qty, unitPrice, lineAmount,
                 sales, cost,
                 gp: sales - cost,
                 gpPct: sales ? (sales - cost) / sales : 0,
@@ -11339,13 +11362,15 @@ function renderEOM() {
             <td>${escapeHtml(r.branch)}</td>
             <td>${escapeHtml(r.itemCategory)}</td>
             <td>${escapeHtml(r.itemNumber)}</td>
+            <td class="num">${r.qty ? fmtQty(r.qty) : ""}</td>
+            <td class="num">${r.lineAmount ? fmtMoneyFull(r.lineAmount) : ""}</td>
             <td class="num">${fmtMoneyFull(r.sales)}</td>
             <td class="num ${r.gp >= 0 ? "pos" : "neg"}">${fmtMoneyFull(r.gp)}</td>
             <td class="num">${fmtPct(r.gpPct)}</td>
             <td>${escapeHtml(r.month)}</td>
             <td class="num">${r.fy}</td>
         </tr>
-    `).join("") || '<tr><td colspan="11" class="empty">No rows.</td></tr>';
+    `).join("") || '<tr><td colspan="13" class="empty">No rows.</td></tr>';
     document.getElementById("eomMeta").textContent = rows.length + " line" + (rows.length === 1 ? "" : "s") + (rows.length > 2000 ? " (showing top 2000 — narrow with filters)" : "");
     renderEOMDrillTree();
 }
@@ -11365,6 +11390,8 @@ function exportEomToCSV() {
         "Item No":       r.itemNumber || "",
         "Description":   r.description || "",
         "Qty":           r.qty != null ? r.qty : 0,
+        "Unit Price":    r.unitPrice != null ? r.unitPrice : 0,
+        "Line Amount":   r.lineAmount != null ? r.lineAmount : 0,
         "Sales $":       r.sales || 0,
         "Cost $":        r.cost || 0,
         "GP $":          r.gp || 0,
@@ -11375,7 +11402,7 @@ function exportEomToCSV() {
     const tag = (state.eomGpLow ? "_lt20" : "") + (state.eomGpHigh ? "_gt90" : "");
     const baseName = "eom" + tag + "_" + new Date().toISOString().slice(0, 10);
     downloadXLSX(detail, "EOM", baseName, {
-        money:   ["Sales $", "Cost $", "GP $"],
+        money:   ["Unit Price", "Line Amount", "Sales $", "Cost $", "GP $"],
         percent: ["GP %"],
         integer: ["FY"],
     });
