@@ -2754,7 +2754,7 @@
                                 <th data-sort="itemCategory">Item Category</th>
                                 <th data-sort="itemNumber">Item No</th>
                                 <th class="num" data-sort="qty">Qty</th>
-                                <th class="num" data-sort="lineAmount">Line Amount</th>
+                                <th class="num" data-sort="unitSell">Unit Sell</th>
                                 <th class="num" data-sort="unitCost">Unit Cost</th>
                                 <th class="num" data-sort="sales">Sales $</th>
                                 <th class="num" data-sort="gp">GP $</th>
@@ -2775,7 +2775,7 @@
                                 <th>Customer / Doc Type / Doc / Item</th>
                                 <th class="num" data-tree-sort="sales">Sales (LCY)</th>
                                 <th class="num" data-tree-sort="qty">Qty</th>
-                                <th class="num" data-tree-sort="lineAmount">Line Amount</th>
+                                <th class="num" data-tree-sort="unitSell">Unit Sell</th>
                                 <th class="num" data-tree-sort="cost">Adj Cost</th>
                                 <th class="num" data-tree-sort="costNonInv">Cost Non-Inv</th>
                                 <th class="num" data-tree-sort="gp">Adj Profit</th>
@@ -5543,19 +5543,11 @@ function buildEOMRows(invoices) {
             const sales = lineNetAmount(ln);
             const cost  = totalCostFromLine(ln, 1, inv.postingDate, inv.customerNumber, inv.number);
             const qty   = num(ln.quantity);
-            const unitPrice = num(ln.unitPrice);
-            // Line Amount matches BC's canonical Line Amount field —
-            // amountExcludingTax = qty × unitPrice minus any per-line
-            // discount. Same value you'd see on the printed invoice
-            // next to that row. Equals Sales when there's no
-            // invoice-level discount; exceeds Sales when there is one
-            // (Sales further subtracts the allocated share). Falls back
-            // to qty × unitPrice only if BC didn't populate the field.
-            const lineAmount = ln.amountExcludingTax != null
-                ? num(ln.amountExcludingTax)
-                : (unitPrice && qty ? unitPrice * qty : 0);
-            // Unit cost — cost ÷ qty. Blank for qty=0 lines (comment,
-            // discount headers) so the column doesn't show noisy zeros.
+            // Per-unit sell = actual net sales ÷ qty (already covers
+            // any line and invoice discounts). Blank when qty=0 so
+            // comment / discount-header lines don't spam noise.
+            const unitSell = qty ? sales / qty : 0;
+            // Unit cost — cost ÷ qty, same reason for blanking at qty=0.
             const unitCost = qty ? cost / qty : 0;
             rows.push({
                 customer:    inv.customerName || inv.customerNumber || "(unknown)",
@@ -5566,7 +5558,7 @@ function buildEOMRows(invoices) {
                 itemCategory: state.itemCategory.get(itemNo) || "—",
                 itemNumber:  itemNo,
                 description: ln.description || "",
-                qty, unitPrice, lineAmount, unitCost,
+                qty, unitSell, unitCost,
                 sales, cost,
                 gp: sales - cost,
                 gpPct: sales ? (sales - cost) / sales : 0,
@@ -11207,7 +11199,7 @@ function renderEOM() {
             <td>${escapeHtml(r.itemCategory)}</td>
             <td>${escapeHtml(r.itemNumber)}</td>
             <td class="num">${r.qty ? fmtQty(r.qty) : ""}</td>
-            <td class="num">${r.lineAmount ? fmtMoneyFull(r.lineAmount) : ""}</td>
+            <td class="num">${r.unitSell ? fmtMoneyFull(r.unitSell) : ""}</td>
             <td class="num">${r.unitCost ? fmtMoneyFull(r.unitCost) : ""}</td>
             <td class="num">${fmtMoneyFull(r.sales)}</td>
             <td class="num ${r.gp >= 0 ? "pos" : "neg"}">${fmtMoneyFull(r.gp)}</td>
@@ -11235,8 +11227,7 @@ function exportEomToCSV() {
         "Item No":       r.itemNumber || "",
         "Description":   r.description || "",
         "Qty":           r.qty != null ? r.qty : 0,
-        "Unit Price":    r.unitPrice != null ? r.unitPrice : 0,
-        "Line Amount":   r.lineAmount != null ? r.lineAmount : 0,
+        "Unit Sell":     r.unitSell != null ? r.unitSell : 0,
         "Unit Cost":     r.unitCost != null ? r.unitCost : 0,
         "Sales $":       r.sales || 0,
         "Cost $":        r.cost || 0,
@@ -11248,7 +11239,7 @@ function exportEomToCSV() {
     const tag = (state.eomGpLow ? "_lt20" : "") + (state.eomGpHigh ? "_gt90" : "");
     const baseName = "eom" + tag + "_" + new Date().toISOString().slice(0, 10);
     downloadXLSX(detail, "EOM", baseName, {
-        money:   ["Unit Price", "Line Amount", "Unit Cost", "Sales $", "Cost $", "GP $"],
+        money:   ["Unit Sell", "Unit Cost", "Sales $", "Cost $", "GP $"],
         percent: ["GP %"],
         integer: ["FY"],
     });
@@ -14707,7 +14698,7 @@ function renderDemographics() {
 // DRILL-DOWN TREES (Customer / Branch / Salesperson)
 // ============================================================
 function _newNode(key, label) {
-    return { key, label, sales: 0, qty: 0, cost: 0, costNonInv: 0, lineAmount: 0, children: [] };
+    return { key, label, sales: 0, qty: 0, cost: 0, costNonInv: 0, children: [] };
 }
 // Build a unified list of posted-sales documents.
 // countsTotal=true: contributes to entity totals (Invoice, Credit Memo).
@@ -14762,13 +14753,17 @@ function _finalizeTree(roots, grandTotal) {
         n.gp = n.sales - n.cost;
         n.gpPct = n.sales ? n.gp / n.sales : 0;
         n.pctGT = grandTotal ? n.sales / grandTotal : 0;
+        // Per-unit sell = sales ÷ qty. At leaf level it's the actual
+        // line sell price; at aggregate nodes (doc → customer) it's the
+        // qty-weighted average — meaningful because Σsales / Σqty is
+        // exactly the blended per-unit rate customers paid.
+        n.unitSell = n.qty ? n.sales / n.qty : 0;
         if (n.children) n.children.forEach(walk);
     };
     roots.forEach(walk);
 }
-function _accumLine(parents, s, q, c, cn, la) {
-    la = la || 0;
-    for (const p of parents) { p.sales += s; p.qty += q; p.cost += c; p.costNonInv += cn; p.lineAmount += la; }
+function _accumLine(parents, s, q, c, cn) {
+    for (const p of parents) { p.sales += s; p.qty += q; p.cost += c; p.costNonInv += cn; }
 }
 function _grandTotalSales() {
     let t = 0; for (const inv of state.filtered) t += invoiceSalesAmount(inv); return t;
@@ -14866,18 +14861,13 @@ function buildEOMDrillTree() {
             const q = num(ln.quantity) * d.sign * mult;
             const c = costFromLine(ln, d.sign, d.postingDate, d.customerNumber, d.number) * mult;
             const cn = costNonInvFromLine(ln, d.sign, d.postingDate, d.customerNumber, d.number) * mult;
-            // Line Amount = BC's canonical field (amountExcludingTax) —
-            // the value shown on the printed invoice for this line.
-            // Signed for credit memos, zeroed for shipments / return
-            // receipts (same convention as Sales/Qty/Cost).
-            const la = num(ln.amountExcludingTax) * d.sign * mult;
             if (gpFilterActive && !gpMatches(s, c + cn)) continue;
             const leaf = _newNode("et-line-" + custKey + "-" + d.type + "-" + d.id + "-" + (ln.id || ln.sequence || itemNo),
                 (itemNo || "(non-item)") + (ln.description ? " · " + ln.description : ""));
             leaf.children = null;
-            leaf.sales = s; leaf.qty = q; leaf.cost = c; leaf.costNonInv = cn; leaf.lineAmount = la;
+            leaf.sales = s; leaf.qty = q; leaf.cost = c; leaf.costNonInv = cn;
             docNode.children.push(leaf);
-            _accumLine([docNode, dtNode, custNode], s, q, c, cn, la);
+            _accumLine([docNode, dtNode, custNode], s, q, c, cn);
         }
     }
     // Prune empty branches (Doc-types/docs/customers with no surviving lines after GP filter).
@@ -15021,10 +15011,10 @@ function renderDrillTree(roots, tableSelector) {
     const tbody = document.querySelector(tableSelector + " tbody");
     if (!tbody) return;
     _sortNodesRecursive(roots, state.treeSort.key, state.treeSort.dir);
-    // Detect optional Line Amount column so trees that don't opt in stay
+    // Detect optional Unit Sell column so trees that don't opt in stay
     // at their original 8 columns.
-    const hasLineAmount = !!document.querySelector(tableSelector + ' th[data-tree-sort="lineAmount"]');
-    const colCount = hasLineAmount ? 9 : 8;
+    const hasUnitSell = !!document.querySelector(tableSelector + ' th[data-tree-sort="unitSell"]');
+    const colCount = hasUnitSell ? 9 : 8;
     const acc = [];
     function emit(node, depth) {
         const expandable = node.children && node.children.length > 0;
@@ -15034,14 +15024,14 @@ function renderDrillTree(roots, tableSelector) {
         const bg = depth === 0 ? "background:#eef0fb; font-weight:700;"
                  : depth === 1 ? "background:#f7f8fd; font-weight:600;"
                  : depth === 2 ? "background:#fafbff;" : "";
-        const laCell = hasLineAmount
-            ? `<td class="num">${node.lineAmount ? fmtMoneyFull(node.lineAmount) : ""}</td>`
+        const usCell = hasUnitSell
+            ? `<td class="num">${node.unitSell ? fmtMoneyFull(node.unitSell) : ""}</td>`
             : "";
         acc.push(`<tr data-key="${escapeAttr(node.key)}" data-expandable="${expandable ? 1 : 0}" style="${bg}cursor:${expandable ? "pointer" : "default"};">
             <td>${pad}<span style="display:inline-block; width:14px; color:#3f51b5;">${arrow}</span> ${escapeHtml(node.label)}</td>
             <td class="num">${fmtMoneyFull(node.sales)}</td>
             <td class="num">${node.qty ? fmtQty(node.qty) : ""}</td>
-            ${laCell}
+            ${usCell}
             <td class="num neg">${node.cost ? "(" + fmtMoneyFull(node.cost) + ")" : ""}</td>
             <td class="num neg">${node.costNonInv ? "(" + fmtMoneyFull(node.costNonInv) + ")" : ""}</td>
             <td class="num ${node.gp >= 0 ? "pos" : "neg"}">${fmtMoneyFull(node.gp)}</td>
