@@ -5651,13 +5651,16 @@ function buildEOMRows(invoices) {
             const cost  = totalCostFromLine(ln, 1, inv.postingDate, inv.customerNumber, inv.number);
             const qty   = num(ln.quantity);
             const unitPrice = num(ln.unitPrice);
-            // Gross line amount = qty × unit price, before line & invoice
-            // discount. Falls back to amountExcludingTax for non-Item
-            // lines (G/L Account, Comment, Charge) which usually don't
-            // have unitPrice populated.
-            const lineAmount = (unitPrice && qty)
-                ? unitPrice * qty
-                : num(ln.amountExcludingTax);
+            // Line Amount matches BC's canonical Line Amount field —
+            // amountExcludingTax = qty × unitPrice minus any per-line
+            // discount. Same value you'd see on the printed invoice
+            // next to that row. Equals Sales when there's no
+            // invoice-level discount; exceeds Sales when there is one
+            // (Sales further subtracts the allocated share). Falls back
+            // to qty × unitPrice only if BC didn't populate the field.
+            const lineAmount = ln.amountExcludingTax != null
+                ? num(ln.amountExcludingTax)
+                : (unitPrice && qty ? unitPrice * qty : 0);
             // Unit cost — cost ÷ qty. Blank for qty=0 lines (comment,
             // discount headers) so the column doesn't show noisy zeros.
             const unitCost = qty ? cost / qty : 0;
@@ -15039,12 +15042,11 @@ function buildEOMDrillTree() {
             const q = num(ln.quantity) * d.sign * mult;
             const c = costFromLine(ln, d.sign, d.postingDate, d.customerNumber, d.number) * mult;
             const cn = costNonInvFromLine(ln, d.sign, d.postingDate, d.customerNumber, d.number) * mult;
-            // Gross line amount = qty × unit price (before line / invoice
-            // discount). Falls back to amountExcludingTax when unitPrice is
-            // missing (non-Item lines often are).
-            const la = (num(ln.unitPrice) && num(ln.quantity))
-                ? num(ln.unitPrice) * num(ln.quantity) * d.sign * mult
-                : num(ln.amountExcludingTax) * d.sign * mult;
+            // Line Amount = BC's canonical field (amountExcludingTax) —
+            // the value shown on the printed invoice for this line.
+            // Signed for credit memos, zeroed for shipments / return
+            // receipts (same convention as Sales/Qty/Cost).
+            const la = num(ln.amountExcludingTax) * d.sign * mult;
             if (gpFilterActive && !gpMatches(s, c + cn)) continue;
             const leaf = _newNode("et-line-" + custKey + "-" + d.type + "-" + d.id + "-" + (ln.id || ln.sequence || itemNo),
                 (itemNo || "(non-item)") + (ln.description ? " · " + ln.description : ""));
@@ -15640,7 +15642,30 @@ async function handleLoad() {
                 else if (c.parentCode) parent = c.parentCode;
                 if (parent && parent !== c.code) state.itemCategoryParent.set(c.code, parent);
             }
-            console.log("[Item Categories] loaded " + (itemCategories || []).length + " · " + state.itemCategoryParent.size + " have a parent");
+            const beforeHeuristic = state.itemCategoryParent.size;
+            // Prefix heuristic — Wiise doesn't ship the Item Categories
+            // page as an OData web service AND its v2.0 REST /itemCategories
+            // strips the parent field, so we can't get real parents from BC.
+            // Fall back to splitting the code on its first "-": UNITS-13
+            // → parent UNITS, 01-KIT → parent 01, DUCT-02 → parent DUCT.
+            // Codes without a dash (SPECIALS, FREIGHT, SERVICE) stay as
+            // their own root. Applied only when BC didn't already give us
+            // a real parent — so if the tenant ever publishes the page,
+            // real data automatically wins.
+            if (beforeHeuristic === 0) {
+                const codes = new Set([...(itemCategories || []).map(c => c.code).filter(Boolean),
+                                       ...state.itemCategory.values()].filter(Boolean));
+                for (const code of codes) {
+                    const dash = code.indexOf("-");
+                    if (dash <= 0) continue;
+                    const parent = code.substring(0, dash);
+                    if (parent === code) continue;
+                    if (!state.itemCategoryParent.has(code)) state.itemCategoryParent.set(code, parent);
+                }
+            }
+            console.log("[Item Categories] loaded " + (itemCategories || []).length
+                + " · " + beforeHeuristic + " have a BC-assigned parent"
+                + " · " + state.itemCategoryParent.size + " total after prefix heuristic");
         }
         state.customers = customers;
         state.custPostingGroup = new Map(customers.map(c => [
