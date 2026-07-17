@@ -4077,15 +4077,46 @@ function updateCostQualityBadge() {
 // ============================================================
 // FETCHERS
 // ============================================================
+// Whitelist of posted sales invoice numbers, sourced from the OData
+// salesInvoiceHeader entity (posted-only) filtered to the same date
+// window. Used to strip un-posted drafts that the v2.0 REST endpoint
+// returns with status="Open" — that status is ambiguous (unposted
+// drafts and posted-unpaid invoices both show it), so status alone
+// can't distinguish. Cross-referencing against a posted-only table
+// is the only reliable way. Verified with Vic Air: SI0000063 was in
+// Wiise's Sales Invoices (draft) list, not Posted Sales Invoices.
+async function fetchPostedInvoiceNumbers(fromISO, toISO) {
+    try {
+        const md = await bcGetODataMetadata();
+        if (!md.entitySets["salesInvoiceHeader"]) {
+            console.warn("[Posted invoice whitelist] salesInvoiceHeader entity not found in $metadata");
+            return null;
+        }
+        const token = await bcGetToken();
+        const cname = await bcGetCompanyInternalName();
+        const filter = "Posting_Date ge " + fromISO + " and Posting_Date le " + toISO;
+        const url = BC_ODATA_URL + "/Company('" + encodeURIComponent(cname) + "')/salesInvoiceHeader?$select=No&$filter=" + encodeURIComponent(filter) + "&$top=10000";
+        const resp = await fetch(url, { headers: { "Authorization": "Bearer " + token } });
+        if (!resp.ok) {
+            console.warn("[Posted invoice whitelist] HTTP " + resp.status);
+            return null;
+        }
+        const j = await resp.json();
+        const set = new Set((j.value || []).map(r => r.No));
+        console.log("[Posted invoice whitelist] " + set.size + " posted invoice numbers in window");
+        return set;
+    } catch (e) {
+        console.warn("[Posted invoice whitelist] failed:", e.message);
+        return null;
+    }
+}
 async function fetchSalesInvoicesWithLines(fromISO, toISO) {
     const compId = await bcGetCompanyId();
-    // Exclude Draft — BC v2.0 REST /salesInvoices returns BOTH unposted
-    // drafts and posted invoices. Drafts carry an intended postingDate
-    // but aren't real sales yet. Vic Air's SI-series drafts were leaking
-    // into June totals (SI0000063 @ $270 caused the tool to over-count
-    // Wiise's Posted Sales Invoices export by exactly $270).
-    // Corrective / Canceled stay in — they're posted documents.
-    const filter = "postingDate ge " + fromISO + " and postingDate le " + toISO + " and status ne 'Draft'";
+    // Filter by posting date only. Status filter is unreliable — BC's
+    // v2.0 REST /salesInvoices unifies posted + unposted, and "Open"
+    // status appears on both. Posted-only distinction happens below via
+    // the salesInvoiceHeader whitelist.
+    const filter = "postingDate ge " + fromISO + " and postingDate le " + toISO;
     // No $top — BC v2.0 treats $top as a *total* cap (not a page size hint),
     // and we were silently dropping invoices beyond the first 2000. The
     // server uses its default page size and @odata.nextLink for the rest;
@@ -4093,36 +4124,35 @@ async function fetchSalesInvoicesWithLines(fromISO, toISO) {
     // invoices totalling ~$199K were missing under $top=2000, exactly the
     // gap between Document-mode sales and VE / PBI sales on this tenant.
     const url = BC_API_URL + "/companies(" + compId + ")/salesInvoices?$filter=" + encodeURIComponent(filter) + "&$expand=salesInvoiceLines";
-    let rows = await bcFetchAll(url, "Sales invoices + lines");
-    // Belt-and-braces client-side filter — the OData "status ne 'Draft'"
-    // filter is silently ignored on some BC tenants (probably because the
-    // v2.0 REST proxy exposes status as a computed property, not a queryable
-    // one). Drop any draft that leaks through so the KPI matches Wiise's
-    // Posted Sales Invoices export regardless.
-    if (rows && rows.length) {
+    const [rowsRaw, postedSet] = await Promise.all([
+        bcFetchAll(url, "Sales invoices + lines"),
+        fetchPostedInvoiceNumbers(fromISO, toISO),
+    ]);
+    let rows = rowsRaw || [];
+    if (rows.length) {
         const beforeStatus = {};
         for (const r of rows) beforeStatus[r.status || "(none)"] = (beforeStatus[r.status || "(none)"] || 0) + 1;
-        // JSON.stringify keeps the distribution inline so it isn't hidden
-        // as a collapsed [Object] in the console.
-        console.log("[Sales Invoices] server returned " + rows.length + " · status distribution: " + JSON.stringify(beforeStatus));
-        // Print the first row's full field list so we can see whether
-        // "status" is even the right field name on this tenant.
-        console.log("[Sales Invoices] sample row keys:", Object.keys(rows[0]).join(", "));
-        // Spotlight SI-prefix rows so we can see what BC actually says
-        // about them — the Wiise export showed zero of these, but this
-        // endpoint returned at least one (SI0000063 last time).
-        const siRows = rows.filter(r => (r.number || "").startsWith("SI") && !(r.number || "").startsWith("SINV"));
-        if (siRows.length) {
-            console.log("[Sales Invoices] " + siRows.length + " SI-prefix (non-SINV) rows:");
-            for (const r of siRows.slice(0, 10)) {
-                console.log("  " + r.number + " · postingDate=" + r.postingDate + " · status=" + r.status
-                    + " · total=" + r.totalAmountExcludingTax + " · customer=" + (r.customerName || ""));
+        console.log("[Sales Invoices] v2.0 REST returned " + rows.length + " · status distribution: " + JSON.stringify(beforeStatus));
+    }
+    // Apply posted-only whitelist. If the OData fetch failed (postedSet
+    // is null), fall back to the raw list rather than break the tool —
+    // the number will be slightly high on that tenant, matching the
+    // old behaviour, and the console warning will tell us why.
+    if (postedSet) {
+        const before = rows.length;
+        const kept = [];
+        const dropped = [];
+        for (const r of rows) {
+            if (postedSet.has(r.number)) kept.push(r);
+            else dropped.push(r);
+        }
+        rows = kept;
+        console.log("[Sales Invoices] posted-whitelist kept " + rows.length + "/" + before + " · dropped " + dropped.length + " unposted");
+        if (dropped.length) {
+            for (const r of dropped.slice(0, 5)) {
+                console.log("  dropped: " + r.number + " · status=" + r.status + " · total=" + r.totalAmountExcludingTax + " · customer=" + (r.customerName || ""));
             }
         }
-        const filtered = rows.filter(r => (r.status || "") !== "Draft");
-        const dropped = rows.length - filtered.length;
-        if (dropped > 0) console.log("[Sales Invoices] client-side dropped " + dropped + " Draft rows");
-        rows = filtered;
     }
     return rows;
 }
