@@ -4093,13 +4093,20 @@ async function fetchSalesInvoicesWithLines(fromISO, toISO) {
     // invoices totalling ~$199K were missing under $top=2000, exactly the
     // gap between Document-mode sales and VE / PBI sales on this tenant.
     const url = BC_API_URL + "/companies(" + compId + ")/salesInvoices?$filter=" + encodeURIComponent(filter) + "&$expand=salesInvoiceLines";
-    const rows = await bcFetchAll(url, "Sales invoices + lines");
-    // Diagnostic — log status distribution so unexpected draft leakage
-    // shows up in the console next time. Small cost, big debugging value.
+    let rows = await bcFetchAll(url, "Sales invoices + lines");
+    // Belt-and-braces client-side filter — the OData "status ne 'Draft'"
+    // filter is silently ignored on some BC tenants (probably because the
+    // v2.0 REST proxy exposes status as a computed property, not a queryable
+    // one). Drop any draft that leaks through so the KPI matches Wiise's
+    // Posted Sales Invoices export regardless.
     if (rows && rows.length) {
-        const byStatus = {};
-        for (const r of rows) byStatus[r.status || "(none)"] = (byStatus[r.status || "(none)"] || 0) + 1;
-        console.log("[Sales Invoices] fetched " + rows.length + " · status distribution:", byStatus);
+        const beforeStatus = {};
+        for (const r of rows) beforeStatus[r.status || "(none)"] = (beforeStatus[r.status || "(none)"] || 0) + 1;
+        console.log("[Sales Invoices] server returned " + rows.length + " · status distribution:", beforeStatus);
+        const filtered = rows.filter(r => (r.status || "") !== "Draft");
+        const dropped = rows.length - filtered.length;
+        if (dropped > 0) console.log("[Sales Invoices] client-side dropped " + dropped + " Draft rows");
+        rows = filtered;
     }
     return rows;
 }
