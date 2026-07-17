@@ -4102,7 +4102,23 @@ async function fetchSalesInvoicesWithLines(fromISO, toISO) {
     if (rows && rows.length) {
         const beforeStatus = {};
         for (const r of rows) beforeStatus[r.status || "(none)"] = (beforeStatus[r.status || "(none)"] || 0) + 1;
-        console.log("[Sales Invoices] server returned " + rows.length + " · status distribution:", beforeStatus);
+        // JSON.stringify keeps the distribution inline so it isn't hidden
+        // as a collapsed [Object] in the console.
+        console.log("[Sales Invoices] server returned " + rows.length + " · status distribution: " + JSON.stringify(beforeStatus));
+        // Print the first row's full field list so we can see whether
+        // "status" is even the right field name on this tenant.
+        console.log("[Sales Invoices] sample row keys:", Object.keys(rows[0]).join(", "));
+        // Spotlight SI-prefix rows so we can see what BC actually says
+        // about them — the Wiise export showed zero of these, but this
+        // endpoint returned at least one (SI0000063 last time).
+        const siRows = rows.filter(r => (r.number || "").startsWith("SI") && !(r.number || "").startsWith("SINV"));
+        if (siRows.length) {
+            console.log("[Sales Invoices] " + siRows.length + " SI-prefix (non-SINV) rows:");
+            for (const r of siRows.slice(0, 10)) {
+                console.log("  " + r.number + " · postingDate=" + r.postingDate + " · status=" + r.status
+                    + " · total=" + r.totalAmountExcludingTax + " · customer=" + (r.customerName || ""));
+            }
+        }
         const filtered = rows.filter(r => (r.status || "") !== "Draft");
         const dropped = rows.length - filtered.length;
         if (dropped > 0) console.log("[Sales Invoices] client-side dropped " + dropped + " Draft rows");
