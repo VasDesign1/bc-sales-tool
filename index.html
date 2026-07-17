@@ -4079,7 +4079,13 @@ function updateCostQualityBadge() {
 // ============================================================
 async function fetchSalesInvoicesWithLines(fromISO, toISO) {
     const compId = await bcGetCompanyId();
-    const filter = "postingDate ge " + fromISO + " and postingDate le " + toISO;
+    // Exclude Draft — BC v2.0 REST /salesInvoices returns BOTH unposted
+    // drafts and posted invoices. Drafts carry an intended postingDate
+    // but aren't real sales yet. Vic Air's SI-series drafts were leaking
+    // into June totals (SI0000063 @ $270 caused the tool to over-count
+    // Wiise's Posted Sales Invoices export by exactly $270).
+    // Corrective / Canceled stay in — they're posted documents.
+    const filter = "postingDate ge " + fromISO + " and postingDate le " + toISO + " and status ne 'Draft'";
     // No $top — BC v2.0 treats $top as a *total* cap (not a page size hint),
     // and we were silently dropping invoices beyond the first 2000. The
     // server uses its default page size and @odata.nextLink for the rest;
@@ -4087,7 +4093,15 @@ async function fetchSalesInvoicesWithLines(fromISO, toISO) {
     // invoices totalling ~$199K were missing under $top=2000, exactly the
     // gap between Document-mode sales and VE / PBI sales on this tenant.
     const url = BC_API_URL + "/companies(" + compId + ")/salesInvoices?$filter=" + encodeURIComponent(filter) + "&$expand=salesInvoiceLines";
-    return bcFetchAll(url, "Sales invoices + lines");
+    const rows = await bcFetchAll(url, "Sales invoices + lines");
+    // Diagnostic — log status distribution so unexpected draft leakage
+    // shows up in the console next time. Small cost, big debugging value.
+    if (rows && rows.length) {
+        const byStatus = {};
+        for (const r of rows) byStatus[r.status || "(none)"] = (byStatus[r.status || "(none)"] || 0) + 1;
+        console.log("[Sales Invoices] fetched " + rows.length + " · status distribution:", byStatus);
+    }
+    return rows;
 }
 async function fetchItemLedgerSales(fromISO, toISO) {
     const compId = await bcGetCompanyId();
