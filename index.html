@@ -1642,6 +1642,8 @@
             <div style="display:flex; align-items:center; gap:18px;">
                 <h2 id="headerTitle">Overview</h2>
                 <button class="btn btn-primary" id="loadBtn" disabled>Load sales</button>
+                <button class="btn btn-primary" id="loadFastBtn" disabled
+                    title="Fast load: sets the range to the current month and loads sales, costs and returns only. Quote, blanket-order and return-receipt data is skipped here and fetched automatically the first time you open those tabs. Use Load sales for the full selected date range with everything loaded upfront.">Load sales (fast)</button>
             </div>
             <div class="right" style="display:flex; align-items:center; gap:14px;">
                 <div>
@@ -4739,6 +4741,11 @@ async function fetchSalesQuoteExtras(fromISO, toISO) {
 const state = {
     invoices: [], filtered: [], iles: [], items: [], customers: [],
     creditMemos: [], shipments: [], returnReceipts: [], quotes: [],
+    // True after a fast load: quote / blanket / residential / archive /
+    // return-receipt data was skipped and still needs fetching. Cleared
+    // by ensureDeferredDocs() (on first visit to a tab that needs it)
+    // and by any full load.
+    deferredDocsPending: false,
     locations: new Map(),    // locId -> code
     itemCategory: new Map(), // itemNumber -> category code
     byItemCategoryFilter: "",       // active leaf-category filter (set by pie click)
@@ -6286,6 +6293,13 @@ function truncate(s, n) { s = s || ""; return s.length > n ? s.slice(0, n - 1) +
 function setActiveTab(name) {
     state.tab = name;
     state.drill = null;
+    // After a fast load, quote / blanket / returns data hasn't been
+    // fetched yet — pull it the first time one of those tabs opens.
+    // renderCurrentTab below paints the tab empty first; ensureDeferredDocs
+    // re-renders when the data lands.
+    if ((name === "quotes" || name === "blanketOrders" || name === "returns") && state.deferredDocsPending) {
+        ensureDeferredDocs();
+    }
     document.querySelectorAll(".sidebar a[data-tab]").forEach(a => {
         a.classList.toggle("active", a.dataset.tab === name);
     });
@@ -15243,19 +15257,40 @@ async function handleSignIn() {
         document.getElementById("userBadge").textContent = name;
         document.getElementById("signinOverlay").style.display = "none";
         document.getElementById("loadBtn").disabled = false;
+        document.getElementById("loadFastBtn").disabled = false;
         document.getElementById("signOutBtn").style.display = "inline-block";
     } catch (err) { alert("Sign-in failed: " + (err.message || err)); }
 }
 
-async function handleLoad() {
+async function handleLoad(fast) {
+    fast = fast === true;
+    if (fast) {
+        // Fast mode narrows the window to the current month — the
+        // dominant day-to-day use — so every date-filtered fetch pulls
+        // a fraction of the rows a 365-day window would.
+        const today = new Date();
+        const first = today.getFullYear() + "-" + String(today.getMonth() + 1).padStart(2, "0") + "-01";
+        document.getElementById("fromDate").value = first;
+        document.getElementById("toDate").value   = today.toISOString().slice(0, 10);
+        const qr = document.getElementById("quickRange"); if (qr) qr.value = "";
+        const mp = document.getElementById("monthPickerField"); if (mp) mp.style.display = "none";
+    }
     const from = document.getElementById("fromDate").value;
     const to   = document.getElementById("toDate").value;
     if (!from || !to) { alert("Pick a date range."); return; }
     if (from > to) { alert("From date must be on or before To date."); return; }
 
     const btn = document.getElementById("loadBtn");
-    btn.disabled = true; btn.textContent = "Loading…";
+    const fastBtn = document.getElementById("loadFastBtn");
+    btn.disabled = true; fastBtn.disabled = true;
+    (fast ? fastBtn : btn).textContent = "Loading…";
     try {
+        // Fast mode defers the document sources no dashboard tab needs:
+        // quotes, quote extras, quote archive, blanket orders, the
+        // residential lookup (a 5-entity OData scan), and the return-
+        // receipts probe (which 404s twice on this tenant). They're
+        // fetched on demand by ensureDeferredDocs() the first time the
+        // user opens the Quotes / Blanket / Returns tab.
         const [locs, items, customers, invoices, iles, creditMemos, shipments, returnReceipts, quotes, quoteExtras, blanketOrders, valueEntries, salesOrders, salesOrderOutstanding, _residentialLookup, _quoteArchive] = await Promise.all([
             fetchLocations(),
             fetchItems(),
@@ -15264,16 +15299,25 @@ async function handleLoad() {
             fetchItemLedgerSales(from, to),
             fetchSalesCreditMemos(from, to),
             fetchSalesShipments(from, to),
-            fetchSalesReturnReceipts(from, to),
-            fetchSalesQuotes(from, to),
-            fetchSalesQuoteExtras(from, to),
-            fetchBlanketSalesOrders(from, to),
+            fast ? Promise.resolve([]) : fetchSalesReturnReceipts(from, to),
+            fast ? Promise.resolve([]) : fetchSalesQuotes(from, to),
+            fast ? Promise.resolve([]) : fetchSalesQuoteExtras(from, to),
+            fast ? Promise.resolve([]) : fetchBlanketSalesOrders(from, to),
             fetchValueEntries(from, to),
             fetchSalesOrders(),
             fetchSalesOrderOutstandingLines(),
-            fetchResidentialDocLookup(),
-            fetchSalesQuoteArchive(from, to),
+            fast ? Promise.resolve(null) : fetchResidentialDocLookup(),
+            fast ? Promise.resolve(null) : fetchSalesQuoteArchive(from, to),
         ]);
+        state.deferredDocsPending = fast;
+        if (fast) {
+            // The two skipped fetchers normally initialise these maps
+            // themselves — give them safe empty defaults so render
+            // guards never see undefined before the lazy fetch runs.
+            if (!state.docYourReference) state.docYourReference = new Map();
+            if (!state.docQuoteLink)     state.docQuoteLink     = new Map();
+            if (!state.quoteArchive)     state.quoteArchive     = new Map();
+        }
         state.salesOrders = salesOrders || [];
         state.salesOrderOutstandingLines = salesOrderOutstanding || [];
         if (state.salesOrders.length) {
@@ -15522,8 +15566,51 @@ async function handleLoad() {
         alert("Load failed: " + (err.message || err));
     } finally {
         hideBCProgress();
-        btn.disabled = false; btn.textContent = "Reload sales";
+        btn.disabled = false;     btn.textContent     = "Reload sales";
+        fastBtn.disabled = false; fastBtn.textContent = "Reload (fast)";
     }
+}
+
+// Fetch the document sources a fast load skipped — quotes, quote
+// extras, quote archive, blanket orders, residential lookup, return
+// receipts — then re-render. Runs once; concurrent calls (e.g. rapid
+// tab switching) share the same in-flight promise.
+let _deferredDocsPromise = null;
+function ensureDeferredDocs() {
+    if (!state.deferredDocsPending) return Promise.resolve();
+    if (_deferredDocsPromise) return _deferredDocsPromise;
+    const from = state.loadedFrom, to = state.loadedTo;
+    updateBCProgress("Quote / blanket data", "loading on demand…");
+    _deferredDocsPromise = Promise.all([
+        fetchSalesReturnReceipts(from, to),
+        fetchSalesQuotes(from, to),
+        fetchSalesQuoteExtras(from, to),
+        fetchBlanketSalesOrders(from, to),
+        fetchResidentialDocLookup(),
+        fetchSalesQuoteArchive(from, to),
+    ]).then(([returnReceipts, quotes, quoteExtras, blanketOrders]) => {
+        state.returnReceipts = returnReceipts || [];
+        state.quotes = quotes || [];
+        state.quoteExtras = new Map();
+        const fmNo = state.quoteExtrasFieldMap && state.quoteExtrasFieldMap.fNo;
+        for (const ex of (quoteExtras || [])) {
+            const no = (fmNo && ex[fmNo]) || ex.No || ex.No_ || ex.no || ex.number;
+            if (no) state.quoteExtras.set(String(no), ex);
+        }
+        state.blanketOrders = blanketOrders || [];
+        state.deferredDocsPending = false;
+        console.log("[Deferred docs] loaded on demand: " + state.quotes.length + " quotes · "
+            + state.blanketOrders.length + " blanket orders · " + state.returnReceipts.length + " return receipts");
+        rebuildFiltered();
+        renderCurrentTab();
+    }).catch(e => {
+        console.warn("[Deferred docs] on-demand fetch failed:", e.message);
+        alert("Loading quote/blanket data failed: " + (e.message || e));
+    }).finally(() => {
+        hideBCProgress();
+        _deferredDocsPromise = null;
+    });
+    return _deferredDocsPromise;
 }
 
 // Custom Item combo popup — renders the filtered item list under the input.
@@ -15555,7 +15642,8 @@ function renderItemComboPopup(filter) {
 
 function wireEvents() {
     document.getElementById("signInBtn").addEventListener("click", handleSignIn);
-    document.getElementById("loadBtn").addEventListener("click", handleLoad);
+    document.getElementById("loadBtn").addEventListener("click", () => handleLoad(false));
+    document.getElementById("loadFastBtn").addEventListener("click", () => handleLoad(true));
 
     // Item combo: focus/click → open, input → filter, outside click → close
     const itemBox = document.getElementById("itemFilterBox");
