@@ -4111,6 +4111,132 @@ async function bcFetchAllTrimmed(fullUrl, trimmedUrl, label) {
     }
 }
 
+// Per-fetch stopwatch for the fast path — logs seconds + row count so
+// we can see exactly where load time goes instead of guessing.
+async function timed(label, promise) {
+    const t0 = performance.now();
+    const out = await promise;
+    const secs = ((performance.now() - t0) / 1000).toFixed(1);
+    const n = Array.isArray(out) ? out.length + " rows" : "done";
+    console.log("[Fast timing] " + label + ": " + secs + "s · " + n);
+    return out;
+}
+
+// Flat-OData invoice fetch — the fast path's replacement for the v2.0
+// salesInvoices?$expand=salesInvoiceLines call. $expand is BC's slowest
+// serving shape (nested JSON materialised invoice-by-invoice); the flat
+// page feeds salesInvoiceHeader + salesInvoiceHeaderSalesInvLines return
+// the same data as two column-trimmed streams we join in the browser.
+// Bonus: salesInvoiceHeader is posted-only, so the separate posted-
+// whitelist request (and the whole draft-leak problem) disappears here.
+// Returns null when the tenant's schema doesn't fit — caller falls back
+// to the v2.0 path so worst case is slower-but-identical.
+async function fetchSalesInvoicesFlatOData(fromISO, toISO) {
+    let md;
+    try { md = await bcGetODataMetadata(); } catch (e) { return null; }
+    const headerType = md.entitySets["salesInvoiceHeader"];
+    if (!headerType) { console.log("[Flat invoices] no salesInvoiceHeader entity — falling back"); return null; }
+    const hFields = md.entityTypes[headerType] || [];
+    const fNo       = bcFindField(hFields, [/^No$/i]);
+    const fPost     = bcFindField(hFields, [/^Posting_Date$/i, /^posting.?date$/i]);
+    const fCustNo   = bcFindField(hFields, [/^Sell_to_Customer_No$/i, /sell.?to.?customer.?no/i]);
+    const fCustName = bcFindField(hFields, [/^Sell_to_Customer_Name$/i, /sell.?to.?customer.?name/i]);
+    const fAmt      = bcFindField(hFields, [/^Amount$/i]);
+    const fSalesp   = bcFindField(hFields, [/salesperson.?code/i]);
+    const fRemain   = bcFindField(hFields, [/remaining.?amount/i]);
+    const fCanc     = bcFindField(hFields, [/^cancelled$/i, /^canceled$/i]);
+    const fInvDisc  = bcFindField(hFields, [/inv.*discount.*amount/i]);
+    if (!fNo || !fPost || !fCustNo || !fAmt || !fSalesp) {
+        console.log("[Flat invoices] header fields missing (No=" + fNo + " date=" + fPost + " cust=" + fCustNo + " amt=" + fAmt + " sp=" + fSalesp + ") — falling back");
+        return null;
+    }
+    let linesInfo;
+    try { linesInfo = await bcDiscoverSalesLinesEntity("salesInvoiceHeader"); } catch (e) { return null; }
+    if (!linesInfo || !linesInfo.fDocNo || !linesInfo.fQty || !linesInfo.fAmount) {
+        console.log("[Flat invoices] no matching lines entity — falling back");
+        return null;
+    }
+    const fLinePost = bcFindField(linesInfo.fields, [/^Posting_Date$/i, /^posting.?date$/i]);
+    if (!fLinePost) {
+        console.log("[Flat invoices] lines entity '" + linesInfo.entity + "' has no Posting_Date — falling back");
+        return null;
+    }
+    const cname = encodeURIComponent(await bcGetCompanyInternalName());
+    const hSel = [fNo, fPost, fCustNo, fCustName, fAmt, fSalesp, fRemain, fCanc, fInvDisc].filter(Boolean);
+    const lSel = [...new Set([linesInfo.fDocNo, linesInfo.fLineNo, linesInfo.fItemNo, linesInfo.fQty,
+                  linesInfo.fAmount, linesInfo.fUnitPrice, linesInfo.fDesc, linesInfo.fLocation,
+                  linesInfo.fType, linesInfo.fDiscAlloc, fLinePost].filter(Boolean))];
+    const hUrl = BC_ODATA_URL + "/Company('" + cname + "')/salesInvoiceHeader?$select=" + hSel.join(",")
+        + "&$filter=" + encodeURIComponent(fPost + " ge " + fromISO + " and " + fPost + " le " + toISO) + "&$top=100000";
+    const lUrl = BC_ODATA_URL + "/Company('" + cname + "')/" + linesInfo.entity + "?$select=" + lSel.join(",")
+        + "&$filter=" + encodeURIComponent(fLinePost + " ge " + fromISO + " and " + fLinePost + " le " + toISO) + "&$top=200000";
+    let headers, lineRows;
+    try {
+        [headers, lineRows] = await Promise.all([
+            bcFetchAll(hUrl, "Invoice headers (flat)"),
+            bcFetchAll(lUrl, "Invoice lines (flat)"),
+        ]);
+    } catch (e) {
+        console.warn("[Flat invoices] fetch failed (" + e.message + ") — falling back");
+        return null;
+    }
+    // Group lines by document number, normalising to the v2.0 line shape
+    // every consumer expects. NOTE on amounts: the posted-invoice-line
+    // "Amount" field is ALREADY net of the invoice-level discount, so
+    // when fDiscAlloc is missing we map amountExcludingTax=Amount and
+    // allocation=0 — lineNetAmount comes out identical either way.
+    const byDoc = new Map();
+    for (const lr of lineRows) {
+        const docNo = String(lr[linesInfo.fDocNo] || "");
+        if (!docNo) continue;
+        const typeVal = linesInfo.fType ? (lr[linesInfo.fType] || "") : "";
+        const itemNo = linesInfo.fItemNo ? (lr[linesInfo.fItemNo] || "") : "";
+        const line = {
+            id: "",
+            sequence: linesInfo.fLineNo ? lr[linesInfo.fLineNo] : "",
+            lineType: /^item$/i.test(typeVal) ? "Item" : (typeVal || (itemNo ? "Item" : "G/L Account")),
+            itemId: itemNo,
+            lineObjectNumber: itemNo,
+            description: linesInfo.fDesc ? (lr[linesInfo.fDesc] || "") : "",
+            quantity: num(lr[linesInfo.fQty]),
+            unitPrice: linesInfo.fUnitPrice ? num(lr[linesInfo.fUnitPrice]) : 0,
+            amountExcludingTax: num(lr[linesInfo.fAmount]),
+            invoiceDiscountAllocation: linesInfo.fDiscAlloc ? num(lr[linesInfo.fDiscAlloc]) : 0,
+            locationId: linesInfo.fLocation ? (lr[linesInfo.fLocation] || "") : "",
+        };
+        if (!byDoc.has(docNo)) byDoc.set(docNo, []);
+        byDoc.get(docNo).push(line);
+    }
+    const invoices = headers.map(h => {
+        const no = String(h[fNo] || "");
+        return {
+            id: no,
+            number: no,
+            postingDate: h[fPost] || "",
+            customerId: "",
+            customerNumber: h[fCustNo] || "",
+            customerName: fCustName ? (h[fCustName] || "") : "",
+            salesperson: h[fSalesp] || "",
+            status: (fCanc && h[fCanc]) ? "Canceled" : ((fRemain && num(h[fRemain]) > 0) ? "Open" : "Paid"),
+            discountAmount: fInvDisc ? num(h[fInvDisc]) : 0,
+            totalAmountExcludingTax: num(h[fAmt]),
+            salesInvoiceLines: byDoc.get(no) || [],
+        };
+    });
+    // Reconciliation log — header Amount vs joined line net should agree;
+    // a big delta means a field mapping is off and warrants a look.
+    let sumH = 0, sumL = 0, noLines = 0;
+    for (const inv of invoices) {
+        sumH += inv.totalAmountExcludingTax;
+        if (!inv.salesInvoiceLines.length) noLines++;
+        for (const ln of inv.salesInvoiceLines) sumL += lineNetAmount(ln);
+    }
+    console.log("[Flat invoices] " + invoices.length + " headers · " + lineRows.length + " lines · "
+        + noLines + " headers without lines · ΣheaderAmt=" + fmtMoneyFull(sumH) + " · ΣlineNet=" + fmtMoneyFull(sumL)
+        + " · delta=" + fmtMoneyFull(sumH - sumL));
+    return invoices;
+}
+
 // Whitelist of posted sales invoice numbers, sourced from the OData
 // salesInvoiceHeader entity (posted-only) filtered to the same date
 // window. Used to strip un-posted drafts that the v2.0 REST endpoint
@@ -15659,14 +15785,22 @@ async function handleFastLoad() {
     fastBtn.textContent = "Loading…";
     state.fastTrim = true;
     try {
-        // ---- Phase 1: sales-side essentials (month-chunked, parallel) ----
-        const [locs, items, customers, invoices, creditMemos] = await Promise.all([
-            fetchLocations(),
-            fetchItems(),
-            fetchCustomers(),
-            fetchByMonthChunks(fetchSalesInvoicesWithLines, from, to, "invoices"),
-            fetchByMonthChunks(fetchSalesCreditMemos, from, to, "credit memos"),
+        // ---- Phase 1: sales-side essentials ----
+        // Invoices go through the flat-OData path (headers + lines as two
+        // column-trimmed streams, joined in the browser) — several times
+        // faster than v2.0's $expand. Falls back to the chunked v2.0
+        // fetch if this tenant's schema doesn't fit.
+        const t0 = performance.now();
+        const [locs, items, customers, invoicesFlat, creditMemos] = await Promise.all([
+            timed("locations", fetchLocations()),
+            timed("items", fetchItems()),
+            timed("customers", fetchCustomers()),
+            timed("invoices (flat OData)", fetchSalesInvoicesFlatOData(from, to)),
+            timed("credit memos", fetchByMonthChunks(fetchSalesCreditMemos, from, to, "credit memos")),
         ]);
+        const invoices = invoicesFlat !== null
+            ? invoicesFlat
+            : await timed("invoices (v2.0 fallback)", fetchByMonthChunks(fetchSalesInvoicesWithLines, from, to, "invoices"));
         state.locations = new Map(locs.map(l => [l.id, l.code || l.displayName || "(unnamed)"]));
         state.items = items;
         state.itemCategory = new Map(items.map(it => [it.number, it.itemCategoryCode || ""]));
@@ -15698,17 +15832,18 @@ async function handleFastLoad() {
         rebuildFiltered();
         setPeriodBadge();
         renderCurrentTab();
+        console.log("[Fast timing] === phase 1 painted at " + ((performance.now() - t0) / 1000).toFixed(1) + "s ===");
         fastBtn.textContent = "Loading costs…";
         updateBCProgress("Background", "sales are final — loading costs & orders…");
 
         // ---- Phases 2 + 3 in parallel (costs month-chunked too) ----
         const costsP = Promise.all([
-            fetchByMonthChunks(fetchValueEntries, from, to, "value entries"),
-            fetchByMonthChunks(fetchItemLedgerSales, from, to, "item ledger"),
+            timed("value entries", fetchByMonthChunks(fetchValueEntries, from, to, "value entries")),
+            timed("item ledger", fetchByMonthChunks(fetchItemLedgerSales, from, to, "item ledger")),
         ]);
         const ordersP = Promise.all([
-            fetchSalesOrders(),
-            fetchSalesOrderOutstandingLines(),
+            timed("open sales orders", fetchSalesOrders()),
+            timed("SO outstanding lines", fetchSalesOrderOutstandingLines()),
         ]);
         const [valueEntries, iles] = await costsP;
         ingestValueEntries(valueEntries);
@@ -15717,11 +15852,13 @@ async function handleFastLoad() {
         updateCostQualityBadge();
         rebuildFiltered();
         renderCurrentTab();
+        console.log("[Fast timing] === costs ready at " + ((performance.now() - t0) / 1000).toFixed(1) + "s ===");
 
         const [salesOrders, salesOrderOutstanding] = await ordersP;
         state.salesOrders = salesOrders || [];
         state.salesOrderOutstandingLines = salesOrderOutstanding || [];
         renderCurrentTab();
+        console.log("[Fast timing] === fully loaded at " + ((performance.now() - t0) / 1000).toFixed(1) + "s ===");
     } catch (err) {
         alert("Load failed: " + (err.message || err));
     } finally {
