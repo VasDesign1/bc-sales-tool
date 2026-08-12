@@ -1644,7 +1644,7 @@
                 <button class="btn btn-primary" id="loadBtn" disabled>Load sales</button>
                 <span style="position:relative; display:inline-block;">
                     <button class="btn btn-primary" id="loadFastBtn" disabled
-                        title="Fast load: pick current month / last 2 months / last 3 months. Loads sales, costs and returns for that window with trimmed columns; quote, blanket-order and return-receipt data is skipped and fetched automatically the first time you open those tabs. Use Load sales for any custom range with everything upfront.">Load sales (fast)</button>
+                        title="Fast load: pick current month / last 2 months / last 3 months. Sales figures appear first (within seconds); costs, profit and open orders fill in shortly after. Downloads trimmed columns only, skips the shipment cost-bridge, and defers quote / blanket / return data until you open those tabs. Use Load sales for any custom range with everything upfront.">Load sales (fast)</button>
                     <div id="loadFastMenu" style="display:none; position:absolute; top:calc(100% + 6px); left:0; z-index:100;
                         background:#fff; border:1px solid #d6d8eb; border-radius:10px; box-shadow:0 6px 24px rgba(26,35,126,0.18);
                         min-width:180px; overflow:hidden; color:#2c2f4a;">
@@ -15313,14 +15313,47 @@ async function handleSignIn() {
     } catch (err) { alert("Sign-in failed: " + (err.message || err)); }
 }
 
+// Shared between full and fast load: stash VE rows and build the
+// per-(doc|item) / per-invoice cost maps every cost consumer reads.
+function ingestValueEntries(valueEntries) {
+    state.valueEntries = valueEntries || [];
+    // Build per-(docNumber|itemNo) cost map from VE rows so direct-
+    // invoice items (no shipment / no ILE entry) still get accurate
+    // cost. Sum signed values; consumers take abs at lookup time.
+    state.veCostByDocItem = new Map();
+    state.veCostNonInvByDocItem = new Map();
+    // Per-invoice total cost map. Sums signed cost+costNI across all
+    // sales-type VE rows for each invoice. invoiceCost() reads from
+    // this so Branch / Salesperson / Sales-by-Item / EOM / MTD use
+    // the same cost number the Overview tab does (PBI-aligned).
+    state.veCostByInvoice = new Map();
+    for (const v of state.valueEntries) {
+        if (!isSalesValueEntry(v)) continue;
+        const d = v.documentNumber;
+        if (d) {
+            const prev = state.veCostByInvoice.get(d) || 0;
+            state.veCostByInvoice.set(d, prev + (v.costAmount || 0) + (v.costAmountNonInv || 0));
+        }
+        if (!v.documentNumber || !v.itemNumber) continue;
+        const k = v.documentNumber + "|" + v.itemNumber;
+        const c = state.veCostByDocItem.get(k) || { cost: 0, qty: 0 };
+        c.cost += v.costAmount; c.qty += v.invoicedQty;
+        state.veCostByDocItem.set(k, c);
+        const cn = state.veCostNonInvByDocItem.get(k) || { cost: 0, qty: 0 };
+        cn.cost += v.costAmountNonInv; cn.qty += v.invoicedQty;
+        state.veCostNonInvByDocItem.set(k, cn);
+    }
+    if (state.veCostByInvoice.size) {
+        console.log("[Value Entry] built veCostByInvoice map · " + state.veCostByInvoice.size + " distinct documents");
+    }
+    if (state.veCostByDocItem.size) {
+        console.log("[Value Entry] built veCostByDocItem map · " + state.veCostByDocItem.size + " (doc, item) keys");
+    }
+}
+
 async function handleLoad(fast) {
-    fast = fast === true;
-    // Fast mode: range was already set by the preset menu (current /
-    // last-2 / last-3 months). fastTrim additionally makes the big
-    // fetchers request only the columns the app reads ($select), which
-    // roughly halves the download size of invoices / credit memos /
-    // shipments / value entries.
-    state.fastTrim = fast;
+    if (fast === true) return handleFastLoad();
+    state.fastTrim = false;
     const from = document.getElementById("fromDate").value;
     const to   = document.getElementById("toDate").value;
     if (!from || !to) { alert("Pick a date range."); return; }
@@ -15329,14 +15362,8 @@ async function handleLoad(fast) {
     const btn = document.getElementById("loadBtn");
     const fastBtn = document.getElementById("loadFastBtn");
     btn.disabled = true; fastBtn.disabled = true;
-    (fast ? fastBtn : btn).textContent = "Loading…";
+    btn.textContent = "Loading…";
     try {
-        // Fast mode defers the document sources no dashboard tab needs:
-        // quotes, quote extras, quote archive, blanket orders, the
-        // residential lookup (a 5-entity OData scan), and the return-
-        // receipts probe (which 404s twice on this tenant). They're
-        // fetched on demand by ensureDeferredDocs() the first time the
-        // user opens the Quotes / Blanket / Returns tab.
         const [locs, items, customers, invoices, iles, creditMemos, shipments, returnReceipts, quotes, quoteExtras, blanketOrders, valueEntries, salesOrders, salesOrderOutstanding, _residentialLookup, _quoteArchive] = await Promise.all([
             fetchLocations(),
             fetchItems(),
@@ -15345,25 +15372,17 @@ async function handleLoad(fast) {
             fetchItemLedgerSales(from, to),
             fetchSalesCreditMemos(from, to),
             fetchSalesShipments(from, to),
-            fast ? Promise.resolve([]) : fetchSalesReturnReceipts(from, to),
-            fast ? Promise.resolve([]) : fetchSalesQuotes(from, to),
-            fast ? Promise.resolve([]) : fetchSalesQuoteExtras(from, to),
-            fast ? Promise.resolve([]) : fetchBlanketSalesOrders(from, to),
+            fetchSalesReturnReceipts(from, to),
+            fetchSalesQuotes(from, to),
+            fetchSalesQuoteExtras(from, to),
+            fetchBlanketSalesOrders(from, to),
             fetchValueEntries(from, to),
             fetchSalesOrders(),
             fetchSalesOrderOutstandingLines(),
-            fast ? Promise.resolve(null) : fetchResidentialDocLookup(),
-            fast ? Promise.resolve(null) : fetchSalesQuoteArchive(from, to),
+            fetchResidentialDocLookup(),
+            fetchSalesQuoteArchive(from, to),
         ]);
-        state.deferredDocsPending = fast;
-        if (fast) {
-            // The two skipped fetchers normally initialise these maps
-            // themselves — give them safe empty defaults so render
-            // guards never see undefined before the lazy fetch runs.
-            if (!state.docYourReference) state.docYourReference = new Map();
-            if (!state.docQuoteLink)     state.docQuoteLink     = new Map();
-            if (!state.quoteArchive)     state.quoteArchive     = new Map();
-        }
+        state.deferredDocsPending = false;
         state.salesOrders = salesOrders || [];
         state.salesOrderOutstandingLines = salesOrderOutstanding || [];
         if (state.salesOrders.length) {
@@ -15396,39 +15415,7 @@ async function handleLoad(fast) {
             console.log("[Sales Orders] " + lineCount + " lines · Σqty=" + fmtInt(totQ) + " · Σshipped=" + fmtInt(totQsh) + " · Σinvoiced=" + fmtInt(totQin));
             console.log("[Sales Orders] union of all line field names:", [...seenLineKeys].sort().join(", "));
         }
-        state.valueEntries = valueEntries || [];
-        // Build per-(docNumber|itemNo) cost map from VE rows so direct-
-        // invoice items (no shipment / no ILE entry) still get accurate
-        // cost. Sum signed values; consumers take abs at lookup time.
-        state.veCostByDocItem = new Map();
-        state.veCostNonInvByDocItem = new Map();
-        // Per-invoice total cost map. Sums signed cost+costNI across all
-        // sales-type VE rows for each invoice. invoiceCost() reads from
-        // this so Branch / Salesperson / Sales-by-Item / EOM / MTD use
-        // the same cost number the Overview tab does (PBI-aligned).
-        state.veCostByInvoice = new Map();
-        for (const v of state.valueEntries) {
-            if (!isSalesValueEntry(v)) continue;
-            const d = v.documentNumber;
-            if (d) {
-                const prev = state.veCostByInvoice.get(d) || 0;
-                state.veCostByInvoice.set(d, prev + (v.costAmount || 0) + (v.costAmountNonInv || 0));
-            }
-            if (!v.documentNumber || !v.itemNumber) continue;
-            const k = v.documentNumber + "|" + v.itemNumber;
-            const c = state.veCostByDocItem.get(k) || { cost: 0, qty: 0 };
-            c.cost += v.costAmount; c.qty += v.invoicedQty;
-            state.veCostByDocItem.set(k, c);
-            const cn = state.veCostNonInvByDocItem.get(k) || { cost: 0, qty: 0 };
-            cn.cost += v.costAmountNonInv; cn.qty += v.invoicedQty;
-            state.veCostNonInvByDocItem.set(k, cn);
-        }
-        if (state.veCostByInvoice.size) {
-            console.log("[Value Entry] built veCostByInvoice map · " + state.veCostByInvoice.size + " distinct documents");
-        }
-        if (state.veCostByDocItem.size) {
-            console.log("[Value Entry] built veCostByDocItem map · " + state.veCostByDocItem.size + " (doc, item) keys");
-        }
+        ingestValueEntries(valueEntries);
         if (state.valueEntries.length) {
             // Quick sanity sum, ONLY over sales-related VE rows — same
             // filter the in-tool getValueEntryTotals() applies. Should
@@ -15607,6 +15594,103 @@ async function handleLoad(fast) {
         populateFilterDropdowns();
         rebuildFiltered();
         setPeriodBadge();
+        renderCurrentTab();
+    } catch (err) {
+        alert("Load failed: " + (err.message || err));
+    } finally {
+        hideBCProgress();
+        btn.disabled = false;     btn.textContent     = "Reload sales";
+        fastBtn.disabled = false; fastBtn.textContent = "Reload (fast)";
+    }
+}
+
+// Fast load — phased so numbers appear as soon as possible:
+//   Phase 1 (blocking): master data + invoices + credit memos → paint
+//     the dashboard. Sales figures are final at this point; GP/cost
+//     show sales-only until phase 2 lands (progress line says so).
+//   Phase 2 (background): Value Entries + item ledger → rebuild cost
+//     maps, re-render. Runs concurrently with phase 3.
+//   Phase 3 (background): open sales orders + outstanding lines →
+//     pipeline tiles fill in, re-render.
+// Skipped entirely: shipments (cost-bridge contributed ~0% on this
+// tenant — same-day ILE matching covers it), return receipts (404s),
+// quotes / extras / archive / blanket / residential (deferred to
+// first visit of those tabs via ensureDeferredDocs), and the heavy
+// console diagnostics the full path runs.
+async function handleFastLoad() {
+    const from = document.getElementById("fromDate").value;
+    const to   = document.getElementById("toDate").value;
+    if (!from || !to) { alert("Pick a date range."); return; }
+    if (from > to) { alert("From date must be on or before To date."); return; }
+
+    const btn = document.getElementById("loadBtn");
+    const fastBtn = document.getElementById("loadFastBtn");
+    btn.disabled = true; fastBtn.disabled = true;
+    fastBtn.textContent = "Loading…";
+    state.fastTrim = true;
+    try {
+        // ---- Phase 1: sales-side essentials ----
+        const [locs, items, customers, invoices, creditMemos] = await Promise.all([
+            fetchLocations(),
+            fetchItems(),
+            fetchCustomers(),
+            fetchSalesInvoicesWithLines(from, to),
+            fetchSalesCreditMemos(from, to),
+        ]);
+        state.locations = new Map(locs.map(l => [l.id, l.code || l.displayName || "(unnamed)"]));
+        state.items = items;
+        state.itemCategory = new Map(items.map(it => [it.number, it.itemCategoryCode || ""]));
+        state.customers = customers;
+        state.custPostingGroup = new Map(customers.map(c => [
+            c.number || c.id,
+            c.customerPostingGroup || c.customerPostingGroupCode || c.postingGroup || ""
+        ]));
+        state.custCity = new Map(customers.map(c => [c.number || c.id, c.city || ""]));
+        state.invoices = invoices;
+        state.creditMemos = creditMemos;
+        // Clear everything this mode skips or hasn't loaded yet so a
+        // prior full load's wider-range data can't bleed into this view.
+        state.shipments = [];
+        state.returnReceipts = [];
+        state.quotes = [];
+        state.quoteExtras = new Map();
+        state.blanketOrders = [];
+        if (!state.docYourReference) state.docYourReference = new Map();
+        if (!state.docQuoteLink)     state.docQuoteLink     = new Map();
+        if (!state.quoteArchive)     state.quoteArchive     = new Map();
+        state.deferredDocsPending = true;
+        ingestValueEntries([]);
+        state.iles = [];
+        buildCostMaps([]);
+        state.loadedFrom = from;
+        state.loadedTo   = to;
+        populateFilterDropdowns();
+        rebuildFiltered();
+        setPeriodBadge();
+        renderCurrentTab();
+        fastBtn.textContent = "Loading costs…";
+        updateBCProgress("Background", "sales are final — loading costs & orders…");
+
+        // ---- Phases 2 + 3 in parallel ----
+        const costsP = Promise.all([
+            fetchValueEntries(from, to),
+            fetchItemLedgerSales(from, to),
+        ]);
+        const ordersP = Promise.all([
+            fetchSalesOrders(),
+            fetchSalesOrderOutstandingLines(),
+        ]);
+        const [valueEntries, iles] = await costsP;
+        ingestValueEntries(valueEntries);
+        state.iles = iles || [];
+        buildCostMaps(state.iles);
+        updateCostQualityBadge();
+        rebuildFiltered();
+        renderCurrentTab();
+
+        const [salesOrders, salesOrderOutstanding] = await ordersP;
+        state.salesOrders = salesOrders || [];
+        state.salesOrderOutstandingLines = salesOrderOutstanding || [];
         renderCurrentTab();
     } catch (err) {
         alert("Load failed: " + (err.message || err));
