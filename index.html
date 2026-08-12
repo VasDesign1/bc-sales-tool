@@ -15604,6 +15604,36 @@ async function handleLoad(fast) {
     }
 }
 
+// Split an ISO date range into calendar-month chunks, e.g.
+// 2026-06-15 → 2026-08-05 becomes [15–30 Jun, 1–31 Jul, 1–5 Aug].
+// Used by the fast path to fire one request per month in parallel —
+// wall-clock for a 3-month window drops to roughly the slowest
+// single month instead of the sum of all three.
+function splitRangeIntoMonths(fromISO, toISO) {
+    const chunks = [];
+    let y = parseInt(fromISO.slice(0, 4), 10);
+    let m = parseInt(fromISO.slice(5, 7), 10);
+    let curFrom = fromISO;
+    for (let guard = 0; guard < 60; guard++) {
+        const lastDay = new Date(y, m, 0).getDate(); // day 0 of next month = last of this
+        const monthEnd = y + "-" + String(m).padStart(2, "0") + "-" + String(lastDay).padStart(2, "0");
+        if (monthEnd >= toISO) { chunks.push({ from: curFrom, to: toISO }); break; }
+        chunks.push({ from: curFrom, to: monthEnd });
+        m++; if (m > 12) { m = 1; y++; }
+        curFrom = y + "-" + String(m).padStart(2, "0") + "-01";
+    }
+    return chunks;
+}
+// Run a (from, to) fetcher once per month chunk concurrently and
+// concatenate the results.
+function fetchByMonthChunks(fetchFn, fromISO, toISO, label) {
+    const chunks = splitRangeIntoMonths(fromISO, toISO);
+    if (chunks.length <= 1) return fetchFn(fromISO, toISO);
+    console.log("[Fast load] " + (label || fetchFn.name) + ": " + chunks.length + " month chunks in parallel");
+    return Promise.all(chunks.map(c => fetchFn(c.from, c.to)))
+        .then(arrays => arrays.flat());
+}
+
 // Fast load — phased so numbers appear as soon as possible:
 //   Phase 1 (blocking): master data + invoices + credit memos → paint
 //     the dashboard. Sales figures are final at this point; GP/cost
@@ -15629,13 +15659,13 @@ async function handleFastLoad() {
     fastBtn.textContent = "Loading…";
     state.fastTrim = true;
     try {
-        // ---- Phase 1: sales-side essentials ----
+        // ---- Phase 1: sales-side essentials (month-chunked, parallel) ----
         const [locs, items, customers, invoices, creditMemos] = await Promise.all([
             fetchLocations(),
             fetchItems(),
             fetchCustomers(),
-            fetchSalesInvoicesWithLines(from, to),
-            fetchSalesCreditMemos(from, to),
+            fetchByMonthChunks(fetchSalesInvoicesWithLines, from, to, "invoices"),
+            fetchByMonthChunks(fetchSalesCreditMemos, from, to, "credit memos"),
         ]);
         state.locations = new Map(locs.map(l => [l.id, l.code || l.displayName || "(unnamed)"]));
         state.items = items;
@@ -15671,10 +15701,10 @@ async function handleFastLoad() {
         fastBtn.textContent = "Loading costs…";
         updateBCProgress("Background", "sales are final — loading costs & orders…");
 
-        // ---- Phases 2 + 3 in parallel ----
+        // ---- Phases 2 + 3 in parallel (costs month-chunked too) ----
         const costsP = Promise.all([
-            fetchValueEntries(from, to),
-            fetchItemLedgerSales(from, to),
+            fetchByMonthChunks(fetchValueEntries, from, to, "value entries"),
+            fetchByMonthChunks(fetchItemLedgerSales, from, to, "item ledger"),
         ]);
         const ordersP = Promise.all([
             fetchSalesOrders(),
