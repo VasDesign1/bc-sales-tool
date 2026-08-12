@@ -4195,8 +4195,12 @@ async function fetchSalesInvoicesWithLines(fromISO, toISO) {
 async function fetchItemLedgerSales(fromISO, toISO) {
     const compId = await bcGetCompanyId();
     // entryType="Sale" covers sales invoices (and credits — caller can filter by documentType if needed).
+    // No $top — BC treats it as a TOTAL cap, not a page size, and a
+    // 12-month window exceeds 10,000 Sale ILE rows; the old $top=10000
+    // silently truncated the cost-fallback data. bcFetchAll pages via
+    // @odata.nextLink so the full set arrives regardless of size.
     const filter = "entryType eq 'Sale' and postingDate ge " + fromISO + " and postingDate le " + toISO;
-    const url = BC_API_URL + "/companies(" + compId + ")/itemLedgerEntries?$filter=" + encodeURIComponent(filter) + "&$top=10000";
+    const url = BC_API_URL + "/companies(" + compId + ")/itemLedgerEntries?$filter=" + encodeURIComponent(filter);
     return bcFetchAll(url, "Item ledger (cost)");
 }
 async function fetchLocations() {
