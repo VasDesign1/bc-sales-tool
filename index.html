@@ -3992,18 +3992,21 @@ async function fetchValueEntries(fromISO, toISO) {
     const coName = encodeURIComponent(await bcGetCompanyInternalName());
     const filter = info.fDate + " ge " + fromISO + " and " + info.fDate + " le " + toISO;
     const params = ["$top=200000", "$filter=" + encodeURIComponent(filter)];
-    // Fast mode: request only the 12 mapped columns instead of all ~32.
-    // Field names come from $metadata discovery (info.f*), so they are
-    // guaranteed to exist on this tenant — no fallback needed.
-    if (state.fastTrim) {
-        const cols = [info.fDate, info.fDocDate, info.fItem, info.fDocNo, info.fDocType,
-                      info.fSourceNo, info.fSourceTyp, info.fSales, info.fCost,
-                      info.fCostNI, info.fQtyInvd, info.fEntryType].filter(Boolean);
-        if (cols.length) params.push("$select=" + [...new Set(cols)].join(","));
-    }
+    // NO $select here — measured on Vic Air's tenant, adding $select to
+    // this query object silently DROPS the $filter and returns the whole
+    // table (102k rows instead of a 3-month window). Untrimmed rows with
+    // a working date filter are far cheaper than trimmed everything.
     const url = BC_ODATA_URL + "/Company('" + coName + "')/" + info.entity + "?" + params.join("&");
     try {
-        const rows = await bcFetchAll(url, "Value Entries (" + info.entity + ")");
+        let rows = await bcFetchAll(url, "Value Entries (" + info.entity + ")");
+        // Client-side date guard — a no-op when the server honoured the
+        // filter, a correctness net when it didn't (see $select note).
+        const before = rows.length;
+        rows = rows.filter(r => {
+            const d = String(r[info.fDate] || "").slice(0, 10);
+            return d >= fromISO && d <= toISO;
+        });
+        if (rows.length !== before) console.log("[Value Entry] client-side date guard dropped " + (before - rows.length) + " out-of-range rows");
         console.log("[Value Entry] " + info.entity + " → " + rows.length + " rows");
         if (rows.length) console.log("[Value Entry] sample row keys:", Object.keys(rows[0]).join(", "));
         const normalised = rows.map(r => ({
@@ -4163,10 +4166,6 @@ async function fetchSalesInvoicesFlatOData(fromISO, toISO) {
         return null;
     }
     const fLinePost = bcFindField(linesInfo.fields, [/^Posting_Date$/i, /^posting.?date$/i]);
-    if (!fLinePost) {
-        console.log("[Flat invoices] lines entity '" + linesInfo.entity + "' has no Posting_Date — falling back");
-        return null;
-    }
     const cname = encodeURIComponent(await bcGetCompanyInternalName());
     const hSel = [fNo, fPost, fCustNo, fCustName, fAmt, fSalesp, fRemain, fCanc, fInvDisc].filter(Boolean);
     const lSel = [...new Set([linesInfo.fDocNo, linesInfo.fLineNo, linesInfo.fItemNo, linesInfo.fQty,
@@ -4174,16 +4173,43 @@ async function fetchSalesInvoicesFlatOData(fromISO, toISO) {
                   linesInfo.fType, linesInfo.fDiscAlloc, fLinePost].filter(Boolean))];
     const hUrl = BC_ODATA_URL + "/Company('" + cname + "')/salesInvoiceHeader?$select=" + hSel.join(",")
         + "&$filter=" + encodeURIComponent(fPost + " ge " + fromISO + " and " + fPost + " le " + toISO) + "&$top=100000";
+    let headers;
+    try { headers = await bcFetchAll(hUrl, "Invoice headers (flat)"); }
+    catch (e) {
+        console.warn("[Flat invoices] header fetch failed (" + e.message + ") — falling back");
+        return null;
+    }
+    // Client-side date guard in case $select+$filter misbehaves on this
+    // entity too (it does on the VE query object).
+    headers = headers.filter(h => {
+        const d = String(h[fPost] || "").slice(0, 10);
+        return d >= fromISO && d <= toISO;
+    });
+    if (!headers.length) { console.log("[Flat invoices] 0 posted headers in range"); return []; }
+    // Lines: this tenant's lines entity has no Posting_Date to filter on,
+    // so filter by the Document_No range spanned by the headers we just
+    // fetched. Doc numbers are lexicographically ordered; any stray lines
+    // from out-of-window documents inside the span are dropped by the
+    // join (lines only attach to fetched headers).
+    let lineFilter;
+    if (fLinePost) {
+        lineFilter = fLinePost + " ge " + fromISO + " and " + fLinePost + " le " + toISO;
+    } else {
+        let minNo = null, maxNo = null;
+        for (const h of headers) {
+            const n = String(h[fNo] || ""); if (!n) continue;
+            if (minNo === null || n < minNo) minNo = n;
+            if (maxNo === null || n > maxNo) maxNo = n;
+        }
+        lineFilter = linesInfo.fDocNo + " ge '" + minNo + "' and " + linesInfo.fDocNo + " le '" + maxNo + "'";
+        console.log("[Flat invoices] no line Posting_Date — filtering lines by doc-no range " + minNo + " … " + maxNo);
+    }
     const lUrl = BC_ODATA_URL + "/Company('" + cname + "')/" + linesInfo.entity + "?$select=" + lSel.join(",")
-        + "&$filter=" + encodeURIComponent(fLinePost + " ge " + fromISO + " and " + fLinePost + " le " + toISO) + "&$top=200000";
-    let headers, lineRows;
-    try {
-        [headers, lineRows] = await Promise.all([
-            bcFetchAll(hUrl, "Invoice headers (flat)"),
-            bcFetchAll(lUrl, "Invoice lines (flat)"),
-        ]);
-    } catch (e) {
-        console.warn("[Flat invoices] fetch failed (" + e.message + ") — falling back");
+        + "&$filter=" + encodeURIComponent(lineFilter) + "&$top=200000";
+    let lineRows;
+    try { lineRows = await bcFetchAll(lUrl, "Invoice lines (flat)"); }
+    catch (e) {
+        console.warn("[Flat invoices] lines fetch failed (" + e.message + ") — falling back");
         return null;
     }
     // Group lines by document number, normalising to the v2.0 line shape
