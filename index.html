@@ -4168,9 +4168,6 @@ async function fetchSalesInvoicesFlatOData(fromISO, toISO) {
     const fLinePost = bcFindField(linesInfo.fields, [/^Posting_Date$/i, /^posting.?date$/i]);
     const cname = encodeURIComponent(await bcGetCompanyInternalName());
     const hSel = [fNo, fPost, fCustNo, fCustName, fAmt, fSalesp, fRemain, fCanc, fInvDisc].filter(Boolean);
-    const lSel = [...new Set([linesInfo.fDocNo, linesInfo.fLineNo, linesInfo.fItemNo, linesInfo.fQty,
-                  linesInfo.fAmount, linesInfo.fUnitPrice, linesInfo.fDesc, linesInfo.fLocation,
-                  linesInfo.fType, linesInfo.fDiscAlloc, fLinePost].filter(Boolean))];
     const hUrl = BC_ODATA_URL + "/Company('" + cname + "')/salesInvoiceHeader?$select=" + hSel.join(",")
         + "&$filter=" + encodeURIComponent(fPost + " ge " + fromISO + " and " + fPost + " le " + toISO) + "&$top=100000";
     let headers;
@@ -4204,11 +4201,20 @@ async function fetchSalesInvoicesFlatOData(fromISO, toISO) {
         lineFilter = linesInfo.fDocNo + " ge '" + minNo + "' and " + linesInfo.fDocNo + " le '" + maxNo + "'";
         console.log("[Flat invoices] no line Posting_Date — filtering lines by doc-no range " + minNo + " … " + maxNo);
     }
-    const lUrl = BC_ODATA_URL + "/Company('" + cname + "')/" + linesInfo.entity + "?$select=" + lSel.join(",")
-        + "&$filter=" + encodeURIComponent(lineFilter) + "&$top=200000";
+    // NO $select on the lines request — on this tenant's query objects
+    // $select can break or catastrophically slow the $filter (proven on
+    // ValueEntries; the first doc-range lines attempt hung the same
+    // way). And a hard timeout: if Wiise is scanning instead of seeking,
+    // give up and fall back to v2.0 rather than hang the load.
+    const lUrl = BC_ODATA_URL + "/Company('" + cname + "')/" + linesInfo.entity
+        + "?$filter=" + encodeURIComponent(lineFilter) + "&$top=200000";
     let lineRows;
-    try { lineRows = await bcFetchAll(lUrl, "Invoice lines (flat)"); }
-    catch (e) {
+    try {
+        lineRows = await Promise.race([
+            bcFetchAll(lUrl, "Invoice lines (flat)"),
+            new Promise((_, rej) => setTimeout(() => rej(new Error("lines fetch exceeded 20s")), 20000)),
+        ]);
+    } catch (e) {
         console.warn("[Flat invoices] lines fetch failed (" + e.message + ") — falling back");
         return null;
     }
