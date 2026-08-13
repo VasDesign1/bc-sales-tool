@@ -1,0 +1,71 @@
+name: sales-snapshot
+
+on:
+  schedule:
+    # Melbourne 7:00 / 12:00 / 16:30, both AEST (UTC+10) and AEDT (UTC+11)
+    # firings — snapshot.js checks the Melbourne wall clock and skips the
+    # firing that lands off-slot, so slots stay at local clock time
+    # year-round.
+    - cron: "0 21 * * *"   # 07:00 AEST
+    - cron: "0 20 * * *"   # 07:00 AEDT
+    - cron: "0 2 * * *"    # 12:00 AEST
+    - cron: "0 1 * * *"    # 12:00 AEDT
+    - cron: "30 6 * * *"   # 16:30 AEST
+    - cron: "30 5 * * *"   # 16:30 AEDT
+  workflow_dispatch:
+    inputs:
+      slot:
+        description: "Force slot (0700 / 1200 / 1630); empty = auto-detect"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sales-snapshot
+  cancel-in-progress: false
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build snapshot
+        env:
+          BC_CLIENT_ID: ${{ secrets.BC_CLIENT_ID }}
+          BC_TENANT: ${{ secrets.BC_TENANT }}
+          BC_REFRESH_TOKEN: ${{ secrets.BC_REFRESH_TOKEN }}
+          SNAPSHOT_PASSPHRASE: ${{ secrets.SNAPSHOT_PASSPHRASE }}
+          SLOT: ${{ github.event.inputs.slot }}
+        run: node scripts/snapshot.js
+
+      - name: Publish to snapshots branch
+        run: |
+          if [ ! -d snapshot-out ] || [ -z "$(ls -A snapshot-out)" ]; then
+            echo "No snapshot produced (off-slot firing) — nothing to publish."
+            exit 0
+          fi
+          mkdir pub && cd pub
+          git init -q -b snapshots
+          git config user.name "sales-snapshot-bot"
+          git config user.email "actions@github.com"
+          git remote add origin "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git"
+          # Carry over the other slots' existing files so each run only
+          # replaces its own slot, while force-pushing a single root
+          # commit keeps the branch history (and repo size) flat.
+          if git fetch -q --depth 1 origin snapshots 2>/dev/null; then
+            git checkout -q FETCH_HEAD -- . 2>/dev/null || true
+            git reset -q
+          fi
+          cp ../snapshot-out/* .
+          git add -A
+          git commit -q -m "snapshot $(date -u +%FT%TZ)"
+          git push -q --force origin HEAD:snapshots
+          echo "Published: $(ls *.bin 2>/dev/null | tr '\n' ' ')"
