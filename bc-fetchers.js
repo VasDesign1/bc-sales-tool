@@ -211,6 +211,7 @@ async function bcDiscoverValueEntryEntity() {
             fSourceTyp: bcFindField(fields, SOURCE_TYP),
             fQtyInvd:   bcFindField(fields, QTY_INVD),
             fEntryType: bcFindField(fields, ENTRY_TYPE),
+            fEntryNo:   bcFindField(fields, [/^entryNumber$/i, /^Entry_No_?$/i]),
         };
     }
     return null;
@@ -259,6 +260,7 @@ async function fetchValueEntries(fromISO, toISO) {
             costAmountNonInv: info.fCostNI    ? num(r[info.fCostNI]) : 0,
             invoicedQty:      info.fQtyInvd   ? num(r[info.fQtyInvd]) : 0,
             entryType:        info.fEntryType ? r[info.fEntryType] : "",
+            entryNo:          info.fEntryNo   ? r[info.fEntryNo]   : null,
         }));
         state.veFieldMap = info;
         state.veDiagnostic = "Source: OData " + info.entity + " · " + rows.length + " rows.";

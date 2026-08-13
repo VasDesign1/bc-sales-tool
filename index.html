@@ -1643,14 +1643,14 @@
                 <h2 id="headerTitle">Overview</h2>
                 <button class="btn btn-primary" id="loadBtn" disabled>Load sales</button>
                 <span style="position:relative; display:inline-block;">
-                    <button class="btn btn-primary" id="loadFastBtn" disabled
-                        title="Fast load: pick current month / last 2 months / last 3 months. Sales figures appear first (within seconds); costs, profit and open orders fill in shortly after. Downloads trimmed columns only, skips the shipment cost-bridge, and defers quote / blanket / return data until you open those tabs. Use Load sales for any custom range with everything upfront.">Load sales (fast)</button>
-                    <div id="loadFastMenu" style="display:none; position:absolute; top:calc(100% + 6px); left:0; z-index:100;
+                    <button class="btn btn-primary" id="loadLookupBtn"
+                        title="Fast lookup: opens pre-loaded snapshots of the last 12 months of sales, captured automatically at 7:00 AM, 12:00 and 4:30 PM Melbourne time. The whole tool works on the chosen snapshot in a few seconds — no sign-in needed, just the snapshot passphrase (asked once per device). Use Load sales for live, right-now data or custom ranges.">Fast lookup ▾</button>
+                    <div id="loadLookupMenu" style="display:none; position:absolute; top:calc(100% + 6px); left:0; z-index:100;
                         background:#fff; border:1px solid #d6d8eb; border-radius:10px; box-shadow:0 6px 24px rgba(26,35,126,0.18);
-                        min-width:180px; overflow:hidden; color:#2c2f4a;">
-                        <button type="button" class="fast-range-opt" data-months="1" style="display:block; width:100%; text-align:left; padding:10px 14px; border:none; background:none; cursor:pointer; font-size:13px; color:inherit;">Current month</button>
-                        <button type="button" class="fast-range-opt" data-months="2" style="display:block; width:100%; text-align:left; padding:10px 14px; border:none; background:none; cursor:pointer; font-size:13px; color:inherit; border-top:1px solid #eef;">Last 2 months</button>
-                        <button type="button" class="fast-range-opt" data-months="3" style="display:block; width:100%; text-align:left; padding:10px 14px; border:none; background:none; cursor:pointer; font-size:13px; color:inherit; border-top:1px solid #eef;">Last 3 months</button>
+                        min-width:250px; overflow:hidden; color:#2c2f4a;">
+                        <div id="loadLookupMenuBody" style="font-size:13px;">
+                            <div style="padding:10px 14px; opacity:0.6;">Checking snapshots…</div>
+                        </div>
                     </div>
                 </span>
             </div>
@@ -1659,6 +1659,7 @@
                     <div class="user" id="userBadge">not signed in</div>
                     <div id="periodBadge"></div>
                     <div id="costQualityBadge" style="margin-top:2px;"></div>
+                    <div id="snapshotBadge" style="margin-top:2px;"></div>
                 </div>
                 <div style="display:flex; flex-direction:column; gap:6px;">
                     <button class="theme-btn" id="themeBtn" title="Change interface theme">Theme</button>
@@ -14322,7 +14323,6 @@ async function handleSignIn() {
         document.getElementById("userBadge").textContent = name;
         document.getElementById("signinOverlay").style.display = "none";
         document.getElementById("loadBtn").disabled = false;
-        document.getElementById("loadFastBtn").disabled = false;
         document.getElementById("signOutBtn").style.display = "inline-block";
     } catch (err) { alert("Sign-in failed: " + (err.message || err)); }
 }
@@ -14365,37 +14365,132 @@ function ingestValueEntries(valueEntries) {
     }
 }
 
-async function handleLoad(fast) {
-    if (fast === true) return handleFastLoad();
-    state.fastTrim = false;
-    const from = document.getElementById("fromDate").value;
-    const to   = document.getElementById("toDate").value;
-    if (!from || !to) { alert("Pick a date range."); return; }
-    if (from > to) { alert("From date must be on or before To date."); return; }
-
-    const btn = document.getElementById("loadBtn");
-    const fastBtn = document.getElementById("loadFastBtn");
-    btn.disabled = true; fastBtn.disabled = true;
-    btn.textContent = "Loading…";
+// ============================================================
+// FAST LOOKUP — pre-built encrypted snapshots (7:00 / 12:00 / 4:30
+// Melbourne, produced by .github/workflows/snapshot.yml). Whole-tool
+// hydration: every tab / filter / drill works on the snapshot data
+// exactly as after a live 12-month Load sales. No BC sign-in needed —
+// just the snapshot passphrase, remembered per device.
+// ============================================================
+const SNAPSHOT_BASE = "https://raw.githubusercontent.com/VasDesign1/bc-sales-tool/snapshots/";
+const SNAPSHOT_SLOTS = [
+    { slot: "0700", label: "7:00 AM" },
+    { slot: "1200", label: "12:00 PM" },
+    { slot: "1630", label: "4:30 PM" },
+];
+function melbourneTodayISO() {
+    // en-CA locale renders as YYYY-MM-DD
+    return new Intl.DateTimeFormat("en-CA", { timeZone: "Australia/Melbourne",
+        year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+}
+async function populateLookupMenu() {
+    const body = document.getElementById("loadLookupMenuBody");
+    body.innerHTML = '<div style="padding:10px 14px; opacity:0.6;">Checking snapshots…</div>';
+    const today = melbourneTodayISO();
+    const rows = await Promise.all(SNAPSHOT_SLOTS.map(async s => {
+        try {
+            const r = await fetch(SNAPSHOT_BASE + s.slot + ".meta.json", { cache: "no-store" });
+            return { ...s, meta: r.ok ? await r.json() : null };
+        } catch (e) { return { ...s, meta: null }; }
+    }));
+    body.innerHTML = rows.map((r, i) => {
+        const css = "display:block; width:100%; text-align:left; padding:10px 14px; border:none; background:none; font-size:13px; color:inherit;"
+                  + (i ? " border-top:1px solid #eef;" : "");
+        if (!r.meta) return '<div style="' + css + ' opacity:0.45;">As of ' + r.label + ' — no snapshot yet</div>';
+        const capDate = (r.meta.fetchedAtMelbourne || "").slice(0, 10);
+        const capTime = (r.meta.fetchedAtMelbourne || "").slice(11);
+        const day = capDate === today ? "today" : "on " + fmtDate(capDate);
+        return '<button type="button" class="lookup-slot-opt" data-slot="' + r.slot + '" style="' + css
+             + ' cursor:pointer;">As of ' + capTime + " " + day + "</button>";
+    }).join("");
+    body.querySelectorAll(".lookup-slot-opt").forEach(btn => {
+        btn.addEventListener("click", e => {
+            e.stopPropagation();
+            document.getElementById("loadLookupMenu").style.display = "none";
+            loadSnapshot(btn.dataset.slot);
+        });
+    });
+}
+function getSnapshotPassphrase(forceAsk) {
+    let p = forceAsk ? "" : (localStorage.getItem("snapshotPassphrase") || "");
+    if (!p) {
+        p = (prompt("Enter the snapshot passphrase:") || "").trim();
+        if (p) localStorage.setItem("snapshotPassphrase", p);
+    }
+    return p;
+}
+async function decryptSnapshot(buf, passphrase) {
+    // Layout mirrors scripts/snapshot.js: salt(16) | iv(12) | AES-GCM ct||tag
+    const bytes = new Uint8Array(buf);
+    const salt = bytes.slice(0, 16), iv = bytes.slice(16, 28), ct = bytes.slice(28);
+    const keyMat = await crypto.subtle.importKey("raw", new TextEncoder().encode(passphrase), "PBKDF2", false, ["deriveKey"]);
+    const key = await crypto.subtle.deriveKey({ name: "PBKDF2", salt, iterations: 150000, hash: "SHA-256" },
+        keyMat, { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
+    const gz = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ct);
+    const stream = new Blob([gz]).stream().pipeThrough(new DecompressionStream("gzip"));
+    return JSON.parse(await new Response(stream).text());
+}
+async function loadSnapshot(slot) {
+    const btn = document.getElementById("loadLookupBtn");
+    const orig = "Fast lookup ▾";
+    btn.disabled = true; btn.textContent = "Loading…";
     try {
-        const [locs, items, customers, invoices, iles, creditMemos, shipments, returnReceipts, quotes, quoteExtras, blanketOrders, valueEntries, salesOrders, salesOrderOutstanding, _residentialLookup, _quoteArchive] = await Promise.all([
-            fetchLocations(),
-            fetchItems(),
-            fetchCustomers(),
-            fetchSalesInvoicesWithLines(from, to),
-            fetchItemLedgerSales(from, to),
-            fetchSalesCreditMemos(from, to),
-            fetchSalesShipments(from, to),
-            fetchSalesReturnReceipts(from, to),
-            fetchSalesQuotes(from, to),
-            fetchSalesQuoteExtras(from, to),
-            fetchBlanketSalesOrders(from, to),
-            fetchValueEntries(from, to),
-            fetchSalesOrders(),
-            fetchSalesOrderOutstandingLines(),
-            fetchResidentialDocLookup(),
-            fetchSalesQuoteArchive(from, to),
-        ]);
+        updateBCProgress("Fast lookup", "downloading snapshot…");
+        const resp = await fetch(SNAPSHOT_BASE + slot + ".bin", { cache: "no-store" });
+        if (!resp.ok) throw new Error("snapshot download failed (HTTP " + resp.status + ")");
+        const buf = await resp.arrayBuffer();
+        updateBCProgress("Fast lookup", "unlocking…");
+        let payload = null;
+        for (let attempt = 0; attempt < 3 && !payload; attempt++) {
+            const pass = getSnapshotPassphrase(attempt > 0);
+            if (!pass) return;   // user cancelled the prompt
+            try { payload = await decryptSnapshot(buf, pass); }
+            catch (e) {
+                localStorage.removeItem("snapshotPassphrase");
+                if (attempt < 2) alert("That passphrase didn't unlock the snapshot — try again.");
+            }
+        }
+        if (!payload) throw new Error("could not unlock snapshot (wrong passphrase?)");
+        updateBCProgress("Fast lookup", "rendering…");
+        hydrateSnapshot(payload);
+    } catch (err) {
+        alert("Fast lookup failed: " + (err.message || err));
+    } finally {
+        hideBCProgress();
+        btn.disabled = false; btn.textContent = orig;
+    }
+}
+function hydrateSnapshot(payload) {
+    const d = payload.data, se = payload.sideEffects || {};
+    // Side effects first — applyLoadedData's quote-extras map build
+    // reads state.quoteExtrasFieldMap.
+    state.docYourReference = new Map(se.docYourReference || []);
+    state.docQuoteLink = new Map(se.docQuoteLink || []);
+    state.quoteArchive = new Map(se.quoteArchive || []);
+    state.veFieldMap = se.veFieldMap || null;
+    state.quoteExtrasFieldMap = se.quoteExtrasFieldMap || null;
+    state.veDiagnostic = se.veDiagnostic || "";
+    state.quoteExtrasDiagnostic = se.quoteExtrasDiagnostic || "";
+    state.quoteArchiveDiagnostic = se.quoteArchiveDiagnostic || "";
+    state.residentialDiagnostic = se.residentialDiagnostic || "";
+    state.blanketOrdersDiagnostic = se.blanketOrdersDiagnostic || "";
+    // Point the toolbar at the snapshot's window before applying.
+    document.getElementById("fromDate").value = payload.meta.from;
+    document.getElementById("toDate").value = payload.meta.to;
+    const qr = document.getElementById("quickRange"); if (qr) qr.value = "";
+    const mp = document.getElementById("monthPickerField"); if (mp) mp.style.display = "none";
+    applyLoadedData({ ...d, from: payload.meta.from, to: payload.meta.to });
+    const sb = document.getElementById("snapshotBadge");
+    if (sb) sb.innerHTML = '<span style="color:#ffca28;">figures as of ' + escapeHtml(payload.meta.fetchedAtMelbourne || "") + " (snapshot)</span>";
+}
+
+// Shared by the live Load sales path and Fast lookup snapshot
+// hydration: pour a full set of fetched sources into state and
+// re-render. `d` carries the sixteen fetch results plus from/to.
+function applyLoadedData(d) {
+    const { locs, items, customers, invoices, iles, creditMemos, shipments, returnReceipts,
+            quotes, quoteExtras, blanketOrders, valueEntries, salesOrders, salesOrderOutstanding,
+            from, to } = d;
         state.deferredDocsPending = false;
         state.salesOrders = salesOrders || [];
         state.salesOrderOutstandingLines = salesOrderOutstanding || [];
@@ -14609,109 +14704,47 @@ async function handleLoad(fast) {
         rebuildFiltered();
         setPeriodBadge();
         renderCurrentTab();
-    } catch (err) {
-        alert("Load failed: " + (err.message || err));
-    } finally {
-        hideBCProgress();
-        btn.disabled = false;     btn.textContent     = "Reload sales";
-        fastBtn.disabled = false; fastBtn.textContent = "Reload (fast)";
-    }
+    const _sb = document.getElementById("snapshotBadge");
+    if (_sb) _sb.textContent = "";   // live loads clear the snapshot badge; hydrateSnapshot re-sets it
 }
 
-// Fast load — phased so numbers appear as soon as possible:
-//   Phase 1 (blocking): master data + invoices + credit memos → paint
-//     the dashboard. Sales figures are final at this point; GP/cost
-//     show sales-only until phase 2 lands (progress line says so).
-//   Phase 2 (background): Value Entries + item ledger → rebuild cost
-//     maps, re-render. Runs concurrently with phase 3.
-//   Phase 3 (background): open sales orders + outstanding lines →
-//     pipeline tiles fill in, re-render.
-// Skipped entirely: shipments (cost-bridge contributed ~0% on this
-// tenant — same-day ILE matching covers it), return receipts (404s),
-// quotes / extras / archive / blanket / residential (deferred to
-// first visit of those tabs via ensureDeferredDocs), and the heavy
-// console diagnostics the full path runs.
-async function handleFastLoad() {
+async function handleLoad() {
+    state.fastTrim = false;
     const from = document.getElementById("fromDate").value;
     const to   = document.getElementById("toDate").value;
     if (!from || !to) { alert("Pick a date range."); return; }
     if (from > to) { alert("From date must be on or before To date."); return; }
 
     const btn = document.getElementById("loadBtn");
-    const fastBtn = document.getElementById("loadFastBtn");
-    btn.disabled = true; fastBtn.disabled = true;
-    fastBtn.textContent = "Loading…";
-    state.fastTrim = true;
+    btn.disabled = true;
+    btn.textContent = "Loading…";
     try {
-        // ---- Phase 1: sales-side essentials ----
-        const [locs, items, customers, invoices, creditMemos] = await Promise.all([
+        const [locs, items, customers, invoices, iles, creditMemos, shipments, returnReceipts, quotes, quoteExtras, blanketOrders, valueEntries, salesOrders, salesOrderOutstanding, _residentialLookup, _quoteArchive] = await Promise.all([
             fetchLocations(),
             fetchItems(),
             fetchCustomers(),
             fetchSalesInvoicesWithLines(from, to),
-            fetchSalesCreditMemos(from, to),
-        ]);
-        state.locations = new Map(locs.map(l => [l.id, l.code || l.displayName || "(unnamed)"]));
-        state.items = items;
-        state.itemCategory = new Map(items.map(it => [it.number, it.itemCategoryCode || ""]));
-        state.customers = customers;
-        state.custPostingGroup = new Map(customers.map(c => [
-            c.number || c.id,
-            c.customerPostingGroup || c.customerPostingGroupCode || c.postingGroup || ""
-        ]));
-        state.custCity = new Map(customers.map(c => [c.number || c.id, c.city || ""]));
-        state.invoices = invoices;
-        state.creditMemos = creditMemos;
-        // Clear everything this mode skips or hasn't loaded yet so a
-        // prior full load's wider-range data can't bleed into this view.
-        state.shipments = [];
-        state.returnReceipts = [];
-        state.quotes = [];
-        state.quoteExtras = new Map();
-        state.blanketOrders = [];
-        if (!state.docYourReference) state.docYourReference = new Map();
-        if (!state.docQuoteLink)     state.docQuoteLink     = new Map();
-        if (!state.quoteArchive)     state.quoteArchive     = new Map();
-        state.deferredDocsPending = true;
-        ingestValueEntries([]);
-        state.iles = [];
-        buildCostMaps([]);
-        state.loadedFrom = from;
-        state.loadedTo   = to;
-        populateFilterDropdowns();
-        rebuildFiltered();
-        setPeriodBadge();
-        renderCurrentTab();
-        fastBtn.textContent = "Loading costs…";
-        updateBCProgress("Background", "sales are final — loading costs & orders…");
-
-        // ---- Phases 2 + 3 in parallel ----
-        const costsP = Promise.all([
-            fetchValueEntries(from, to),
             fetchItemLedgerSales(from, to),
-        ]);
-        const ordersP = Promise.all([
+            fetchSalesCreditMemos(from, to),
+            fetchSalesShipments(from, to),
+            fetchSalesReturnReceipts(from, to),
+            fetchSalesQuotes(from, to),
+            fetchSalesQuoteExtras(from, to),
+            fetchBlanketSalesOrders(from, to),
+            fetchValueEntries(from, to),
             fetchSalesOrders(),
             fetchSalesOrderOutstandingLines(),
+            fetchResidentialDocLookup(),
+            fetchSalesQuoteArchive(from, to),
         ]);
-        const [valueEntries, iles] = await costsP;
-        ingestValueEntries(valueEntries);
-        state.iles = iles || [];
-        buildCostMaps(state.iles);
-        updateCostQualityBadge();
-        rebuildFiltered();
-        renderCurrentTab();
-
-        const [salesOrders, salesOrderOutstanding] = await ordersP;
-        state.salesOrders = salesOrders || [];
-        state.salesOrderOutstandingLines = salesOrderOutstanding || [];
-        renderCurrentTab();
+        applyLoadedData({ locs, items, customers, invoices, iles, creditMemos, shipments, returnReceipts,
+                         quotes, quoteExtras, blanketOrders, valueEntries, salesOrders, salesOrderOutstanding,
+                         from, to });
     } catch (err) {
         alert("Load failed: " + (err.message || err));
     } finally {
         hideBCProgress();
-        btn.disabled = false;     btn.textContent     = "Reload sales";
-        fastBtn.disabled = false; fastBtn.textContent = "Reload (fast)";
+        btn.disabled = false; btn.textContent = "Reload sales";
     }
 }
 
@@ -14786,34 +14819,16 @@ function renderItemComboPopup(filter) {
 
 function wireEvents() {
     document.getElementById("signInBtn").addEventListener("click", handleSignIn);
-    document.getElementById("loadBtn").addEventListener("click", () => handleLoad(false));
-    // Fast button opens a small preset menu instead of loading directly.
-    // Each option sets From = 1st of (now − months + 1) and To = today,
-    // then runs the fast load path — the toolbar's previous range is
-    // deliberately ignored for fast loads.
-    document.getElementById("loadFastBtn").addEventListener("click", e => {
+    document.getElementById("loadBtn").addEventListener("click", () => handleLoad());
+    document.getElementById("loadLookupBtn").addEventListener("click", e => {
         e.stopPropagation();
-        const menu = document.getElementById("loadFastMenu");
-        menu.style.display = menu.style.display === "none" ? "block" : "none";
-    });
-    document.querySelectorAll("#loadFastMenu .fast-range-opt").forEach(opt => {
-        opt.addEventListener("click", e => {
-            e.stopPropagation();
-            document.getElementById("loadFastMenu").style.display = "none";
-            const months = parseInt(opt.dataset.months, 10) || 1;
-            const today = new Date();
-            const start = new Date(today.getFullYear(), today.getMonth() - (months - 1), 1);
-            document.getElementById("fromDate").value =
-                start.getFullYear() + "-" + String(start.getMonth() + 1).padStart(2, "0") + "-01";
-            document.getElementById("toDate").value = today.toISOString().slice(0, 10);
-            const qr = document.getElementById("quickRange"); if (qr) qr.value = "";
-            const mp = document.getElementById("monthPickerField"); if (mp) mp.style.display = "none";
-            setPeriodBadge();
-            handleLoad(true);
-        });
+        const menu = document.getElementById("loadLookupMenu");
+        const show = menu.style.display === "none";
+        menu.style.display = show ? "block" : "none";
+        if (show) populateLookupMenu();
     });
     document.addEventListener("click", () => {
-        const menu = document.getElementById("loadFastMenu");
+        const menu = document.getElementById("loadLookupMenu");
         if (menu) menu.style.display = "none";
     });
 

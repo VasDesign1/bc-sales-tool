@@ -134,6 +134,29 @@ function isoAddDays(iso, days) {
         + invoices.length + " invoices · " + (valueEntries || []).length + " VE · "
         + (iles || []).length + " ILE · " + (quotes || []).length + " quotes");
 
+    // ---- Integrity checks (fail loudly rather than snapshot bad data) ----
+    // 1. VE date filter actually applied? (this tenant has form — $select
+    //    provably disabled it once already)
+    let veMin = "9999", veMax = "0000", veOut = 0;
+    for (const v of (valueEntries || [])) {
+        const d = String(v.postingDate || "").slice(0, 10);
+        if (d < veMin) veMin = d;
+        if (d > veMax) veMax = d;
+        if (d < from || d > to) veOut++;
+    }
+    console.log("[VE check] postingDate " + veMin + " … " + veMax + " · outOfRange=" + veOut);
+    // 2. Duplicate rows? Entry_No is unique in BC — any repeat means a
+    //    pagination/duplication fault and the cost maps would double-count.
+    const entryNos = (valueEntries || []).map(v => v.entryNo).filter(n => n != null);
+    const distinct = new Set(entryNos).size;
+    console.log("[VE check] entryNo present on " + entryNos.length + "/" + (valueEntries || []).length
+        + " rows · distinct=" + distinct);
+    if (entryNos.length && distinct !== entryNos.length) {
+        console.error("[VE check] DUPLICATE Value Entry rows detected — aborting snapshot");
+        process.exit(1);
+    }
+    if (veOut > 0) console.warn("[VE check] " + veOut + " rows outside range — server filter ignored?! Snapshot keeps them (aggregation re-filters by date) but investigate.");
+
     const payload = {
         meta: {
             formatVersion: 1,
