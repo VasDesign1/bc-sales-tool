@@ -6312,7 +6312,10 @@ function renderDiLorenz() {
             plugins: { legend: { display: false },
                        tooltip: { callbacks: { label: c => "x = " + c.label + "% customers · y = " + c.parsed.y.toFixed(1) + "% revenue" } } },
             scales: {
-                x: { ticks: { callback: v => v + "%", maxTicksLimit: 5 }, title: { display: true, text: "Cumulative % of customers", font: { size: 10 } } },
+                // Category axis: the tick callback receives the tick INDEX,
+                // not the label — resolve it, else ticks print the customer
+                // index as a bogus percentage (0%, 94%, 188%, …).
+                x: { ticks: { callback: function (v) { const l = parseFloat(this.getLabelForValue(v)); return (isNaN(l) ? v : Math.round(l)) + "%"; }, maxTicksLimit: 5 }, title: { display: true, text: "Cumulative % of customers", font: { size: 10 } } },
                 y: { ticks: { callback: v => v + "%" }, title: { display: true, text: "Cumulative % of revenue", font: { size: 10 } } },
             }
         })
@@ -8212,7 +8215,10 @@ function renderDiGeo() {
         const stroke = activeState === code ? "#1a237e" : "rgba(0,0,0,0.4)";
         const strokeW = activeState === code ? 0.8 : 0.35;
         const title = code + " · " + STATE_NAMES[code] + " · " + fmtMoneyFull(e.sales) + " · GP " + fmtPct(gpPct) + " · " + e.count + " invoices · " + e.custs.size + " customers";
-        svg += '<path class="di-geo-state" data-state="' + code + '" d="' + path + '" fill="' + fill + '" stroke="' + stroke + '" stroke-width="' + strokeW + '" style="cursor:pointer;" data-tip="' + escapeAttr(title) + '"></path>';
+        // NOTE: no data-tip here — the state map drives its own mouse-
+        // following tooltip (diBuildHoverTooltip) below; carrying data-tip
+        // too made the global tooltip render a second overlapping box.
+        svg += '<path class="di-geo-state" data-state="' + code + '" d="' + path + '" fill="' + fill + '" stroke="' + stroke + '" stroke-width="' + strokeW + '" style="cursor:pointer;"></path>';
     }
     // Labels (small in viewBox coords; SVG scaling makes them readable)
     for (const [code, pt] of Object.entries(LABEL)) {
@@ -11438,48 +11444,25 @@ function renderBlanketOrders() {
         const linesAttached = headers.reduce((s, bo) => s + ((bo.blanketSalesOrderLines && bo.blanketSalesOrderLines.length) ? 1 : 0), 0);
         const itemsCovered = headers.reduce((s, bo) => s + ((bo.blanketSalesOrderLines || []).filter(ln => (ln.lineObjectNumber || ln.itemId)).length), 0);
         const totalLines = headers.reduce((s, bo) => s + ((bo.blanketSalesOrderLines || []).length), 0);
-        const linesInfo = state.blanketOrdersLinesFieldMap;
-        const headerInfo = state.blanketOrdersFieldMap;
-        const sampleKeys = state.blanketOrdersLinesSampleKeys;
-        const fieldLine = (label, info, fields) => {
-            if (!info) return "<em>not picked</em>";
-            const parts = fields.map(([k, prop]) => k + "=" + escapeHtml(info[prop] || "—"));
-            return label + ": <code>" + escapeHtml(info.entity) + "</code> · " + parts.join(" · ");
-        };
-        const showInfoBlock = () =>
-            "<br><span style='font-family:monospace; font-size:11px;'>" +
-                fieldLine("Header entity", headerInfo, [["No", "fNo"], ["CustNo", "fCustNo"], ["Amount", "fAmount"], ["Campaign", "fCampaign"], ["DocDate", "fDocDate"]]) +
-            "</span>" +
-            "<br><span style='font-family:monospace; font-size:11px;'>" +
-                fieldLine("Lines entity", linesInfo, [["DocNo", "fDocNo"], ["LineNo", "fLineNo"], ["ItemNo", "fItemNo"], ["Desc", "fDesc"], ["Qty", "fQty"], ["Amount", "fAmount"], ["Type", "fType"], ["Location", "fLocation"]]) +
-            "</span>" +
-            (sampleKeys ? "<br><span style='font-family:monospace; font-size:11px; color:#555;'>Sample line keys: " + escapeHtml(sampleKeys.join(", ")) + "</span>" : "");
         if (!headers.length) {
             diag.style.display = "block";
             diag.innerHTML = "<strong>No blanket sales orders loaded.</strong> " +
-                (state.blanketOrdersDiagnostic ? "<br><span style='font-family:monospace; font-size:11px;'>" + escapeHtml(state.blanketOrdersDiagnostic) + "</span>" : "") +
-                "<br>Ask BC admin to publish page 9305 (BlanketSalesOrder) as a Web Service.";
+                (state.blanketOrdersDiagnostic ? "<br><span style='font-size:11px; opacity:0.75;'>" + escapeHtml(state.blanketOrdersDiagnostic) + "</span>" : "");
         } else if (linesAttached === 0 || itemsCovered === 0) {
             diag.style.display = "block";
             diag.innerHTML = "<strong>" + (linesAttached === 0
-                    ? "Headers loaded but no line rows attached."
-                    : "Lines attached (" + fmtInt(totalLines) + " rows) but no item numbers — per-item charts will be empty.") + "</strong> " +
-                fmtInt(headers.length) + " orders · " + fmtInt(linesAttached) + " with lines · " + fmtInt(itemsCovered) + " of " + fmtInt(totalLines) + " line rows have an Item No." +
-                showInfoBlock() +
-                "<br>Open F12 → Console and share the <code>[Blanket SO lines] sample line row</code> object so I can pick the correct Item No field.";
+                    ? "Order lines couldn't be loaded from BC"
+                    : "Order lines loaded, but without item numbers") + "</strong> — the item and category charts below will be empty. "
+                + "Order totals, customer and salesperson figures on this tab are unaffected. Reload sales to retry."
+                + (state.blanketOrdersDiagnostic ? "<br><span style='font-size:11px; opacity:0.75;'>" + escapeHtml(state.blanketOrdersDiagnostic) + "</span>" : "");
         } else if (linesAttached < headers.length || itemsCovered < totalLines) {
             diag.style.display = "block";
-            diag.innerHTML = "<strong>Partial coverage.</strong> " +
+            diag.innerHTML = "<strong>Partial line coverage.</strong> " +
                 fmtInt(linesAttached) + " of " + fmtInt(headers.length) + " orders have lines · " +
-                fmtInt(itemsCovered) + " of " + fmtInt(totalLines) + " line rows have an Item No." +
-                showInfoBlock();
+                fmtInt(itemsCovered) + " of " + fmtInt(totalLines) + " line rows have an item number. Item charts show what's available.";
         } else {
-            diag.style.display = "block";
-            diag.style.borderLeftColor = "#43a047";
-            diag.style.background = "#e8f5e9";
-            diag.innerHTML = "<strong>OData source healthy.</strong> " +
-                fmtInt(headers.length) + " orders · " + fmtInt(totalLines) + " line rows, all attached, all have Item No." +
-                showInfoBlock();
+            // Everything attached and itemised — no banner needed.
+            diag.style.display = "none";
         }
     }
 

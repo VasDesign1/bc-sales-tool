@@ -645,15 +645,31 @@ async function fetchBlanketSalesOrders(fromISO, toISO) {
             const linesInfo = await bcDiscoverSalesLinesEntity(info.entity);
             if (linesInfo) {
                 state.blanketOrdersLinesFieldMap = linesInfo;
-                const lineParams = ["$top=50000"];
-                // Filter to just our headers' document numbers if we have a manageable count
                 const docNos = normalized.map(o => o.number).filter(Boolean);
-                if (docNos.length && docNos.length <= 400) {
-                    const inClause = docNos.map(n => linesInfo.fDocNo + " eq '" + String(n).replace(/'/g, "''") + "'").join(" or ");
-                    lineParams.push("$filter=" + encodeURIComponent(inClause));
+                // Prefer a constant-size documentType filter. The old
+                // approach OR-ed every header's document number into one
+                // URL, which worked at 62 orders but returned HTTP 414
+                // (URI Too Long) at 219 — silently leaving every order
+                // line-less. The join below drops any extra doc numbers,
+                // so the wider type filter is safe.
+                const fLineDocType = bcFindField(linesInfo.fields || [], [/^documentType$/i, /^Document_Type$/i]);
+                let lineRows;
+                if (fLineDocType && info.docTypeValue) {
+                    const linesUrl = BC_ODATA_URL + "/Company('" + coName + "')/" + linesInfo.entity
+                        + "?$top=50000&$filter=" + encodeURIComponent(fLineDocType + " eq '" + info.docTypeValue + "'");
+                    lineRows = await bcFetchAll(linesUrl, "Blanket order lines (" + linesInfo.entity + ")");
+                } else {
+                    // Fallback: chunked OR-filters, 40 document numbers per
+                    // request, so the URL stays far below server limits.
+                    lineRows = [];
+                    for (let i = 0; i < docNos.length; i += 40) {
+                        const chunk = docNos.slice(i, i + 40);
+                        const inClause = chunk.map(n => linesInfo.fDocNo + " eq '" + String(n).replace(/'/g, "''") + "'").join(" or ");
+                        const linesUrl = BC_ODATA_URL + "/Company('" + coName + "')/" + linesInfo.entity
+                            + "?$top=50000&$filter=" + encodeURIComponent(inClause);
+                        lineRows = lineRows.concat(await bcFetchAll(linesUrl, "Blanket order lines " + Math.min(i + 40, docNos.length) + "/" + docNos.length));
+                    }
                 }
-                const linesUrl = BC_ODATA_URL + "/Company('" + coName + "')/" + linesInfo.entity + "?" + lineParams.join("&");
-                const lineRows = await bcFetchAll(linesUrl, "Blanket order lines (" + linesInfo.entity + ")");
                 console.log("[Blanket SO lines] " + linesInfo.entity + " → " + lineRows.length + " line rows");
                 if (lineRows.length) {
                     console.log("[Blanket SO lines] sample line keys:", Object.keys(lineRows[0]).join(", "));
