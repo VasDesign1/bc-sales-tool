@@ -83,7 +83,11 @@ function detectSlot(mel) {
         const d = Math.abs(mel.minutes - mins);
         if (d < bestDiff) { bestDiff = d; best = slot; }
     }
-    return bestDiff <= 45 ? best : null;   // cron drift tolerance; DST-shifted crons fall outside and skip
+    // GitHub crons routinely fire 1-2h late (worst at top of the hour), so
+    // accept anything within 2h of a slot — the menu shows the REAL capture
+    // time, so a late capture is honestly labeled. The DST-twin cron (60 min
+    // off) now also runs; harmless, the on-time firing overwrites it.
+    return bestDiff <= 120 ? best : null;
 }
 
 // ---------- ISO date helpers (Melbourne-anchored) ----------

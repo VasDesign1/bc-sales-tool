@@ -3,15 +3,16 @@ name: sales-snapshot
 on:
   schedule:
     # Melbourne 7:00 / 12:00 / 16:30, both AEST (UTC+10) and AEDT (UTC+11)
-    # firings — snapshot.js checks the Melbourne wall clock and skips the
-    # firing that lands off-slot, so slots stay at local clock time
-    # year-round.
-    - cron: "0 21 * * *"   # 07:00 AEST
-    - cron: "0 20 * * *"   # 07:00 AEDT
-    - cron: "0 2 * * *"    # 12:00 AEST
-    - cron: "0 1 * * *"    # 12:00 AEDT
-    - cron: "30 6 * * *"   # 16:30 AEST
-    - cron: "30 5 * * *"   # 16:30 AEDT
+    # firings. Scheduled ~13 min BEFORE each slot at odd minutes — GitHub
+    # crons at the top of the hour routinely run 1-2h late or get dropped.
+    # snapshot.js maps the Melbourne wall clock to the nearest slot within
+    # a 2h window and skips anything further off.
+    - cron: "43 20 * * *"   # 07:00 AEST (fires 06:43 local)
+    - cron: "43 19 * * *"   # 07:00 AEDT
+    - cron: "43 1 * * *"    # 12:00 AEST (fires 11:43 local)
+    - cron: "43 0 * * *"    # 12:00 AEDT
+    - cron: "13 6 * * *"    # 16:30 AEST (fires 16:13 local)
+    - cron: "13 5 * * *"    # 16:30 AEDT
   workflow_dispatch:
     inputs:
       slot:
