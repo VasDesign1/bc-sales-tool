@@ -77,17 +77,19 @@ function melbourneNow() {
              hhmm: g("hour") + ":" + g("minute") };
 }
 const SLOTS = { "0700": 7 * 60, "1200": 12 * 60, "1630": 16 * 60 + 30 };
+// Every firing publishes — no run is wasted. GitHub crons run hours late
+// (the noon ones were landing ~15:00 Melbourne, and nearest-slot logic filed
+// them into the 1630 bin, starving 1200 for days). Rule: file the capture
+// into the most recent slot of the day. The menu always shows the REAL
+// capture time, so late captures are honestly labeled.
+//   06:00-10:59 → 0700 · 11:00-15:29 → 1200 · 15:30 onward → 1630
+//   00:00-05:59 → 1630 (overnight straggler = freshest data for the arvo bin)
 function detectSlot(mel) {
-    let best = null, bestDiff = 1e9;
-    for (const [slot, mins] of Object.entries(SLOTS)) {
-        const d = Math.abs(mel.minutes - mins);
-        if (d < bestDiff) { bestDiff = d; best = slot; }
-    }
-    // GitHub crons routinely fire 1-2h late (worst at top of the hour), so
-    // accept anything within 2h of a slot — the menu shows the REAL capture
-    // time, so a late capture is honestly labeled. The DST-twin cron (60 min
-    // off) now also runs; harmless, the on-time firing overwrites it.
-    return bestDiff <= 120 ? best : null;
+    const m = mel.minutes;
+    if (m >= 15 * 60 + 30) return "1630";
+    if (m >= 11 * 60) return "1200";
+    if (m >= 6 * 60) return "0700";
+    return "1630";
 }
 
 // ---------- ISO date helpers (Melbourne-anchored) ----------
