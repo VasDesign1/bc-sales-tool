@@ -1644,7 +1644,7 @@
                 <button class="btn btn-primary" id="loadBtn" disabled>Load sales</button>
                 <span style="position:relative; display:inline-block;">
                     <button class="btn btn-primary" id="loadLookupBtn"
-                        title="Fast lookup: opens pre-loaded snapshots of the last 12 months of sales, captured automatically at 7:00 AM, 12:00 and 4:30 PM Melbourne time. The whole tool works on the chosen snapshot in a few seconds — no sign-in needed, just the snapshot passphrase (asked once per device). Use Load sales for live, right-now data or custom ranges.">Fast lookup ▾</button>
+                        title="Fast lookup: opens pre-loaded snapshots of the last 12 months of sales, captured automatically at 7:00 AM, 12:00 and 4:30 PM Melbourne time. The whole tool works on the chosen snapshot in a few seconds — uses your Microsoft sign-in to fetch them from the Vic Air SharePoint, plus the snapshot passphrase (asked once per device). Use Load sales for live, right-now data or custom ranges.">Fast lookup ▾</button>
                     <div id="loadLookupMenu" style="display:none; position:absolute; top:calc(100% + 6px); left:0; z-index:100;
                         background:#fff; border:1px solid #d6d8eb; border-radius:10px; box-shadow:0 6px 24px rgba(26,35,126,0.18);
                         min-width:250px; overflow:hidden; color:#2c2f4a;">
@@ -3776,6 +3776,47 @@ async function bcGetToken() {
     }
     const result = await bcMsalInstance.loginPopup({ scopes: BC_SCOPES });
     bcAccessToken = result.accessToken; return result.accessToken;
+}
+// Microsoft Graph token for reading the snapshots from SharePoint. Same
+// MSAL account as Business Central; Graph is a separate resource so it is
+// a separate (silently cached) token. Files.Read.All is admin-consented
+// tenant-wide, so no extra prompt for users who are already signed in.
+async function graphGetToken() {
+    initMsal();
+    const accounts = bcMsalInstance.getAllAccounts();
+    if (accounts.length > 0) {
+        try {
+            const r = await bcMsalInstance.acquireTokenSilent({ scopes: GRAPH_SCOPES, account: accounts[0] });
+            return r.accessToken;
+        } catch (e) { /* fall through to interactive */ }
+    }
+    const r = await bcMsalInstance.acquireTokenPopup({ scopes: GRAPH_SCOPES });
+    return r.accessToken;
+}
+const GRAPH_API = "https://graph.microsoft.com/v1.0";
+function spEncPath(p) { return p.split("/").filter(Boolean).map(encodeURIComponent).join("/"); }
+async function spDriveId(token) {
+    const cached = sessionStorage.getItem("spDriveId:" + SP_CONFIG.host);
+    if (cached) return cached;
+    const h = { Authorization: "Bearer " + token };
+    const site = await fetch(GRAPH_API + "/sites/" + SP_CONFIG.host + ":/?$select=id", { headers: h });
+    if (!site.ok) throw new Error("SharePoint site lookup failed (HTTP " + site.status + ")");
+    const drive = await fetch(GRAPH_API + "/sites/" + (await site.json()).id + "/drive?$select=id", { headers: h });
+    if (!drive.ok) throw new Error("SharePoint library lookup failed (HTTP " + drive.status + ")");
+    const id = (await drive.json()).id;
+    sessionStorage.setItem("spDriveId:" + SP_CONFIG.host, id);
+    return id;
+}
+// Fetch a file from the snapshot folder as the signed-in user. Graph
+// answers /content with a 302 to a short-lived pre-authenticated URL;
+// the browser follows it (dropping the bearer header cross-origin).
+async function spFetch(name) {
+    const token = await graphGetToken();
+    const driveId = await spDriveId(token);
+    const url = GRAPH_API + "/drives/" + driveId + "/root:/" + spEncPath(SP_CONFIG.folder + "/" + name) + ":/content";
+    const resp = await fetch(url, { headers: { Authorization: "Bearer " + token }, cache: "no-store" });
+    if (resp.status === 403) throw new Error("your account has no access to the snapshot folder on SharePoint");
+    return resp;
 }
 function updateBCProgress(label, detail) {
     const el = document.getElementById("bcProgressText");
@@ -14352,10 +14393,11 @@ function ingestValueEntries(valueEntries) {
 // FAST LOOKUP — pre-built encrypted snapshots (7:00 / 12:00 / 4:30
 // Melbourne, produced by .github/workflows/snapshot.yml). Whole-tool
 // hydration: every tab / filter / drill works on the snapshot data
-// exactly as after a live 12-month Load sales. No BC sign-in needed —
-// just the snapshot passphrase, remembered per device.
+// exactly as after a live 12-month Load sales. Files live in the Vic
+// Air SharePoint (SP_CONFIG in bc-fetchers.js) and are fetched through
+// Microsoft Graph with the signed-in user's token, then unlocked with
+// the snapshot passphrase, remembered per device.
 // ============================================================
-const SNAPSHOT_BASE = "https://raw.githubusercontent.com/VasDesign1/bc-sales-tool/snapshots/";
 const SNAPSHOT_SLOTS = [
     { slot: "0700", label: "7:00 AM" },
     { slot: "1200", label: "12:00 PM" },
@@ -14370,9 +14412,15 @@ async function populateLookupMenu() {
     const body = document.getElementById("loadLookupMenuBody");
     body.innerHTML = '<div style="padding:10px 14px; opacity:0.6;">Checking snapshots…</div>';
     const today = melbourneTodayISO();
+    // Sign-in / access problems surface once, not as three "no snapshot yet" rows.
+    try { await spDriveId(await graphGetToken()); }
+    catch (e) {
+        body.innerHTML = '<div style="padding:10px 14px; color:#c62828;">Cannot reach the snapshot folder: ' + escapeHtml(e.message || String(e)) + '</div>';
+        return;
+    }
     const rows = await Promise.all(SNAPSHOT_SLOTS.map(async s => {
         try {
-            const r = await fetch(SNAPSHOT_BASE + s.slot + ".meta.json", { cache: "no-store" });
+            const r = await spFetch(s.slot + ".meta.json");
             return { ...s, meta: r.ok ? await r.json() : null };
         } catch (e) { return { ...s, meta: null }; }
     }));
@@ -14407,7 +14455,7 @@ async function decryptSnapshot(buf, passphrase) {
     const bytes = new Uint8Array(buf);
     const salt = bytes.slice(0, 16), iv = bytes.slice(16, 28), ct = bytes.slice(28);
     const keyMat = await crypto.subtle.importKey("raw", new TextEncoder().encode(passphrase), "PBKDF2", false, ["deriveKey"]);
-    const key = await crypto.subtle.deriveKey({ name: "PBKDF2", salt, iterations: 150000, hash: "SHA-256" },
+    const key = await crypto.subtle.deriveKey({ name: "PBKDF2", salt, iterations: 600000, hash: "SHA-256" },   // keep in sync with scripts/snapshot.js
         keyMat, { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
     const gz = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ct);
     const stream = new Blob([gz]).stream().pipeThrough(new DecompressionStream("gzip"));
@@ -14419,7 +14467,7 @@ async function loadSnapshot(slot) {
     btn.disabled = true; btn.textContent = "Loading…";
     try {
         updateBCProgress("Fast lookup", "downloading snapshot…");
-        const resp = await fetch(SNAPSHOT_BASE + slot + ".bin", { cache: "no-store" });
+        const resp = await spFetch(slot + ".bin");
         if (!resp.ok) throw new Error("snapshot download failed (HTTP " + resp.status + ")");
         const buf = await resp.arrayBuffer();
         updateBCProgress("Fast lookup", "unlocking…");

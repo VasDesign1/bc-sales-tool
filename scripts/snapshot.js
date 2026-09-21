@@ -12,10 +12,13 @@
 //                                                (empty = auto-detect from
 //                                                 Melbourne wall clock)
 //
-// Output (./snapshot-out/):
+// Output — uploaded to SharePoint (scripts/sp-upload.js → SP_CONFIG in
+// bc-fetchers.js); a local copy also lands in ./snapshot-out/ for the
+// Actions log:
 //   <slot>.bin        salt(16) | iv(12) | AES-256-GCM ciphertext||tag
 //                     of gzip(JSON payload) — tag last so browser
-//                     WebCrypto can decrypt the ct||tag block directly
+//                     WebCrypto can decrypt the ct||tag block directly.
+//                     Key = PBKDF2-SHA256(passphrase, salt, 600,000 iters).
 //   <slot>.meta.json  { slot, fetchedAtUtc, fetchedAtMelbourne, from,
 //                       to, bytes, formatVersion } (plaintext, no data)
 // ============================================================
@@ -63,6 +66,8 @@ global.bcGetToken = async function bcGetToken() {
 };
 
 const F = require(path.join(__dirname, "..", "bc-fetchers.js"));
+const SP = require(path.join(__dirname, "sp-upload.js"));
+const PBKDF2_ITERATIONS = 600000;   // keep in sync with decryptSnapshot() in index.html
 
 // ---------- Melbourne wall clock + slot detection ----------
 function melbourneNow() {
@@ -194,7 +199,7 @@ function isoAddDays(iso, days) {
     const gz = zlib.gzipSync(json, { level: 9 });
     const salt = crypto.randomBytes(16);
     const iv = crypto.randomBytes(12);
-    const key = crypto.pbkdf2Sync(PASSPHRASE, salt, 150000, 32, "sha256");
+    const key = crypto.pbkdf2Sync(PASSPHRASE, salt, PBKDF2_ITERATIONS, 32, "sha256");
     const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
     const ct = Buffer.concat([cipher.update(gz), cipher.final(), cipher.getAuthTag()]);
     const bin = Buffer.concat([salt, iv, ct]);
@@ -202,16 +207,21 @@ function isoAddDays(iso, days) {
     const outDir = path.join(__dirname, "..", "snapshot-out");
     fs.mkdirSync(outDir, { recursive: true });
     fs.writeFileSync(path.join(outDir, slot + ".bin"), bin);
-    fs.writeFileSync(path.join(outDir, slot + ".meta.json"), JSON.stringify({
+    const metaJson = JSON.stringify({
         slot,
         fetchedAtUtc: payload.meta.fetchedAtUtc,
         fetchedAtMelbourne: payload.meta.fetchedAtMelbourne,
         from, to,
         bytes: bin.length,
         formatVersion: 1,
-    }, null, 2));
+    }, null, 2);
+    fs.writeFileSync(path.join(outDir, slot + ".meta.json"), metaJson);
     console.log("Wrote " + slot + ".bin (" + (bin.length / 1048576).toFixed(2) + " MB, "
         + (json.length / 1048576).toFixed(1) + " MB raw JSON)");
+
+    console.log("Publishing to SharePoint…");
+    await SP.publishSnapshot(slot, bin, metaJson);
+    console.log("Published " + slot + " to SharePoint");
 })().catch(e => {
     console.error("SNAPSHOT FAILED:", e.message);
     process.exit(1);

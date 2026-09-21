@@ -19,9 +19,16 @@ on:
         description: "Force slot (0700 / 1200 / 1630); empty = auto-detect"
         required: false
         default: ""
+      selftest:
+        description: "Only test the SharePoint upload/download/delete round-trip (no snapshot)"
+        type: boolean
+        required: false
+        default: false
 
+# Snapshots are published to SharePoint via Microsoft Graph, not to a
+# branch — the workflow never needs to write to the repo.
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: sales-snapshot
@@ -38,7 +45,16 @@ jobs:
         with:
           node-version: 20
 
-      - name: Build snapshot
+      - name: SharePoint self-test
+        if: ${{ github.event.inputs.selftest == 'true' }}
+        env:
+          BC_CLIENT_ID: ${{ secrets.BC_CLIENT_ID }}
+          BC_TENANT: ${{ secrets.BC_TENANT }}
+          BC_REFRESH_TOKEN: ${{ secrets.BC_REFRESH_TOKEN }}
+        run: node scripts/sp-upload.js --selftest
+
+      - name: Build snapshot and publish to SharePoint
+        if: ${{ github.event.inputs.selftest != 'true' }}
         env:
           BC_CLIENT_ID: ${{ secrets.BC_CLIENT_ID }}
           BC_TENANT: ${{ secrets.BC_TENANT }}
@@ -46,27 +62,3 @@ jobs:
           SNAPSHOT_PASSPHRASE: ${{ secrets.SNAPSHOT_PASSPHRASE }}
           SLOT: ${{ github.event.inputs.slot }}
         run: node scripts/snapshot.js
-
-      - name: Publish to snapshots branch
-        run: |
-          if [ ! -d snapshot-out ] || [ -z "$(ls -A snapshot-out)" ]; then
-            echo "No snapshot produced (off-slot firing) — nothing to publish."
-            exit 0
-          fi
-          mkdir pub && cd pub
-          git init -q -b snapshots
-          git config user.name "sales-snapshot-bot"
-          git config user.email "actions@github.com"
-          git remote add origin "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git"
-          # Carry over the other slots' existing files so each run only
-          # replaces its own slot, while force-pushing a single root
-          # commit keeps the branch history (and repo size) flat.
-          if git fetch -q --depth 1 origin snapshots 2>/dev/null; then
-            git checkout -q FETCH_HEAD -- . 2>/dev/null || true
-            git reset -q
-          fi
-          cp ../snapshot-out/* .
-          git add -A
-          git commit -q -m "snapshot $(date -u +%FT%TZ)"
-          git push -q --force origin HEAD:snapshots
-          echo "Published: $(ls *.bin 2>/dev/null | tr '\n' ' ')"
