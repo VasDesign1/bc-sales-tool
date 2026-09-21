@@ -27,14 +27,15 @@ const BC_API_URL  = BC_API_BASE + "/api/v2.0";
 const BC_ODATA_URL = BC_API_BASE + "/ODataV4";
 const BC_SCOPES   = ["https://api.businesscentral.dynamics.com/.default"];
 
-// SharePoint home of the encrypted Fast-lookup snapshots. Written by the
+// SharePoint home of the encrypted Fast-lookup snapshots (snapshots/ sub-
+// folder of the tool folder). Written by the
 // snapshot robot (scripts/sp-upload.js, delegated refresh token) and read
 // by the browser through Microsoft Graph with the signed-in user's token —
 // Files.Read.All on the "VicAir Forecast Tool" app registration. Knowing
 // the path grants nothing: Graph enforces the folder's SharePoint ACL.
 const SP_CONFIG = {
     host:   "vicairptyltd.sharepoint.com",
-    folder: "Vic Air Shared Docs Folder/03.0 Corporate/3.05 IT and Communications/bc-tools/sales-tool/snapshots",
+    folder: "Vic Air Shared Docs Folder/03.0 Corporate/3.05 IT and Communications/bc-tools/sales-tool",
 };
 const GRAPH_SCOPES = ["https://graph.microsoft.com/Files.Read.All"];
 

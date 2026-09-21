@@ -158,15 +158,15 @@ async function deleteFile(driveId, itemPath) {
 // never advertises a slot whose bytes are still uploading.
 async function publishSnapshot(slot, bin, metaJson) {
     const driveId = await resolveDrive(SP_CONFIG.host);
-    await uploadFile(driveId, SP_CONFIG.folder + "/" + slot + ".bin", bin);
-    await uploadFile(driveId, SP_CONFIG.folder + "/" + slot + ".meta.json", Buffer.from(metaJson, "utf8"));
+    await uploadFile(driveId, SP_CONFIG.folder + "/snapshots/" + slot + ".bin", bin);
+    await uploadFile(driveId, SP_CONFIG.folder + "/snapshots/" + slot + ".meta.json", Buffer.from(metaJson, "utf8"));
 }
 
 async function selftest() {
     if (!TENANT || !CLIENT_ID || !REFRESH_TOKEN) throw new Error("Missing env: BC_TENANT, BC_CLIENT_ID, BC_REFRESH_TOKEN");
     console.log("SharePoint self-test → " + SP_CONFIG.host + " / " + SP_CONFIG.folder);
     const driveId = await resolveDrive(SP_CONFIG.host);
-    const name = SP_CONFIG.folder + "/_selftest.txt";
+    const name = SP_CONFIG.folder + "/snapshots/_selftest.txt";
     const marker = Buffer.from("selftest " + new Date().toISOString() + "\n", "utf8");
     await uploadFile(driveId, name, marker);
     const back = await downloadFile(driveId, name);

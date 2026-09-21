@@ -14420,7 +14420,7 @@ async function populateLookupMenu() {
     }
     const rows = await Promise.all(SNAPSHOT_SLOTS.map(async s => {
         try {
-            const r = await spFetch(s.slot + ".meta.json");
+            const r = await spFetch("snapshots/" + s.slot + ".meta.json");
             return { ...s, meta: r.ok ? await r.json() : null };
         } catch (e) { return { ...s, meta: null }; }
     }));
@@ -14467,7 +14467,7 @@ async function loadSnapshot(slot) {
     btn.disabled = true; btn.textContent = "Loading…";
     try {
         updateBCProgress("Fast lookup", "downloading snapshot…");
-        const resp = await spFetch(slot + ".bin");
+        const resp = await spFetch("snapshots/" + slot + ".bin");
         if (!resp.ok) throw new Error("snapshot download failed (HTTP " + resp.status + ")");
         const buf = await resp.arrayBuffer();
         updateBCProgress("Fast lookup", "unlocking…");
