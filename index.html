@@ -1716,6 +1716,12 @@
                         <div class="combo-popup" id="itemFilterPopup"></div>
                     </div>
                 </div>
+                <div class="field" title="Rental income (G/L line 7005, e.g. the monthly Hunter Leisure rental) is hidden from every figure by default. Tick to include it.">
+                    <label for="includeRentalsToggle">Rentals</label>
+                    <label style="display:flex; align-items:center; gap:6px; cursor:pointer; padding:7px 0; font-size:13px;">
+                        <input type="checkbox" id="includeRentalsToggle" style="cursor:pointer;"> Include
+                    </label>
+                </div>
                 <div class="field" title="Hide documents modified after this timestamp — useful for matching a stale Power BI refresh">
                     <label for="snapshotAsOf">Compare as of</label>
                     <input type="datetime-local" id="snapshotAsOf">
@@ -3905,6 +3911,11 @@ const state = {
     custFilter: "", itemFilter: "", eomFilter: "", customerItemFilter: "",
     filters: { location: "", salesperson: "", customer: "", customerName: "", item: "", itemDesc: "", status: "" },
     snapshotAsOf: null,
+    // Rentals (G/L line 7005) are excluded from all figures by default;
+    // the toolbar toggle flips this. Remembered per device.
+    includeRentals: (function () {
+        try { return localStorage.getItem("includeRentals") === "1"; } catch (e) { return false; }
+    })(),
     // Per-chart view mode: { chartId: "gross" | "adjusted" }. Loaded from
     // localStorage at startup; chartViewMode(id) reads with a "gross" fallback.
     chartViewModes: {},
@@ -4215,7 +4226,14 @@ function buildCostMaps(iles) {
 // This is what BC's Sales Value Entries (and PBI's "Sales (LCY)" measure)
 // effectively use. Using just amountExcludingTax over-counts sales for any
 // invoice that had an invoice-level discount applied.
+// Rentals: when the toolbar toggle hides rentals, this returns 0 for
+// rental lines — a deliberate blanket so every revenue sum in the app
+// (including chart-local credit-memo loops that don't run through
+// lineMatchesFilters) excludes them consistently. Structural exclusion
+// (row visibility, invoice counts) is handled by lineMatchesFilters /
+// invoiceMatchesFilters; this covers the dollars.
 function lineNetAmount(line) {
+    if (!state.includeRentals && isRentalLine(line)) return 0;
     return num(line.amountExcludingTax) - num(line.invoiceDiscountAllocation);
 }
 // Count unique invoices in state.filtered that contain at least one
@@ -4452,10 +4470,26 @@ function lineCostNonInvForDoc(_dt, _no, itemNumber) { return state.itemAvgCostNo
 // ============================================================
 // FILTERING
 // ============================================================
+// Rental income lines — hidden from every figure unless the "Include
+// rentals" toggle is on. Identified by line code: G/L account 7005
+// ("Rental for September" etc., the monthly Hunter Leisure rental).
+// Add further codes here if more rental accounts appear.
+const RENTAL_LINE_CODES = new Set(["7005"]);
+function isRentalLine(ln) {
+    return RENTAL_LINE_CODES.has(String(ln.lineObjectNumber || ln.itemId || ""));
+}
+// A document that consists solely of rental lines (needs ≥1 line to
+// qualify — line-less docs are never treated as rental).
+function docIsAllRental(lines) {
+    return (lines || []).length > 0 && lines.every(isRentalLine);
+}
 function invoiceMatchesFilters(inv) {
     if (state.filters.salesperson && (inv.salesperson || "(unassigned)") !== state.filters.salesperson) return false;
     if (state.filters.customer && (inv.customerNumber || "") !== state.filters.customer) return false;
     if (state.filters.status && (inv.status || "") !== state.filters.status) return false;
+    // Rentals hidden: an invoice made up entirely of rental lines drops
+    // out of the invoice count / outstanding KPIs, not just its dollars.
+    if (!state.includeRentals && docIsAllRental(inv.salesInvoiceLines)) return false;
     if (state.filters.location || state.filters.item) {
         return (inv.salesInvoiceLines || []).some(ln => {
             if (state.filters.location && locationCode(ln.locationId) !== state.filters.location) return false;
@@ -4466,8 +4500,10 @@ function invoiceMatchesFilters(inv) {
     return true;
 }
 // Single source of truth for "should this line contribute to totals" — covers
-// both the location filter and the item filter for line-level aggregations.
+// the location filter, the item filter, and the rentals toggle for
+// line-level aggregations.
 function lineMatchesFilters(ln) {
+    if (!state.includeRentals && isRentalLine(ln)) return false;
     if (state.filters.location && locationCode(ln.locationId) !== state.filters.location) return false;
     if (state.filters.item && (ln.lineObjectNumber || ln.itemId || "") !== state.filters.item) return false;
     return true;
@@ -5016,6 +5052,7 @@ function _returnsCacheKey() {
         state.filters.customer,
         state.filters.location,
         state.filters.item,
+        state.includeRentals,
         (state.creditMemos || []).length,
     ]);
 }
@@ -5140,11 +5177,15 @@ function getAdjustments(dateOverride, visibleItems) {
             cmQty    += num(ln.quantity);
             cmCost   += totalCostFromLine(ln, 1, cm.postingDate, cm.customerNumber, cm.number);
         }
-        // Only fall back to the header total when NO line-level filter
-        // is active — otherwise the fallback undoes the whole point of
-        // the item scoping (would add back the un-scoped header total).
-        if (!matchedAny && !visibleItems && !state.filters.item && !state.filters.location
-            && !cmAmount && cm.totalAmountExcludingTax != null) {
+        // Header-total fallback is ONLY for summary credit memos that
+        // carry no line detail at all. If lines exist but were all
+        // filtered out (item / location scope, visible-items scope, or
+        // the rentals toggle), falling back would add the un-scoped
+        // header total straight back in — e.g. the $11k monthly rental
+        // credit reappearing with rentals hidden.
+        if (!matchedAny && (cm.salesCreditMemoLines || []).length === 0
+            && !visibleItems && !state.filters.item && !state.filters.location
+            && cm.totalAmountExcludingTax != null) {
             cmAmount = num(cm.totalAmountExcludingTax);
         }
         credit += cmAmount; qty += cmQty; cost += cmCost;
@@ -11986,6 +12027,10 @@ function renderReturns() {
     }
 
     for (const cm of cms) {
+        // Rentals hidden: skip credit memos that are purely the rental
+        // line (e.g. "7005 — Rental for September") so they don't appear
+        // in the table or fall back to their header total below.
+        if (!state.includeRentals && docIsAllRental(cm.salesCreditMemoLines)) continue;
         let cmAmount = 0, cmQty = 0, cmCost = 0;
         for (const ln of (cm.salesCreditMemoLines || [])) {
             if (!lineMatchesFilters(ln)) continue;
@@ -11999,7 +12044,9 @@ function renderReturns() {
             if (ln.description) ent.description = ln.description;
             byItem.set(itemNo, ent);
         }
-        if (!cmAmount && cm.totalAmountExcludingTax != null) cmAmount = num(cm.totalAmountExcludingTax);
+        // Header fallback only for CMs with no line detail at all — see
+        // getAdjustments for the reasoning.
+        if (!cmAmount && (cm.salesCreditMemoLines || []).length === 0 && cm.totalAmountExcludingTax != null) cmAmount = num(cm.totalAmountExcludingTax);
         totalCredit += cmAmount;
         totalQty += cmQty;
         // GP impact = credit revenue lost - cost returned (cost flows back to stock, so a "saving")
@@ -14066,9 +14113,11 @@ function buildBranchDrillTree(_invoices) {
     const docs = allPostedDocs().filter(docMatchesFilters);
     for (const d of docs) {
         for (const ln of d.lines) {
+            // lineMatchesFilters covers location + item + rentals toggle —
+            // the previous inline location/item checks bypassed the
+            // rentals exclusion.
+            if (!lineMatchesFilters(ln)) continue;
             const locCode = locationCode(ln.locationId);
-            if (state.filters.location && locCode !== state.filters.location) continue;
-            if (state.filters.item && (ln.lineObjectNumber || ln.itemId || "") !== state.filters.item) continue;
             let loc = locMap.get(locCode);
             if (!loc) { loc = _newNode("bt-loc-" + locCode, locCode); locMap.set(locCode, loc); dtByLoc.set(locCode, new Map()); }
             let dt = dtByLoc.get(locCode).get(d.type);
@@ -14944,6 +14993,13 @@ function wireEvents() {
         }
     });
 
+    const rentalsToggle = document.getElementById("includeRentalsToggle");
+    rentalsToggle.checked = state.includeRentals;
+    rentalsToggle.addEventListener("change", () => {
+        state.includeRentals = rentalsToggle.checked;
+        try { localStorage.setItem("includeRentals", state.includeRentals ? "1" : "0"); } catch (e) {}
+        if (state.invoices && state.invoices.length) { rebuildFiltered(); renderCurrentTab(); }
+    });
     document.getElementById("locationFilter").addEventListener("change", e => {
         state.filters.location = e.target.value; rebuildFiltered(); renderCurrentTab();
     });
