@@ -3815,7 +3815,8 @@ async function spFetch(name) {
     const driveId = await spDriveId(token);
     const url = GRAPH_API + "/drives/" + driveId + "/root:/" + spEncPath(SP_CONFIG.folder + "/" + name) + ":/content";
     const resp = await fetch(url, { headers: { Authorization: "Bearer " + token }, cache: "no-store" });
-    if (resp.status === 403) throw new Error("your account has no access to the snapshot folder on SharePoint");
+    // SharePoint hides files the user cannot see: Graph answers 404, not 403.
+    if (resp.status === 403 || resp.status === 404) throw new Error("your account has no access to the snapshot folder on SharePoint");
     return resp;
 }
 function updateBCProgress(label, detail) {
