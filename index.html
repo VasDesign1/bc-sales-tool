@@ -1716,11 +1716,18 @@
                         <div class="combo-popup" id="itemFilterPopup"></div>
                     </div>
                 </div>
-                <div class="field" title="Rental income (G/L line 7005, e.g. the monthly Hunter Leisure rental) is hidden from every figure by default. Tick to include it.">
+                <div class="field" title="Rental income (G/L line 7005, e.g. the monthly Hunter Leisure rental) is hidden from every figure by default. Switch on to include it.">
                     <label for="includeRentalsToggle">Rentals</label>
-                    <label style="display:flex; align-items:center; gap:6px; cursor:pointer; padding:7px 0; font-size:13px;">
-                        <input type="checkbox" id="includeRentalsToggle" style="cursor:pointer;"> Include
-                    </label>
+                    <div style="display:flex; align-items:center; gap:7px; padding:8px 0;">
+                        <button type="button" id="includeRentalsToggle" aria-pressed="false"
+                            style="width:34px; height:18px; min-width:34px; border-radius:9px; border:1px solid rgba(0,0,0,0.25);
+                                   background:#c2c2bb; position:relative; cursor:pointer; padding:0; display:inline-block; vertical-align:middle;">
+                            <span id="includeRentalsKnob"
+                                style="position:absolute; top:1px; left:1px; width:14px; height:14px; border-radius:50%;
+                                       background:#fff; transition:left 0.15s ease; box-shadow:0 1px 3px rgba(0,0,0,0.35);"></span>
+                        </button>
+                        <span id="includeRentalsState" style="font-size:11px; opacity:0.65;">off</span>
+                    </div>
                 </div>
                 <div class="field" title="Hide documents modified after this timestamp — useful for matching a stale Power BI refresh">
                     <label for="snapshotAsOf">Compare as of</label>
@@ -14994,10 +15001,18 @@ function wireEvents() {
     });
 
     const rentalsToggle = document.getElementById("includeRentalsToggle");
-    rentalsToggle.checked = state.includeRentals;
-    rentalsToggle.addEventListener("change", () => {
-        state.includeRentals = rentalsToggle.checked;
+    const paintRentalsToggle = () => {
+        const on = state.includeRentals;
+        rentalsToggle.style.background = on ? "#43a047" : "#c2c2bb";
+        rentalsToggle.setAttribute("aria-pressed", on ? "true" : "false");
+        document.getElementById("includeRentalsKnob").style.left = on ? "17px" : "1px";
+        document.getElementById("includeRentalsState").textContent = on ? "included" : "off";
+    };
+    paintRentalsToggle();
+    rentalsToggle.addEventListener("click", () => {
+        state.includeRentals = !state.includeRentals;
         try { localStorage.setItem("includeRentals", state.includeRentals ? "1" : "0"); } catch (e) {}
+        paintRentalsToggle();
         if (state.invoices && state.invoices.length) { rebuildFiltered(); renderCurrentTab(); }
     });
     document.getElementById("locationFilter").addEventListener("change", e => {
