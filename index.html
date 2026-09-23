@@ -3671,17 +3671,17 @@
                 </div>
                 <div class="panel">
                     <div class="panel-header"><h2>Profit &amp; Loss statement <span id="pnlStmtTitle" style="font-weight:400; color:#6e72a6;"></span></h2></div>
-                    <div class="hint" style="margin:0 0 8px;">Drill down: click a category to see its accounts, click an account to see its ledger entries. Net is shown the P&amp;L way: income = credit − debit, costs = debit − credit. ↗ opens the entries in Wiise.</div>
+                    <div class="hint" style="margin:0 0 8px;">Drill down: click a category to see its accounts, click an account to see its ledger entries. Click a column header to sort the accounts inside each section — the sections themselves stay in P&amp;L order. Net is shown the P&amp;L way: income = credit − debit, costs = debit − credit. ↗ opens the entries in Wiise.</div>
                     <div class="table-scroll">
                         <table id="pnlStmtTable">
                             <thead><tr>
-                                <th>Account</th>
-                                <th>Description</th>
-                                <th class="num">Entries</th>
-                                <th class="num">Debit</th>
-                                <th class="num">Credit</th>
-                                <th class="num">Net</th>
-                                <th class="num">% of income</th>
+                                <th data-sort="no" title="Sort the accounts inside each section (sections stay in P&amp;L order)">Account</th>
+                                <th data-sort="name" title="Sort the accounts inside each section">Description</th>
+                                <th class="num" data-sort="count" title="Sort the accounts inside each section">Entries</th>
+                                <th class="num" data-sort="debit" title="Sort the accounts inside each section">Debit</th>
+                                <th class="num" data-sort="credit" title="Sort the accounts inside each section">Credit</th>
+                                <th class="num" data-sort="net" title="Sort the accounts inside each section">Net</th>
+                                <th class="num" data-sort="net" title="Sort the accounts inside each section (same order as Net)">% of income</th>
                             </tr></thead>
                             <tbody></tbody>
                         </table>
@@ -14642,7 +14642,7 @@ function applyMonth(yyyymm) {
 // ============================================================
 state.gl = { accounts: [], accountsByNo: new Map(), entries: [], windows: [], from: "", to: "",
              loadedAt: null, openGroups: new Set(), openAccounts: new Set(),
-             chartPrefs: null, mapSort: { key: "no", dir: "asc" } };
+             chartPrefs: null, mapSort: { key: "no", dir: "asc" }, stmtSort: { key: "no", dir: "asc" } };
 
 const PNL_GROUP_ORDER = ["Income", "Cost of Goods Sold", "Expense", "Unclassified", "Balance sheet"];
 const PNL_COST_GROUPS = new Set(["Cost of Goods Sold", "Expense"]);
@@ -14880,7 +14880,9 @@ function renderPnl() {
             + (g === "Unclassified" ? ' <span style="color:#f57c00;">⚠ no Wiise category</span>' : "") + "</td>"
             + '<td class="num">' + fmtInt(gCount) + '</td><td class="num">' + fmtMoneyFull(gDebit) + '</td><td class="num">' + fmtMoneyFull(gCredit) + "</td>"
             + '<td class="num ' + (groupNet[g] >= 0 ? "pos" : "neg") + '">' + fmtMoneyFull(groupNet[g]) + '</td><td class="num">' + pctInc(groupNet[g]) + "</td></tr>");
-        if (gOpen) for (const r of gRows) {
+        // Sections stay in P&L order; only the accounts inside a section sort.
+        const gSorted = sortRowsBy(gRows.slice(), state.gl.stmtSort);
+        if (gOpen) for (const r of gSorted) {
             const open = state.gl.openAccounts.has(r.no);
             html.push('<tr data-pnl-acct="' + escapeAttr(r.no) + '" title="Wiise category: ' + escapeAttr(r.bcCategory || "(blank)") + ' — click to ' + (open ? "hide" : "show") + ' the ledger entries" style="' + treeRowStyle(1) + ' font-weight:400; cursor:pointer;">'
                 + '<td style="padding-left:24px; white-space:nowrap;">' + (open ? "▾ " : "▸ ") + escapeHtml(r.no) + pnlWiiseLink("G/L Account No.", r.no, "Open account " + r.no + " entries in Wiise") + "</td>"
@@ -14913,6 +14915,7 @@ function renderPnl() {
     html.push('<tr title="Assets / Liabilities / Equity accounts — never part of the P&L, listed in the account map" style="color:#888; font-size:12px;"><td colspan="2">Balance-sheet accounts in this view (excluded from P&L)</td><td class="num">' + fmtInt(bs.reduce((s, r) => s + r.count, 0)) + '</td><td class="num">' + fmtMoneyFull(bs.reduce((s, r) => s + r.debit, 0)) + '</td><td class="num">' + fmtMoneyFull(bs.reduce((s, r) => s + r.credit, 0)) + '</td><td class="num"></td><td></td></tr>');
     html.push('<tr title="Every entry in the range, all accounts: total debits minus total credits. A balanced ledger gives $0.00." style="color:#888; font-size:12px;"><td colspan="2">Ledger check · all ' + fmtInt(t.count) + ' entries: debits − credits</td><td class="num"></td><td class="num">' + fmtMoneyFull(t.debit) + '</td><td class="num">' + fmtMoneyFull(t.credit) + '</td><td class="num ' + (Math.abs(diff) < 0.005 ? "pos" : "neg") + '">' + fmtMoneyFull(diff) + (Math.abs(diff) < 0.005 ? " ✓" : "") + "</td><td></td></tr>");
     stmtBody.innerHTML = html.join("");
+    paintSortHeaders("#pnlStmtTable", state.gl.stmtSort);
 
     // Monthly summary (every month held, independent of the toolbar range)
     const months = [...new Set(state.gl.entries.map(e => e.postingDate.slice(0, 7)))].sort();
@@ -15154,6 +15157,7 @@ function pnlExportCsv() {
         pnlGoToMonth(tr.dataset.pnlMonth);
     });
     attachSortHandlers("#pnlMapTable", state.gl.mapSort, renderPnlMap, new Set(["no", "name", "bcCategory", "group"]));
+    attachSortHandlers("#pnlStmtTable", state.gl.stmtSort, () => { if (state.gl.loadedAt) renderPnl(); }, new Set(["no", "name"]));
 })();
 
 // The "Targets & Run Rate" and "Lists" nav groups are visible only to
