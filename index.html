@@ -10440,7 +10440,7 @@ function renderEOM() {
     tbody.innerHTML = rows.slice(0, 2000).map(r => `
         <tr>
             <td>${escapeHtml(r.customer)}</td>
-            <td>${escapeHtml(r.invoiceNumber)}</td>
+            <td>${escapeHtml(r.invoiceNumber)}${wiiseDocLinkHtml("Posted Sales Invoice", r.invoiceNumber)}</td>
             <td>${escapeHtml(r.salesperson)}</td>
             <td>${escapeHtml(r.branch)}</td>
             <td>${escapeHtml(r.itemCategory)}</td>
@@ -12144,7 +12144,7 @@ function renderReturns() {
         <tr>
             <td>${escapeHtml(r.customer)}</td>
             <td>${escapeHtml(r.salesperson)}</td>
-            <td>${escapeHtml(r.number)}</td>
+            <td>${escapeHtml(r.number)}${wiiseDocLinkHtml("Posted Sales CR/Adj Note", r.number)}</td>
             <td>${fmtDate(r.postingDate)}</td>
             <td class="num">${fmtInt(r.qty)}</td>
             <td class="num neg">${fmtMoneyFull(-r.amount)}</td>
@@ -12865,6 +12865,15 @@ function bcDocLink(docType, docNo) {
     return "https://businesscentral.dynamics.com/" + BC_CONFIG.tenantId + "/" + BC_CONFIG.environment
         + "?page=" + page + "&filter=" + encodeURIComponent("'No.' IS '" + docNo + "'");
 }
+// Small ↗ anchor that opens the document in Wiise — used next to every
+// document number across the tool. stopPropagation so clicking the link
+// never triggers the row's own drill/expand behaviour.
+function wiiseDocLinkHtml(docType, docNo) {
+    if (!docNo) return "";
+    return ' <a href="' + escapeAttr(bcDocLink(docType, docNo)) + '" target="_blank" rel="noopener"'
+        + ' title="Open ' + escapeAttr(docNo) + ' in Wiise" onclick="event.stopPropagation()"'
+        + ' style="text-decoration:none; font-size:11px; opacity:0.7;">↗</a>';
+}
 function decompPopulateSelects() {
     const opts = Object.entries(DECOMP_DIMS).map(([k, v]) => `<option value="${escapeAttr(k)}">${escapeHtml(v.label)}</option>`).join("");
     for (let i = 1; i <= 5; i++) {
@@ -12985,9 +12994,7 @@ function renderDecomposition() {
         const bg = depth === 0 ? "background:#eef0fb; font-weight:700;"
                  : depth === 1 ? "background:#f7f8fd; font-weight:600;"
                  : depth === 2 ? "background:#fafbff;" : "";
-        const wiiseLink = node.docNo
-            ? ` <a href="${escapeAttr(bcDocLink(node.docType, node.docNo))}" target="_blank" rel="noopener" title="Open ${escapeAttr(node.docNo)} in Wiise" onclick="event.stopPropagation()" style="text-decoration:none; font-size:11px; opacity:0.7;">↗</a>`
-            : "";
+        const wiiseLink = wiiseDocLinkHtml(node.docType, node.docNo);
         acc.push(`<tr data-decomp-key="${escapeAttr(node.key)}" data-expandable="${expandable ? 1 : 0}" style="${bg}cursor:${expandable ? "pointer" : "default"};">
             <td>${pad}<span style="display:inline-block; width:14px; color:#3f51b5;">${arrow}</span> ${escapeHtml(node.label)}${wiiseLink}</td>
             <td class="num">${fmtMoneyFull(node.sales)}</td>
@@ -13088,7 +13095,7 @@ function renderCustomerInvoiceTable() {
     const tbody = document.querySelector("#customerInvoiceTable tbody");
     tbody.innerHTML = rows.map(inv => `
         <tr class="clickable" data-inv="${escapeAttr(inv.id)}">
-            <td>${escapeHtml(inv.number)}</td>
+            <td>${escapeHtml(inv.number)}${wiiseDocLinkHtml("Posted Sales Invoice", inv.number)}</td>
             <td>${fmtDate(inv.postingDate)}</td>
             <td>${statusBadge(inv.status)}</td>
             <td class="num">${fmtMoney2(num(inv.totalAmountExcludingTax))}</td>
@@ -13242,7 +13249,7 @@ function renderCiTable() {
     const tbody = document.querySelector("#ciInvoiceTable tbody");
     tbody.innerHTML = [...rows].sort((a, b) => a.postingDate < b.postingDate ? 1 : -1).map(r => `
         <tr class="clickable" data-inv="${escapeAttr(r.invoiceId)}">
-            <td>${escapeHtml(r.invoiceNumber)}</td>
+            <td>${escapeHtml(r.invoiceNumber)}${wiiseDocLinkHtml("Posted Sales Invoice", r.invoiceNumber)}</td>
             <td>${fmtDate(r.postingDate)}</td>
             <td class="num">${fmtInt(r.qty)}</td>
             <td class="num">${fmtMoney2(r.unitPrice)}</td>
@@ -13377,7 +13384,7 @@ function renderIdInvoiceTable() {
         <tr class="clickable" data-cust="${escapeAttr(r.customerNumber)}" data-inv-id="${escapeAttr(r.invoiceId)}">
             <td data-action="customer" style="cursor:pointer;"><u>${escapeHtml(r.customerName || r.customerNumber)}</u></td>
             <td>${escapeHtml(r.salesperson)}</td>
-            <td>${escapeHtml(r.invoiceNumber)}</td>
+            <td>${escapeHtml(r.invoiceNumber)}${wiiseDocLinkHtml("Posted Sales Invoice", r.invoiceNumber)}</td>
             <td>${fmtDate(r.postingDate)}</td>
             <td class="num">${fmtQty(r.qty)}</td>
             <td class="num">${fmtMoney2(r.unitPrice)}</td>
@@ -14083,6 +14090,7 @@ function buildCustomerDrillTree(customer) {
             let docNode = docMap.get(d.id);
             if (!docNode) {
                 docNode = _newNode("ct-doc-" + et + "-" + d.type + "-" + d.id, d.number || "(no number)");
+                docNode.docNo = d.number || ""; docNode.docType = d.type;
                 docMap.set(d.id, docNode);
                 dt.children.push(docNode);
             }
@@ -14141,6 +14149,7 @@ function buildEOMDrillTree() {
         let docNode = docMap.get(d.id);
         if (!docNode) {
             docNode = _newNode("et-doc-" + custKey + "-" + d.type + "-" + d.id, d.number || "(no number)");
+                docNode.docNo = d.number || ""; docNode.docType = d.type;
             docMap.set(d.id, docNode);
             dtNode.children.push(docNode);
         }
@@ -14203,6 +14212,7 @@ function buildBranchDrillTree(_invoices) {
             let docNode = docMap.get(d.id);
             if (!docNode) {
                 docNode = _newNode("bt-doc-" + locCode + "-" + d.type + "-" + d.id, d.number || "(no number)");
+                docNode.docNo = d.number || ""; docNode.docType = d.type;
                 docMap.set(d.id, docNode);
                 dt.children.push(docNode);
             }
@@ -14266,6 +14276,7 @@ function buildSalespersonDrillTree(_invoices) {
             let docNode = docMap.get(d.id);
             if (!docNode) {
                 docNode = _newNode("st-doc-" + sp + "-" + custKey + "-" + et + "-" + d.type + "-" + d.id, d.number || "(no number)");
+                docNode.docNo = d.number || ""; docNode.docType = d.type;
                 docMap.set(d.id, docNode);
                 dt.children.push(docNode);
             }
@@ -14321,7 +14332,7 @@ function renderDrillTree(roots, tableSelector) {
             ? `<td class="num">${node.unitSell ? fmtMoneyFull(node.unitSell) : ""}</td>`
             : "";
         acc.push(`<tr data-key="${escapeAttr(node.key)}" data-expandable="${expandable ? 1 : 0}" style="${bg}cursor:${expandable ? "pointer" : "default"};">
-            <td>${pad}<span style="display:inline-block; width:14px; color:#3f51b5;">${arrow}</span> ${escapeHtml(node.label)}</td>
+            <td>${pad}<span style="display:inline-block; width:14px; color:#3f51b5;">${arrow}</span> ${escapeHtml(node.label)}${wiiseDocLinkHtml(node.docType, node.docNo)}</td>
             <td class="num">${fmtMoneyFull(node.sales)}</td>
             <td class="num">${node.qty ? fmtQty(node.qty) : ""}</td>
             ${usCell}
