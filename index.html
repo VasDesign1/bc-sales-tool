@@ -1735,7 +1735,8 @@
                         <span id="includeRentalsState" style="font-size:11px; opacity:0.65;">off</span>
                     </div>
                 </div>
-                <div class="field" title="Hide documents modified after this timestamp — useful for matching a stale Power BI refresh">
+                <!-- Owner-only (restrictedNav, see updateRestrictedNav): a PBI-reconciliation aid nobody else needs. -->
+                <div class="field restrictedNav" style="display:none;" title="Hide documents modified after this timestamp — useful for matching a stale Power BI refresh">
                     <label for="snapshotAsOf">Compare as of</label>
                     <input type="datetime-local" id="snapshotAsOf">
                 </div>
@@ -15180,6 +15181,12 @@ function updateRestrictedNav() {
     const show = user === RESTRICTED_NAV_OWNER;
     document.querySelectorAll(".restrictedNav").forEach(el => { el.style.display = show ? "" : "none"; });
     if (!show && RESTRICTED_TABS.has(state.tab)) setActiveTab("overview");
+    // "Compare as of" is owner-only too: make sure a hidden filter can't stay active.
+    if (!show && state.snapshotAsOf) {
+        state.snapshotAsOf = null;
+        const asOf = document.getElementById("snapshotAsOf"); if (asOf) asOf.value = "";
+        if (state.invoices && state.invoices.length) { rebuildFiltered(); renderCurrentTab(); }
+    }
 }
 
 async function handleSignIn() {
