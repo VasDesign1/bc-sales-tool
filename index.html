@@ -3601,23 +3601,37 @@
             <section data-tab-content="pnl" style="display:none;">
                 <div class="hint">Owner-only test tab. Reads <strong>General Ledger Entries</strong> straight from Wiise (BC API v2.0 <code>generalLedgerEntries</code>) and groups them by the <strong>Chart of Accounts</strong> category (Income / Cost of Goods Sold / Expense). Independent of the sales load and of the Rentals toggle — this is what the ledger itself shows. Balance-sheet accounts (Assets / Liabilities / Equity) are excluded from the P&amp;L but listed in the account map below. The ledger holds roughly 100k entries a month, so load one month at a time (about 30 s each) — loads merge into the monthly summary.</div>
                 <div class="panel" style="margin-bottom:16px;">
-                    <div class="panel-header"><h2>Ledger range</h2></div>
-                    <div style="display:flex; gap:14px; align-items:flex-end; flex-wrap:wrap; padding:6px 0 4px;">
-                        <div class="field" style="display:flex; flex-direction:column; gap:4px;">
-                            <label for="pnlFrom" style="font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:#6e72a6;">From</label>
-                            <input type="date" id="pnlFrom" style="padding:7px 9px; border:1px solid #d6d8eb; border-radius:8px; font-size:13px;">
+                    <div class="panel-header"><h2>Ledger range</h2><span class="meta" id="pnlStatus"></span></div>
+                    <div style="padding:14px 18px 16px; display:flex; flex-direction:column; gap:14px;">
+                        <div style="display:flex; gap:14px; align-items:flex-end; flex-wrap:wrap;">
+                            <div style="min-width:150px; font-size:12px; font-weight:700; color:#2c2f4a; padding-bottom:9px;">1 · Load from Wiise</div>
+                            <div class="field" style="display:flex; flex-direction:column; gap:4px;">
+                                <label for="pnlFrom" style="font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:#6e72a6;">From</label>
+                                <input type="date" id="pnlFrom" style="padding:7px 9px; border:1px solid #d6d8eb; border-radius:8px; font-size:13px;">
+                            </div>
+                            <div class="field" style="display:flex; flex-direction:column; gap:4px;">
+                                <label for="pnlTo" style="font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:#6e72a6;">To</label>
+                                <input type="date" id="pnlTo" style="padding:7px 9px; border:1px solid #d6d8eb; border-radius:8px; font-size:13px;">
+                            </div>
+                            <button class="btn btn-primary" id="pnlLoadBtn" type="button">Load ledger</button>
+                            <span style="font-size:12px; color:#6e72a6; padding-bottom:9px;">about 30 s per month · loads merge</span>
                         </div>
-                        <div class="field" style="display:flex; flex-direction:column; gap:4px;">
-                            <label for="pnlTo" style="font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:#6e72a6;">To</label>
-                            <input type="date" id="pnlTo" style="padding:7px 9px; border:1px solid #d6d8eb; border-radius:8px; font-size:13px;">
+                        <div style="display:flex; gap:14px; align-items:flex-end; flex-wrap:wrap;">
+                            <div style="min-width:150px; font-size:12px; font-weight:700; color:#2c2f4a; padding-bottom:9px;">2 · Show</div>
+                            <div class="field" style="display:flex; flex-direction:column; gap:4px;">
+                                <label for="pnlMonth" style="font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:#6e72a6;">Period</label>
+                                <select id="pnlMonth" style="padding:7px 9px; border:1px solid #d6d8eb; border-radius:8px; font-size:13px; min-width:200px;"><option value="">— load the ledger first —</option></select>
+                            </div>
+                            <div class="field" id="pnlCustomWrap" style="display:none; flex-direction:column; gap:4px;">
+                                <label for="pnlViewFrom" style="font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:#6e72a6;">Custom from</label>
+                                <input type="date" id="pnlViewFrom" style="padding:7px 9px; border:1px solid #d6d8eb; border-radius:8px; font-size:13px;">
+                            </div>
+                            <div class="field" id="pnlCustomWrap2" style="display:none; flex-direction:column; gap:4px;">
+                                <label for="pnlViewTo" style="font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:#6e72a6;">Custom to</label>
+                                <input type="date" id="pnlViewTo" style="padding:7px 9px; border:1px solid #d6d8eb; border-radius:8px; font-size:13px;">
+                            </div>
+                            <button class="btn btn-ghost" id="pnlCsvBtn" type="button" title="Download every G/L entry in the current view as CSV">Export entries CSV</button>
                         </div>
-                        <button class="btn btn-primary" id="pnlLoadBtn" type="button">Load ledger</button>
-                        <div class="field" style="display:flex; flex-direction:column; gap:4px;">
-                            <label for="pnlMonth" style="font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:#6e72a6;">Show</label>
-                            <select id="pnlMonth" style="padding:7px 9px; border:1px solid #d6d8eb; border-radius:8px; font-size:13px; min-width:170px;"><option value="">— load the ledger first —</option></select>
-                        </div>
-                        <button class="btn btn-ghost" id="pnlCsvBtn" type="button" title="Download every G/L entry in the current view as CSV">Export entries CSV</button>
-                        <span id="pnlStatus" style="font-size:12px; color:#6e72a6;"></span>
                     </div>
                 </div>
                 <div class="kpi-row" style="grid-template-columns: repeat(6, 1fr);">
@@ -14604,7 +14618,7 @@ function applyMonth(yyyymm) {
 // Nothing here touches state.invoices / the sales pipeline.
 // ============================================================
 state.gl = { accounts: [], accountsByNo: new Map(), entries: [], from: "", to: "",
-             loadedAt: null, month: "", openAccounts: new Set(),
+             loadedAt: null, month: "", viewFrom: "", viewTo: "", openAccounts: new Set(),
              mapSort: { key: "no", dir: "asc" } };
 
 const PNL_GROUP_ORDER = ["Income", "Cost of Goods Sold", "Expense", "Unclassified", "Balance sheet"];
@@ -14655,6 +14669,44 @@ function pnlMonthLabel(mk) {
     return new Date(y, m - 1, 1).toLocaleDateString("en-AU", { month: "short", year: "numeric" });
 }
 function pnlSetStatus(msg) { const el = document.getElementById("pnlStatus"); if (el) el.textContent = msg || ""; }
+// The "Period" select drives the view: "" = everything loaded, "custom" =
+// the two custom date inputs, anything else = a YYYY-MM month.
+function pnlViewRange() {
+    const m = state.gl.month;
+    if (m === "custom") {
+        const from = state.gl.viewFrom || state.gl.from, to = state.gl.viewTo || state.gl.to;
+        return { from, to, label: fmtDate(from) + " → " + fmtDate(to), file: from + "_" + to };
+    }
+    if (m) {
+        const [y, mo] = m.split("-").map(Number); const last = new Date(y, mo, 0).getDate();
+        return { from: m + "-01", to: m + "-" + String(last).padStart(2, "0"), label: pnlMonthLabel(m), file: m };
+    }
+    return { from: state.gl.from, to: state.gl.to, label: "everything loaded, " + fmtDate(state.gl.from) + " → " + fmtDate(state.gl.to), file: state.gl.from + "_" + state.gl.to };
+}
+function pnlSyncPeriodUi() {
+    const custom = state.gl.month === "custom";
+    ["pnlCustomWrap", "pnlCustomWrap2"].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = custom ? "flex" : "none"; });
+    if (custom) {
+        const f = document.getElementById("pnlViewFrom"), t = document.getElementById("pnlViewTo");
+        if (f && !f.value) f.value = state.gl.viewFrom || state.gl.from;
+        if (t && !t.value) t.value = state.gl.viewTo || state.gl.to;
+        state.gl.viewFrom = f.value; state.gl.viewTo = t.value;
+    }
+    const sel = document.getElementById("pnlMonth"); if (sel && sel.value !== state.gl.month) sel.value = state.gl.month;
+}
+// Is [from,to] fully inside the loaded windows? Used to warn when a custom
+// range reaches beyond what has been fetched.
+function pnlRangeCovered(from, to) {
+    const ws = (state.gl.windows || []).slice().sort((a, b) => a.from.localeCompare(b.from));
+    let cursor = from;
+    for (const w of ws) {
+        if (w.to < cursor) continue;
+        if (w.from > cursor) return false;
+        if (w.to >= to) return true;
+        cursor = new Date(new Date(w.to + "T00:00:00").getTime() + 86400000).toISOString().slice(0, 10);
+    }
+    return false;
+}
 
 function pnlDefaultRange() {
     const today = new Date();
@@ -14710,7 +14762,8 @@ async function loadPnl() {
         const sel = document.getElementById("pnlMonth");
         const sorted = [...months].sort().reverse();
         sel.innerHTML = '<option value="">Everything loaded (' + state.gl.windows.map(w => fmtDate(w.from) + " → " + fmtDate(w.to)).join(", ") + ')</option>'
-            + sorted.map(mk => '<option value="' + mk + '">' + pnlMonthLabel(mk) + "</option>").join("");
+            + sorted.map(mk => '<option value="' + mk + '">' + pnlMonthLabel(mk) + "</option>").join("")
+            + '<option value="custom">Custom dates…</option>';
         // Show the latest month of the window just fetched.
         const fetched = [...new Set(rows.map(e => e.postingDate.slice(0, 7)))].sort();
         state.gl.month = fetched.length ? fetched[fetched.length - 1] : (sorted[0] || "");
@@ -14727,8 +14780,9 @@ async function loadPnl() {
 }
 
 function pnlEntriesForView() {
-    const mk = state.gl.month;
-    return mk ? state.gl.entries.filter(e => e.postingDate.slice(0, 7) === mk) : state.gl.entries;
+    if (!state.gl.month) return state.gl.entries;
+    const r = pnlViewRange();
+    return state.gl.entries.filter(e => e.postingDate >= r.from && e.postingDate <= r.to);
 }
 // Aggregate entries → per-account rows with group / debit / credit / net.
 function pnlAggregate(entries) {
@@ -14778,7 +14832,9 @@ function renderPnl() {
     const view = pnlEntriesForView();
     const rows = pnlAggregate(view);
     const t = pnlTotals(rows);
-    const title = state.gl.month ? pnlMonthLabel(state.gl.month) : ("everything loaded, " + fmtDate(state.gl.from) + " → " + fmtDate(state.gl.to));
+    pnlSyncPeriodUi();
+    const vr = pnlViewRange();
+    const title = vr.label;
     document.getElementById("pnlStmtTitle").textContent = "· " + title;
 
     // KPIs
@@ -14794,6 +14850,8 @@ function renderPnl() {
     const warns = [];
     const uncl = rows.filter(r => r.group === "Unclassified");
     if (uncl.length) warns.push("<strong>" + uncl.length + " account(s) have no category in Wiise</strong> (" + uncl.map(r => escapeHtml(r.no)).join(", ") + ") — their net " + fmtMoneyFull(t.unclassified) + " is NOT in the P&L totals. See the Unclassified group below.");
+    if (state.gl.month === "custom" && vr.from > vr.to) warns.push("Custom range: From is after To.");
+    else if (state.gl.month === "custom" && !pnlRangeCovered(vr.from, vr.to)) warns.push("The custom range reaches outside what has been loaded (" + (state.gl.windows || []).map(w => fmtDate(w.from) + " → " + fmtDate(w.to)).join(", ") + ") — load that range first or the figures will be partial.");
     const diff = t.debit - t.credit;
     if (Math.abs(diff) > 0.005) warns.push("Ledger does not balance for this view: debits − credits = " + fmtMoneyFull(diff) + " (partial range or entries still posting?).");
     warn.innerHTML = warns.join("<br>"); warn.style.display = warns.length ? "" : "none";
@@ -14926,7 +14984,7 @@ function pnlExportCsv() {
     }
     const blob = new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
-    a.download = "gl-entries-" + (state.gl.month || (state.gl.from + "_" + state.gl.to)) + ".csv"; a.click();
+    a.download = "gl-entries-" + pnlViewRange().file + ".csv"; a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
 
@@ -14934,7 +14992,9 @@ function pnlExportCsv() {
     const on = (id, ev, fn) => { const el = document.getElementById(id); if (el) el.addEventListener(ev, fn); };
     on("pnlLoadBtn", "click", loadPnl);
     on("pnlCsvBtn", "click", pnlExportCsv);
-    on("pnlMonth", "change", e => { state.gl.month = e.target.value; renderPnl(); });
+    on("pnlMonth", "change", e => { state.gl.month = e.target.value; if (state.gl.loadedAt) renderPnl(); else pnlSyncPeriodUi(); });
+    on("pnlViewFrom", "change", e => { state.gl.viewFrom = e.target.value; if (state.gl.loadedAt) renderPnl(); });
+    on("pnlViewTo",   "change", e => { state.gl.viewTo   = e.target.value; if (state.gl.loadedAt) renderPnl(); });
     on("pnlMapSearch", "input", () => { if (state.gl.loadedAt) renderPnlMap(); });
     const stmt = document.querySelector("#pnlStmtTable tbody");
     if (stmt) stmt.addEventListener("click", e => {
