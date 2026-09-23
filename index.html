@@ -13043,12 +13043,14 @@ function showCustomer(custNumber) {
     // Items table is collapsed by default — user opens with "Show more…"
     const itemsPanel = document.getElementById("customerItemsPanel");
     if (itemsPanel) itemsPanel.style.display = "none";
+    // Open the panel FIRST — charts built while their canvases are
+    // hidden get 0×0 dimensions and render blank until re-rendered.
+    openDrill("customer");
     renderCustomerTrendChart();
     renderCustomerItemsChart();
     renderCustomerInvoiceTable();
     renderCustomerDrillTree();
     document.getElementById("cdInvCount").textContent = g.invoices.length + " invoices";
-    openDrill("customer");
 }
 
 function renderCustomerTrendChart() {
@@ -13219,11 +13221,11 @@ function showItem(item) {
     document.getElementById("ciFreq").textContent    = avgDays ? ("every " + avgDays.toFixed(1) + " days · " + rows.length + " purchases") : (rows.length + " purchase" + (rows.length === 1 ? "" : "s"));
 
     state.charts._ciRows = rows;
+    openDrill("item");   // before chart build — see showCustomer
     renderCiChart();
     renderCiTable();
     document.getElementById("ciInvCount").textContent = rows.length + " line" + (rows.length === 1 ? "" : "s");
     paintBucketToggle("ciBucketToggle");
-    openDrill("item");
 }
 
 function renderCiChart() {
@@ -13319,11 +13321,11 @@ function showItemDetail(item) {
     document.getElementById("idCustCount").textContent = fmtInt(customerSet.size);
 
     state.charts._idRows = rows;
+    openDrill("itemDetail");   // before chart build — see showCustomer
     renderIdChart();
     renderIdCustomerChart();
     renderIdInvoiceTable();
     document.getElementById("idInvCount").textContent = rows.length + " line" + (rows.length === 1 ? "" : "s") + " · click a row to open the invoice · click a customer name to drill into customer";
-    openDrill("itemDetail");
 }
 
 function renderIdChart() {
