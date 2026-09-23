@@ -3,3 +3,8 @@ _docx/
 Prompt.docx
 *.docx
 *.xlsx
+
+# Local credential drops — NEVER commit (NAV web-service key, etc.)
+nav-creds.local.txt
+*.local.txt
+refresh_token.txt
