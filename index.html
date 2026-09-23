@@ -3599,59 +3599,36 @@
 
             <!-- TAB: Profit & Loss (General Ledger) — owner-only, see updateRestrictedNav -->
             <section data-tab-content="pnl" style="display:none;">
-                <div class="hint">Owner-only test tab. Reads <strong>General Ledger Entries</strong> straight from Wiise (BC API v2.0 <code>generalLedgerEntries</code>) and groups them by the <strong>Chart of Accounts</strong> category (Income / Cost of Goods Sold / Expense). Independent of the sales load and of the Rentals toggle — this is what the ledger itself shows. Balance-sheet accounts (Assets / Liabilities / Equity) are excluded from the P&amp;L but listed in the account map below. The ledger holds roughly 100k entries a month, so load one month at a time (about 30 s each) — loads merge into the monthly summary.</div>
+                <div class="hint">Owner-only test tab. Reads <strong>General Ledger Entries</strong> straight from Wiise (BC API v2.0 <code>generalLedgerEntries</code>) and groups them by the <strong>Chart of Accounts</strong> category (Income / Cost of Goods Sold / Expense). Uses the From / To and Quick range in the toolbar above. Independent of the sales load and of the Rentals toggle — this is what the ledger itself shows. Balance-sheet accounts (Assets / Liabilities / Equity) are excluded from the P&amp;L but listed in the account map below.</div>
                 <div class="panel" style="margin-bottom:16px;">
-                    <div class="panel-header"><h2>Ledger range</h2><span class="meta" id="pnlStatus"></span></div>
-                    <div style="padding:14px 18px 16px; display:flex; flex-direction:column; gap:14px;">
-                        <div style="display:flex; gap:14px; align-items:flex-end; flex-wrap:wrap;">
-                            <div style="min-width:150px; font-size:12px; font-weight:700; color:#2c2f4a; padding-bottom:9px;">1 · Load from Wiise</div>
-                            <div class="field" style="display:flex; flex-direction:column; gap:4px;">
-                                <label for="pnlFrom" style="font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:#6e72a6;">From</label>
-                                <input type="date" id="pnlFrom" style="padding:7px 9px; border:1px solid #d6d8eb; border-radius:8px; font-size:13px;">
-                            </div>
-                            <div class="field" style="display:flex; flex-direction:column; gap:4px;">
-                                <label for="pnlTo" style="font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:#6e72a6;">To</label>
-                                <input type="date" id="pnlTo" style="padding:7px 9px; border:1px solid #d6d8eb; border-radius:8px; font-size:13px;">
-                            </div>
-                            <button class="btn btn-primary" id="pnlLoadBtn" type="button">Load ledger</button>
-                            <span style="font-size:12px; color:#6e72a6; padding-bottom:9px;">about 30 s per month · loads merge</span>
-                        </div>
-                        <div style="display:flex; gap:14px; align-items:flex-end; flex-wrap:wrap;">
-                            <div style="min-width:150px; font-size:12px; font-weight:700; color:#2c2f4a; padding-bottom:9px;">2 · Show</div>
-                            <div class="field" style="display:flex; flex-direction:column; gap:4px;">
-                                <label for="pnlMonth" style="font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:#6e72a6;">Period</label>
-                                <select id="pnlMonth" style="padding:7px 9px; border:1px solid #d6d8eb; border-radius:8px; font-size:13px; min-width:200px;"><option value="">— load the ledger first —</option></select>
-                            </div>
-                            <div class="field" id="pnlCustomWrap" style="display:none; flex-direction:column; gap:4px;">
-                                <label for="pnlViewFrom" style="font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:#6e72a6;">Custom from</label>
-                                <input type="date" id="pnlViewFrom" style="padding:7px 9px; border:1px solid #d6d8eb; border-radius:8px; font-size:13px;">
-                            </div>
-                            <div class="field" id="pnlCustomWrap2" style="display:none; flex-direction:column; gap:4px;">
-                                <label for="pnlViewTo" style="font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:#6e72a6;">Custom to</label>
-                                <input type="date" id="pnlViewTo" style="padding:7px 9px; border:1px solid #d6d8eb; border-radius:8px; font-size:13px;">
-                            </div>
-                            <button class="btn btn-ghost" id="pnlCsvBtn" type="button" title="Download every G/L entry in the current view as CSV">Export entries CSV</button>
+                    <div class="panel-header">
+                        <h2>Ledger</h2>
+                        <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+                            <span class="meta" id="pnlStatus"></span>
+                            <button class="btn btn-ghost" id="pnlCsvBtn" type="button" title="Download every G/L entry in the current date range as CSV">Export entries CSV</button>
+                            <button class="btn btn-primary" id="pnlLoadBtn" type="button" title="Fetch the general ledger for the toolbar From / To range. About 30 seconds per month; loads merge with what is already held.">Load ledger</button>
                         </div>
                     </div>
+                    <div class="hint" style="margin:0;" id="pnlLoadHint">Loads the ledger for the toolbar range (<strong id="pnlRangeLabel">—</strong>). About 30 s per month on this tenant; loads merge, so pull one month at a time and the monthly summary fills in.</div>
                 </div>
                 <div class="kpi-row" style="grid-template-columns: repeat(6, 1fr);">
-                    <div class="kpi k-rev"><div class="label">Income</div><div class="value" id="pnlKpiIncome">—</div><div class="sub" id="pnlKpiIncomeSub"></div></div>
-                    <div class="kpi k-loc"><div class="label">Cost of Goods Sold</div><div class="value" id="pnlKpiCogs">—</div><div class="sub" id="pnlKpiCogsSub"></div></div>
-                    <div class="kpi k-gp"><div class="label">Gross Profit</div><div class="value" id="pnlKpiGp">—</div><div class="sub" id="pnlKpiGpSub"></div></div>
-                    <div class="kpi k-gpp"><div class="label">Gross Margin</div><div class="value" id="pnlKpiGpp">—</div><div class="sub" id="pnlKpiGppSub"></div></div>
-                    <div class="kpi k-avg"><div class="label">Expenses</div><div class="value" id="pnlKpiExp">—</div><div class="sub" id="pnlKpiExpSub"></div></div>
-                    <div class="kpi k-inv"><div class="label">Net Profit</div><div class="value" id="pnlKpiNet">—</div><div class="sub" id="pnlKpiNetSub"></div></div>
+                    <div class="kpi k-rev" title="INCOME — every G/L entry in the date range on accounts whose Wiise Account Category is 'Income' (accounts 4xxx, 7005 rent, 7030 interest, 8026 other income). Netted the P&L way: credits minus debits, because a sale credits the income account. Straight from the ledger — no sales-tool adjustments and the Rentals toggle does not apply."><div class="label">Income</div><div class="value" id="pnlKpiIncome">—</div><div class="sub" id="pnlKpiIncomeSub"></div></div>
+                    <div class="kpi k-loc" title="COST OF GOODS SOLD — entries on accounts whose Wiise category is 'Cost of Goods Sold' (5xxx), netted debits minus credits. Raw ledger COGS: includes the purchase / direct-cost accrual pairs Wiise posts (5170 Purchases, 5175 Direct Cost Purch. Acc, 5180 Inventory Adj.) and freight / obsolescence, not only the item cost of what was sold."><div class="label">Cost of Goods Sold</div><div class="value" id="pnlKpiCogs">—</div><div class="sub" id="pnlKpiCogsSub"></div></div>
+                    <div class="kpi k-gp" title="GROSS PROFIT = Income − Cost of Goods Sold, both as shown on the tiles to the left."><div class="label">Gross Profit</div><div class="value" id="pnlKpiGp">—</div><div class="sub" id="pnlKpiGpSub"></div></div>
+                    <div class="kpi k-gpp" title="GROSS MARGIN = Gross Profit ÷ Income."><div class="label">Gross Margin</div><div class="value" id="pnlKpiGpp">—</div><div class="sub" id="pnlKpiGppSub"></div></div>
+                    <div class="kpi k-avg" title="EXPENSES — entries on accounts whose Wiise category is 'Expense' (6xxx operating costs: wages, rent, vehicles, bank fees…), netted debits minus credits. Accounts with a BLANK category in Wiise are NOT here — they are listed under 'Unclassified' with a warning until they are categorised."><div class="label">Expenses</div><div class="value" id="pnlKpiExp">—</div><div class="sub" id="pnlKpiExpSub"></div></div>
+                    <div class="kpi k-inv" title="NET PROFIT = Gross Profit − Expenses. Balance-sheet accounts (Assets / Liabilities / Equity) never enter this figure; they only feed the debit = credit ledger check at the bottom of the statement."><div class="label">Net Profit</div><div class="value" id="pnlKpiNet">—</div><div class="sub" id="pnlKpiNetSub"></div></div>
                 </div>
                 <div id="pnlWarn" class="hint" style="display:none; border-left:4px solid #f57c00;"></div>
                 <div class="chart-grid" style="margin-bottom:16px;">
                     <div class="card span-12">
-                        <div class="head"><h3>Month by month · Income vs Cost of Goods Sold vs Expenses, Net Profit line</h3><span class="meta" id="pnlChartMeta"></span></div>
+                        <div class="head"><h3 title="One bar group per month held in memory (every month loaded so far), regardless of the toolbar range. Click a month to set the toolbar to it.">Month by month · Income vs Cost of Goods Sold vs Expenses, Net Profit line</h3><span class="meta" id="pnlChartMeta"></span></div>
                         <div class="chart-wrap" style="min-height:260px;"><canvas id="pnlMonthlyChart"></canvas></div>
                     </div>
                 </div>
                 <div class="panel">
                     <div class="panel-header"><h2>Profit &amp; Loss statement <span id="pnlStmtTitle" style="font-weight:400; color:#6e72a6;"></span></h2></div>
-                    <div class="hint" style="margin:0 0 8px;">Click an account row to expand its ledger entries. Net is shown the P&amp;L way: income = credit − debit, costs = debit − credit. ↗ opens the entries in Wiise.</div>
+                    <div class="hint" style="margin:0 0 8px;">Drill down: click a category to see its accounts, click an account to see its ledger entries. Net is shown the P&amp;L way: income = credit − debit, costs = debit − credit. ↗ opens the entries in Wiise.</div>
                     <div class="table-scroll">
                         <table id="pnlStmtTable">
                             <thead><tr>
@@ -3669,7 +3646,7 @@
                 </div>
                 <div class="panel">
                     <div class="panel-header"><h2>Monthly summary</h2></div>
-                    <div class="hint" style="margin:0 0 8px;">One row per month loaded so far (loads merge — load another range and its months are added; a month only partly inside a loaded window shows partial figures). Click a row to show that month above. "Ledger check" is total debits minus total credits across every entry in the month (all accounts) — should be $0.00.</div>
+                    <div class="hint" style="margin:0 0 8px;">One row per month loaded so far (loads merge — load another range and its months are added; a month only partly inside a loaded window shows partial figures). Click a row to set the toolbar range to that month. "Ledger check" is total debits minus total credits across every entry in the month (all accounts) — should be $0.00.</div>
                     <div class="table-scroll">
                         <table id="pnlMonthlyTable">
                             <thead><tr>
@@ -3690,8 +3667,8 @@
                 </div>
                 <div class="panel">
                     <div class="panel-header"><h2>Account map · which G/L codes go where</h2></div>
-                    <div class="hint" style="margin:0 0 8px;">Every account that has entries in the loaded range, with the category Wiise assigns it in the Chart of Accounts and how this tab treats it. Accounts marked <strong>Unclassified</strong> have no category set in Wiise — tell me where they belong and I'll map them.</div>
-                    <div style="display:flex; gap:10px; align-items:center; margin-bottom:8px;">
+                    <div class="hint" style="margin:0 0 8px;">Every account with entries in the loaded ledger, the category Wiise assigns it in the Chart of Accounts, and how this tab treats it. Accounts marked <strong>Unclassified</strong> have no category set in Wiise — tell me where they belong and I'll map them.</div>
+                    <div style="display:flex; gap:10px; align-items:center; margin:0 18px 8px;">
                         <input type="text" id="pnlMapSearch" placeholder="Filter by account no / name / category…" style="padding:7px 9px; border:1px solid #d6d8eb; border-radius:8px; font-size:13px; width:320px;">
                         <span id="pnlMapCount" style="font-size:12px; color:#6e72a6;"></span>
                     </div>
@@ -3701,7 +3678,6 @@
                                 <th data-sort="no">Account</th>
                                 <th data-sort="name">Name</th>
                                 <th data-sort="bcCategory">Wiise category</th>
-                                <th data-sort="bcSub">Wiise sub-category</th>
                                 <th data-sort="group">Treated as</th>
                                 <th class="num" data-sort="count">Entries</th>
                                 <th class="num" data-sort="debit">Debit</th>
@@ -14610,33 +14586,43 @@ function applyMonth(yyyymm) {
 
 // ============================================================
 // PROFIT & LOSS (GENERAL LEDGER) — owner-only tab (Faik, 2026-09-23)
-// Reads BC API v2.0 `accounts` (chart of accounts, incl. category /
-// subCategory) + `generalLedgerEntries` for a posting-date range, then
-// lays the entries out as a P&L: Income − COGS = Gross Profit, − Expense
-// = Net Profit. Balance-sheet accounts are kept (for the debit = credit
-// ledger check and the account map) but never enter the P&L totals.
-// Nothing here touches state.invoices / the sales pipeline.
+// Reads BC API v2.0 `accounts` (chart of accounts, incl. category) +
+// `generalLedgerEntries` for the toolbar From/To range, then lays the
+// entries out as a P&L: Income − COGS = Gross Profit, − Expense = Net
+// Profit. Balance-sheet accounts are kept (for the debit = credit ledger
+// check and the account map) but never enter the P&L totals. The tab
+// has no date controls of its own: it follows the toolbar From / To /
+// Quick range like every other tab. Nothing here touches state.invoices.
+// The v2.0 `subCategory` field is NOT used: on this tenant it comes back
+// shuffled (4010 Sales - Product → "Payroll Liabilities (Non-Current)"),
+// so the statement is category → account → entries only.
 // ============================================================
-state.gl = { accounts: [], accountsByNo: new Map(), entries: [], from: "", to: "",
-             loadedAt: null, month: "", viewFrom: "", viewTo: "", openAccounts: new Set(),
+state.gl = { accounts: [], accountsByNo: new Map(), entries: [], windows: [], from: "", to: "",
+             loadedAt: null, openGroups: new Set(), openAccounts: new Set(),
              mapSort: { key: "no", dir: "asc" } };
 
 const PNL_GROUP_ORDER = ["Income", "Cost of Goods Sold", "Expense", "Unclassified", "Balance sheet"];
+const PNL_COST_GROUPS = new Set(["Cost of Goods Sold", "Expense"]);
 const PNL_MAX_EXPANDED = 500; // rows shown when an account is expanded (4010 alone has thousands a month)
+const PNL_GROUP_TIPS = {
+    "Income": "Accounts whose Wiise category is Income. Net = credit − debit.",
+    "Cost of Goods Sold": "Accounts whose Wiise category is Cost of Goods Sold. Net = debit − credit. Raw ledger, incl. purchase / direct-cost accrual pairs.",
+    "Expense": "Accounts whose Wiise category is Expense. Net = debit − credit.",
+    "Unclassified": "Accounts with NO category on their Wiise account card. Excluded from every total until categorised.",
+};
 // Manual overrides for accounts whose Wiise category is blank (probe
 // 2026-09-23 found four: 1000 Balance Sheet, 6309 Service Fees Bank - NAB,
 // 6319 NAB-Facility Fees, 6477 Unrealised FX Gain/Loss). Left empty on
 // purpose so they surface as "Unclassified" until Faik says where they go.
 const PNL_ACCOUNT_OVERRIDES = { /* "6319": "Expense" */ };
-const PNL_COST_GROUPS = new Set(["Cost of Goods Sold", "Expense"]);
 
+// Wiise returns enum text OData-escaped ("Cost_x0020_of_x0020_Goods_x0020_Sold",
+// blank = "_x0020_"), so decode before matching / displaying.
+function pnlDecode(s) { return (s == null ? "" : String(s)).replace(/_x([0-9a-fA-F]{4})_/g, (m, h) => String.fromCharCode(parseInt(h, 16))).trim(); }
 // Map BC's account category to the P&L bucket this tab uses. BC v2.0
 // `category` values: Unknown, Assets, Liabilities, Equity, Income,
 // Cost of Goods Sold, Expense. Anything else (or no chart row at all)
 // lands in "Unclassified" so it is visible rather than silently lost.
-// Wiise returns enum text OData-escaped ("Cost_x0020_of_x0020_Goods_x0020_Sold",
-// blank = "_x0020_"), so decode before matching / displaying.
-function pnlDecode(s) { return (s == null ? "" : String(s)).replace(/_x([0-9a-fA-F]{4})_/g, (m, h) => String.fromCharCode(parseInt(h, 16))).trim(); }
 function pnlGroupOf(acct) {
     if (acct && PNL_ACCOUNT_OVERRIDES[String(acct.number)]) return PNL_ACCOUNT_OVERRIDES[String(acct.number)];
     const cat = pnlDecode(acct && acct.category).toLowerCase();
@@ -14669,33 +14655,14 @@ function pnlMonthLabel(mk) {
     return new Date(y, m - 1, 1).toLocaleDateString("en-AU", { month: "short", year: "numeric" });
 }
 function pnlSetStatus(msg) { const el = document.getElementById("pnlStatus"); if (el) el.textContent = msg || ""; }
-// The "Period" select drives the view: "" = everything loaded, "custom" =
-// the two custom date inputs, anything else = a YYYY-MM month.
-function pnlViewRange() {
-    const m = state.gl.month;
-    if (m === "custom") {
-        const from = state.gl.viewFrom || state.gl.from, to = state.gl.viewTo || state.gl.to;
-        return { from, to, label: fmtDate(from) + " → " + fmtDate(to), file: from + "_" + to };
-    }
-    if (m) {
-        const [y, mo] = m.split("-").map(Number); const last = new Date(y, mo, 0).getDate();
-        return { from: m + "-01", to: m + "-" + String(last).padStart(2, "0"), label: pnlMonthLabel(m), file: m };
-    }
-    return { from: state.gl.from, to: state.gl.to, label: "everything loaded, " + fmtDate(state.gl.from) + " → " + fmtDate(state.gl.to), file: state.gl.from + "_" + state.gl.to };
+// The toolbar From / To is the only date control this tab uses.
+function pnlToolbarRange() {
+    const from = (document.getElementById("fromDate") || {}).value || "";
+    const to   = (document.getElementById("toDate")   || {}).value || "";
+    return { from, to, label: from && to ? fmtDate(from) + " → " + fmtDate(to) : "—", file: from + "_" + to };
 }
-function pnlSyncPeriodUi() {
-    const custom = state.gl.month === "custom";
-    ["pnlCustomWrap", "pnlCustomWrap2"].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = custom ? "flex" : "none"; });
-    if (custom) {
-        const f = document.getElementById("pnlViewFrom"), t = document.getElementById("pnlViewTo");
-        if (f && !f.value) f.value = state.gl.viewFrom || state.gl.from;
-        if (t && !t.value) t.value = state.gl.viewTo || state.gl.to;
-        state.gl.viewFrom = f.value; state.gl.viewTo = t.value;
-    }
-    const sel = document.getElementById("pnlMonth"); if (sel && sel.value !== state.gl.month) sel.value = state.gl.month;
-}
-// Is [from,to] fully inside the loaded windows? Used to warn when a custom
-// range reaches beyond what has been fetched.
+// Is [from,to] fully inside the loaded windows? Used to warn when the
+// toolbar range reaches beyond what has been fetched.
 function pnlRangeCovered(from, to) {
     const ws = (state.gl.windows || []).slice().sort((a, b) => a.from.localeCompare(b.from));
     let cursor = from;
@@ -14707,25 +14674,26 @@ function pnlRangeCovered(from, to) {
     }
     return false;
 }
-
-function pnlDefaultRange() {
-    const today = new Date();
-    const to = today.toISOString().slice(0, 10);
-    // The ledger runs ~100k entries a month on this tenant, so default to
-    // the current month only; load other months as needed — loads merge, so
-    // already-loaded months stay in the monthly summary.
-    const from = today.getFullYear() + "-" + String(today.getMonth() + 1).padStart(2, "0") + "-01";
-    const f = document.getElementById("pnlFrom"), t = document.getElementById("pnlTo");
-    if (f && !f.value) f.value = from;
-    if (t && !t.value) t.value = to;
+// Point the toolbar at one month (used by the monthly table + chart).
+function pnlGoToMonth(mk) {
+    applyMonth(mk);
+    const qr = document.getElementById("quickRange"); if (qr) qr.value = "";
+    const mp = document.getElementById("monthPicker"); if (mp) mp.value = mk;
+    if (state.invoices && state.invoices.length) rebuildFiltered();
+    renderCurrentTab();
 }
 
 async function loadPnl() {
     if (!pnlIsOwner()) { alert("This tab is limited to the owner account."); return; }
-    const from = document.getElementById("pnlFrom").value, to = document.getElementById("pnlTo").value;
-    if (!from || !to || from > to) { alert("Pick a valid From / To range first."); return; }
+    const { from, to } = pnlToolbarRange();
+    if (!from || !to || from > to) { alert("Set a valid From / To range in the toolbar first."); return; }
+    const days = Math.round((new Date(to + "T00:00:00") - new Date(from + "T00:00:00")) / 86400000) + 1;
+    if (days > 62) {
+        const months = Math.ceil(days / 30);
+        if (!confirm("The toolbar range spans about " + months + " months — roughly " + (months * 100).toLocaleString("en-AU") + "k ledger entries and " + Math.round(months * 0.5) + " minutes to load.\n\nTip: pick one month in Quick range → Specific month and load month by month (loads merge).\n\nLoad the whole range anyway?")) return;
+    }
     const btn = document.getElementById("pnlLoadBtn");
-    btn.disabled = true; pnlSetStatus("Loading…");
+    btn.disabled = true; pnlSetStatus("Loading " + fmtDate(from) + " → " + fmtDate(to) + "…");
     try {
         const compId = await bcGetCompanyId();
         if (!state.gl.accounts.length) {
@@ -14755,19 +14723,9 @@ async function loadPnl() {
         state.gl.entries = kept.concat(rows);
         state.gl.windows = (state.gl.windows || []).filter(w => w.to < from || w.from > to).concat([{ from, to }]).sort((a, b) => a.from.localeCompare(b.from));
         state.gl.from = state.gl.windows[0].from; state.gl.to = state.gl.windows[state.gl.windows.length - 1].to; state.gl.loadedAt = new Date();
-        state.gl.openAccounts = new Set();
+        // Fresh load → everything collapsed; the user drills down one level at a time.
+        state.gl.openGroups = new Set(); state.gl.openAccounts = new Set();
         console.log("[P&L] loaded", rows.length, "G/L entries", from, "→", to, "| held:", state.gl.entries.length, "| windows:", JSON.stringify(state.gl.windows), "|", state.gl.accounts.length, "accounts");
-        // Month picker: every month in the range, newest first; default to the latest month with entries.
-        const months = new Set(state.gl.entries.map(e => e.postingDate.slice(0, 7)));
-        const sel = document.getElementById("pnlMonth");
-        const sorted = [...months].sort().reverse();
-        sel.innerHTML = '<option value="">Everything loaded (' + state.gl.windows.map(w => fmtDate(w.from) + " → " + fmtDate(w.to)).join(", ") + ')</option>'
-            + sorted.map(mk => '<option value="' + mk + '">' + pnlMonthLabel(mk) + "</option>").join("")
-            + '<option value="custom">Custom dates…</option>';
-        // Show the latest month of the window just fetched.
-        const fetched = [...new Set(rows.map(e => e.postingDate.slice(0, 7)))].sort();
-        state.gl.month = fetched.length ? fetched[fetched.length - 1] : (sorted[0] || "");
-        sel.value = state.gl.month;
         pnlSetStatus(rows.length.toLocaleString("en-AU") + " entries fetched · " + state.gl.entries.length.toLocaleString("en-AU") + " held · " + state.gl.accounts.length + " accounts · " + state.gl.loadedAt.toLocaleTimeString("en-AU", { hour: "2-digit", minute: "2-digit" }));
         renderPnl();
     } catch (err) {
@@ -14780,9 +14738,9 @@ async function loadPnl() {
 }
 
 function pnlEntriesForView() {
-    if (!state.gl.month) return state.gl.entries;
-    const r = pnlViewRange();
-    return state.gl.entries.filter(e => e.postingDate >= r.from && e.postingDate <= r.to);
+    const { from, to } = pnlToolbarRange();
+    if (!from || !to) return state.gl.entries;
+    return state.gl.entries.filter(e => e.postingDate >= from && e.postingDate <= to);
 }
 // Aggregate entries → per-account rows with group / debit / credit / net.
 function pnlAggregate(entries) {
@@ -14792,7 +14750,7 @@ function pnlAggregate(entries) {
         if (!r) {
             const a = state.gl.accountsByNo.get(e.accountNumber);
             r = { no: e.accountNumber, name: a ? a.displayName : "(not in chart of accounts)",
-                  bcCategory: a ? pnlDecode(a.category) : "", bcSub: a ? pnlDecode(a.subCategory) : "",
+                  bcCategory: a ? pnlDecode(a.category) : "",
                   accountType: a ? pnlDecode(a.accountType) : "", group: pnlGroupOf(a),
                   debit: 0, credit: 0, count: 0, entries: [] };
             byAcct.set(e.accountNumber, r);
@@ -14816,26 +14774,25 @@ function pnlTotals(rows) {
 }
 
 function renderPnl() {
-    pnlDefaultRange();
-    const loaded = state.gl.entries.length > 0 || state.gl.loadedAt;
+    const vr = pnlToolbarRange();
+    const rl = document.getElementById("pnlRangeLabel"); if (rl) rl.textContent = vr.label;
+    const loaded = !!state.gl.loadedAt;
     const stmtBody = document.querySelector("#pnlStmtTable tbody");
     const monBody  = document.querySelector("#pnlMonthlyTable tbody");
     const mapBody  = document.querySelector("#pnlMapTable tbody");
     const warn = document.getElementById("pnlWarn");
     if (!loaded) {
         ["Income", "Cogs", "Gp", "Gpp", "Exp", "Net"].forEach(k => { document.getElementById("pnlKpi" + k).textContent = "—"; document.getElementById("pnlKpi" + k + "Sub").textContent = ""; });
-        stmtBody.innerHTML = '<tr><td colspan="7" style="color:#888; font-style:italic;">Pick a range and click Load ledger.</td></tr>';
+        stmtBody.innerHTML = '<tr><td colspan="7" style="color:#888; font-style:italic;">Set the toolbar range (Quick range → Specific month is the quickest) and click Load ledger.</td></tr>';
         monBody.innerHTML = ""; mapBody.innerHTML = ""; warn.style.display = "none";
+        document.getElementById("pnlStmtTitle").textContent = "";
         destroyChart("pnlMonthly");
         return;
     }
     const view = pnlEntriesForView();
     const rows = pnlAggregate(view);
     const t = pnlTotals(rows);
-    pnlSyncPeriodUi();
-    const vr = pnlViewRange();
-    const title = vr.label;
-    document.getElementById("pnlStmtTitle").textContent = "· " + title;
+    document.getElementById("pnlStmtTitle").textContent = "· " + vr.label;
 
     // KPIs
     const setK = (k, v, sub) => { document.getElementById("pnlKpi" + k).textContent = v; document.getElementById("pnlKpi" + k + "Sub").textContent = sub || ""; };
@@ -14846,17 +14803,18 @@ function renderPnl() {
     setK("Exp",    fmtMoneyFull(t.expense), rows.filter(r => r.group === "Expense").length + " accounts");
     setK("Net",    fmtMoneyFull(t.net),    "GP − Expenses");
 
-    // Warnings: unclassified accounts, unbalanced ledger, entries missing from chart.
+    // Warnings: range not loaded, unclassified accounts, unbalanced ledger.
     const warns = [];
+    // Cap the coverage check at today: a month that runs past today can't be "loaded" beyond it.
+    const todayIso = new Date().toISOString().slice(0, 10);
+    if (vr.from && vr.to && !pnlRangeCovered(vr.from, vr.to < todayIso ? vr.to : todayIso)) warns.push("The toolbar range " + vr.label + " reaches outside the loaded ledger (" + (state.gl.windows || []).map(w => fmtDate(w.from) + " → " + fmtDate(w.to)).join(", ") + ") — click Load ledger to fetch it, otherwise the figures are partial.");
     const uncl = rows.filter(r => r.group === "Unclassified");
     if (uncl.length) warns.push("<strong>" + uncl.length + " account(s) have no category in Wiise</strong> (" + uncl.map(r => escapeHtml(r.no)).join(", ") + ") — their net " + fmtMoneyFull(t.unclassified) + " is NOT in the P&L totals. See the Unclassified group below.");
-    if (state.gl.month === "custom" && vr.from > vr.to) warns.push("Custom range: From is after To.");
-    else if (state.gl.month === "custom" && !pnlRangeCovered(vr.from, vr.to)) warns.push("The custom range reaches outside what has been loaded (" + (state.gl.windows || []).map(w => fmtDate(w.from) + " → " + fmtDate(w.to)).join(", ") + ") — load that range first or the figures will be partial.");
     const diff = t.debit - t.credit;
     if (Math.abs(diff) > 0.005) warns.push("Ledger does not balance for this view: debits − credits = " + fmtMoneyFull(diff) + " (partial range or entries still posting?).");
     warn.innerHTML = warns.join("<br>"); warn.style.display = warns.length ? "" : "none";
 
-    // Statement: group → sub-category → account → (expanded) entries
+    // Statement: category (collapsed by default) → account → (expanded) entries
     const html = [];
     const groupNet = { "Income": t.income, "Cost of Goods Sold": t.cogs, "Expense": t.expense, "Unclassified": t.unclassified };
     const pctInc = v => t.income ? fmtPct(v / t.income) : "—";
@@ -14864,62 +14822,55 @@ function renderPnl() {
         const gRows = rows.filter(r => r.group === g);
         if (g === "Balance sheet") continue; // excluded from the statement, shown in the account map
         if (!gRows.length && g === "Unclassified") continue;
+        const gOpen = state.gl.openGroups.has(g);
         const gDebit = gRows.reduce((s, r) => s + r.debit, 0), gCredit = gRows.reduce((s, r) => s + r.credit, 0), gCount = gRows.reduce((s, r) => s + r.count, 0);
-        html.push('<tr style="' + treeRowStyle(0) + '"><td colspan="2">' + escapeHtml(g) + (g === "Unclassified" ? ' <span style="color:#f57c00;">⚠ no Wiise category</span>' : "") + "</td>"
+        html.push('<tr data-pnl-group="' + escapeAttr(g) + '" title="' + escapeAttr(PNL_GROUP_TIPS[g] || "") + '" style="' + treeRowStyle(0) + ' cursor:pointer;"><td colspan="2">' + (gOpen ? "▾ " : "▸ ") + escapeHtml(g)
+            + ' <span style="font-weight:400; color:#6e72a6; font-size:11px;">' + gRows.length + " account" + (gRows.length === 1 ? "" : "s") + "</span>"
+            + (g === "Unclassified" ? ' <span style="color:#f57c00;">⚠ no Wiise category</span>' : "") + "</td>"
             + '<td class="num">' + fmtInt(gCount) + '</td><td class="num">' + fmtMoneyFull(gDebit) + '</td><td class="num">' + fmtMoneyFull(gCredit) + "</td>"
             + '<td class="num ' + (groupNet[g] >= 0 ? "pos" : "neg") + '">' + fmtMoneyFull(groupNet[g]) + '</td><td class="num">' + pctInc(groupNet[g]) + "</td></tr>");
-        // sub-categories in first-seen order (sorted by account number)
-        const subs = [...new Set(gRows.map(r => r.bcSub || ""))];
-        for (const sub of subs) {
-            const sRows = gRows.filter(r => (r.bcSub || "") === sub);
-            if (subs.length > 1 || sub) {
-                const sNet = sRows.reduce((s, r) => s + r.net, 0);
-                html.push('<tr style="' + treeRowStyle(1) + '"><td colspan="2" style="padding-left:22px;">' + escapeHtml(sub || "(no sub-category)") + "</td>"
-                    + '<td class="num">' + fmtInt(sRows.reduce((s, r) => s + r.count, 0)) + '</td><td class="num">' + fmtMoneyFull(sRows.reduce((s, r) => s + r.debit, 0)) + '</td><td class="num">' + fmtMoneyFull(sRows.reduce((s, r) => s + r.credit, 0)) + "</td>"
-                    + '<td class="num ' + (sNet >= 0 ? "pos" : "neg") + '">' + fmtMoneyFull(sNet) + '</td><td class="num">' + pctInc(sNet) + "</td></tr>");
-            }
-            for (const r of sRows) {
-                const open = state.gl.openAccounts.has(r.no);
-                html.push('<tr data-pnl-acct="' + escapeAttr(r.no) + '" style="' + treeRowStyle(2) + ' cursor:pointer;">'
-                    + '<td style="padding-left:40px; white-space:nowrap;">' + (open ? "▾ " : "▸ ") + escapeHtml(r.no) + pnlWiiseLink("G/L Account No.", r.no, "Open account " + r.no + " entries in Wiise") + "</td>"
-                    + "<td>" + escapeHtml(r.name) + "</td>"
-                    + '<td class="num">' + fmtInt(r.count) + '</td><td class="num">' + fmtMoneyFull(r.debit) + '</td><td class="num">' + fmtMoneyFull(r.credit) + "</td>"
-                    + '<td class="num ' + (r.net >= 0 ? "pos" : "neg") + '">' + fmtMoneyFull(r.net) + '</td><td class="num">' + pctInc(r.net) + "</td></tr>");
-                if (open) {
-                    const entsAll = r.entries.slice().sort((a, b) => a.postingDate.localeCompare(b.postingDate) || (a.entryNumber - b.entryNumber));
-                    const ents = entsAll.slice(0, PNL_MAX_EXPANDED);
-                    if (entsAll.length > ents.length) html.push('<tr style="' + treeRowStyle(3) + ' font-size:12px; color:#b26a00;"><td style="padding-left:58px;" colspan="7">Showing the first ' + fmtInt(ents.length) + " of " + fmtInt(entsAll.length) + " entries — use Export entries CSV for the full list.</td></tr>");
-                    for (const e of ents) {
-                        html.push('<tr style="' + treeRowStyle(3) + ' font-size:12px;">'
-                            + '<td style="padding-left:58px; white-space:nowrap;">' + fmtDate(e.postingDate) + "</td>"
-                            + "<td>" + escapeHtml((e.documentType && e.documentType.trim() ? e.documentType + " " : "") + (e.documentNumber || "")) + (e.documentNumber ? pnlWiiseLink("Document No.", e.documentNumber, "Open document " + e.documentNumber + " entries in Wiise") : "")
-                            + (e.description ? ' <span style="color:#666;">· ' + escapeHtml(e.description) + "</span>" : "") + "</td>"
-                            + '<td class="num" style="color:#999;">#' + escapeHtml(String(e.entryNumber || "")) + "</td>"
-                            + '<td class="num">' + (e.debitAmount ? fmtMoneyFull(e.debitAmount) : "") + '</td><td class="num">' + (e.creditAmount ? fmtMoneyFull(e.creditAmount) : "") + "</td>"
-                            + '<td class="num">' + fmtMoneyFull(pnlSigned(r.group, e.debitAmount, e.creditAmount)) + "</td><td></td></tr>");
-                    }
+        if (gOpen) for (const r of gRows) {
+            const open = state.gl.openAccounts.has(r.no);
+            html.push('<tr data-pnl-acct="' + escapeAttr(r.no) + '" title="Wiise category: ' + escapeAttr(r.bcCategory || "(blank)") + ' — click to ' + (open ? "hide" : "show") + ' the ledger entries" style="' + treeRowStyle(1) + ' font-weight:400; cursor:pointer;">'
+                + '<td style="padding-left:24px; white-space:nowrap;">' + (open ? "▾ " : "▸ ") + escapeHtml(r.no) + pnlWiiseLink("G/L Account No.", r.no, "Open account " + r.no + " entries in Wiise") + "</td>"
+                + "<td>" + escapeHtml(r.name) + "</td>"
+                + '<td class="num">' + fmtInt(r.count) + '</td><td class="num">' + fmtMoneyFull(r.debit) + '</td><td class="num">' + fmtMoneyFull(r.credit) + "</td>"
+                + '<td class="num ' + (r.net >= 0 ? "pos" : "neg") + '">' + fmtMoneyFull(r.net) + '</td><td class="num">' + pctInc(r.net) + "</td></tr>");
+            if (open) {
+                const entsAll = r.entries.slice().sort((a, b) => a.postingDate.localeCompare(b.postingDate) || (a.entryNumber - b.entryNumber));
+                const ents = entsAll.slice(0, PNL_MAX_EXPANDED);
+                if (entsAll.length > ents.length) html.push('<tr style="' + treeRowStyle(2) + ' font-size:12px; color:#b26a00;"><td style="padding-left:44px;" colspan="7">Showing the first ' + fmtInt(ents.length) + " of " + fmtInt(entsAll.length) + " entries — use Export entries CSV for the full list.</td></tr>");
+                for (const e of ents) {
+                    html.push('<tr style="' + treeRowStyle(2) + ' font-size:12px;">'
+                        + '<td style="padding-left:44px; white-space:nowrap;">' + fmtDate(e.postingDate) + "</td>"
+                        + "<td>" + escapeHtml((e.documentType ? e.documentType + " " : "") + (e.documentNumber || "")) + (e.documentNumber ? pnlWiiseLink("Document No.", e.documentNumber, "Open document " + e.documentNumber + " entries in Wiise") : "")
+                        + (e.description ? ' <span style="color:#666;">· ' + escapeHtml(e.description) + "</span>" : "") + "</td>"
+                        + '<td class="num" style="color:#999;">#' + escapeHtml(String(e.entryNumber || "")) + "</td>"
+                        + '<td class="num">' + (e.debitAmount ? fmtMoneyFull(e.debitAmount) : "") + '</td><td class="num">' + (e.creditAmount ? fmtMoneyFull(e.creditAmount) : "") + "</td>"
+                        + '<td class="num">' + fmtMoneyFull(pnlSigned(r.group, e.debitAmount, e.creditAmount)) + "</td><td></td></tr>");
                 }
             }
         }
         if (g === "Cost of Goods Sold") {
-            html.push('<tr style="background:#e8f5e9; font-weight:700;"><td colspan="5">Gross Profit (Income − COGS)</td><td class="num ' + (t.gp >= 0 ? "pos" : "neg") + '">' + fmtMoneyFull(t.gp) + '</td><td class="num">' + fmtPct(t.gpPct) + "</td></tr>");
+            html.push('<tr title="Income − Cost of Goods Sold" style="background:#e8f5e9; font-weight:700;"><td colspan="5">Gross Profit (Income − COGS)</td><td class="num ' + (t.gp >= 0 ? "pos" : "neg") + '">' + fmtMoneyFull(t.gp) + '</td><td class="num">' + fmtPct(t.gpPct) + "</td></tr>");
         }
         if (g === "Expense") {
-            html.push('<tr style="background:#e3f2fd; font-weight:700;"><td colspan="5">Net Profit (Gross Profit − Expenses)</td><td class="num ' + (t.net >= 0 ? "pos" : "neg") + '">' + fmtMoneyFull(t.net) + '</td><td class="num">' + pctInc(t.net) + "</td></tr>");
+            html.push('<tr title="Gross Profit − Expenses" style="background:#e3f2fd; font-weight:700;"><td colspan="5">Net Profit (Gross Profit − Expenses)</td><td class="num ' + (t.net >= 0 ? "pos" : "neg") + '">' + fmtMoneyFull(t.net) + '</td><td class="num">' + pctInc(t.net) + "</td></tr>");
         }
     }
     const bs = rows.filter(r => r.group === "Balance sheet");
-    html.push('<tr style="color:#888; font-size:12px;"><td colspan="2">Balance-sheet accounts in this view (excluded from P&L)</td><td class="num">' + fmtInt(bs.reduce((s, r) => s + r.count, 0)) + '</td><td class="num">' + fmtMoneyFull(bs.reduce((s, r) => s + r.debit, 0)) + '</td><td class="num">' + fmtMoneyFull(bs.reduce((s, r) => s + r.credit, 0)) + '</td><td class="num"></td><td></td></tr>');
-    html.push('<tr style="color:#888; font-size:12px;"><td colspan="2">Ledger check · all ' + fmtInt(t.count) + ' entries: debits − credits</td><td class="num"></td><td class="num">' + fmtMoneyFull(t.debit) + '</td><td class="num">' + fmtMoneyFull(t.credit) + '</td><td class="num ' + (Math.abs(diff) < 0.005 ? "pos" : "neg") + '">' + fmtMoneyFull(diff) + (Math.abs(diff) < 0.005 ? " ✓" : "") + "</td><td></td></tr>");
+    html.push('<tr title="Assets / Liabilities / Equity accounts — never part of the P&L, listed in the account map" style="color:#888; font-size:12px;"><td colspan="2">Balance-sheet accounts in this view (excluded from P&L)</td><td class="num">' + fmtInt(bs.reduce((s, r) => s + r.count, 0)) + '</td><td class="num">' + fmtMoneyFull(bs.reduce((s, r) => s + r.debit, 0)) + '</td><td class="num">' + fmtMoneyFull(bs.reduce((s, r) => s + r.credit, 0)) + '</td><td class="num"></td><td></td></tr>');
+    html.push('<tr title="Every entry in the range, all accounts: total debits minus total credits. A balanced ledger gives $0.00." style="color:#888; font-size:12px;"><td colspan="2">Ledger check · all ' + fmtInt(t.count) + ' entries: debits − credits</td><td class="num"></td><td class="num">' + fmtMoneyFull(t.debit) + '</td><td class="num">' + fmtMoneyFull(t.credit) + '</td><td class="num ' + (Math.abs(diff) < 0.005 ? "pos" : "neg") + '">' + fmtMoneyFull(diff) + (Math.abs(diff) < 0.005 ? " ✓" : "") + "</td><td></td></tr>");
     stmtBody.innerHTML = html.join("");
 
-    // Monthly summary (whole loaded range, independent of the month picker)
+    // Monthly summary (every month held, independent of the toolbar range)
     const months = [...new Set(state.gl.entries.map(e => e.postingDate.slice(0, 7)))].sort();
     const monthly = months.map(mk => {
         const mt = pnlTotals(pnlAggregate(state.gl.entries.filter(e => e.postingDate.slice(0, 7) === mk)));
         return Object.assign({ mk }, mt);
     });
-    monBody.innerHTML = monthly.map(m => '<tr data-pnl-month="' + m.mk + '" style="cursor:pointer;' + (m.mk === state.gl.month ? " background:#eef0fb; font-weight:700;" : "") + '">'
+    const curMk = (vr.from && vr.to && vr.from.slice(0, 7) === vr.to.slice(0, 7)) ? vr.from.slice(0, 7) : "";
+    monBody.innerHTML = monthly.map(m => '<tr data-pnl-month="' + m.mk + '" title="Set the toolbar to ' + pnlMonthLabel(m.mk) + '" style="cursor:pointer;' + (m.mk === curMk ? " background:#eef0fb; font-weight:700;" : "") + '">'
         + "<td>" + pnlMonthLabel(m.mk) + "</td><td class=\"num\">" + fmtInt(m.count) + "</td>"
         + '<td class="num">' + fmtMoneyFull(m.income) + '</td><td class="num">' + fmtMoneyFull(m.cogs) + "</td>"
         + '<td class="num ' + (m.gp >= 0 ? "pos" : "neg") + '">' + fmtMoneyFull(m.gp) + '</td><td class="num">' + fmtPct(m.gpPct) + "</td>"
@@ -14932,7 +14883,7 @@ function renderPnl() {
     destroyChart("pnlMonthly");
     const canvas = document.getElementById("pnlMonthlyChart");
     if (canvas && monthly.length) {
-        document.getElementById("pnlChartMeta").textContent = monthly.length + " month" + (monthly.length === 1 ? "" : "s");
+        document.getElementById("pnlChartMeta").textContent = monthly.length + " month" + (monthly.length === 1 ? "" : "s") + " loaded";
         state.charts.pnlMonthly = new Chart(canvas.getContext("2d"), {
             type: "bar",
             data: { labels: monthly.map(m => pnlMonthLabel(m.mk)),
@@ -14945,12 +14896,12 @@ function renderPnl() {
             options: chartBase({
                 plugins: { tooltip: { callbacks: { label: c => c.dataset.label + ": " + fmtMoneyFull(c.parsed.y) } } },
                 scales: { y: { ticks: { callback: v => fmtMoney(v) } } },
-                onClick: (ev, els) => { if (els.length) { state.gl.month = monthly[els[0].index].mk; document.getElementById("pnlMonth").value = state.gl.month; renderPnl(); } },
+                onClick: (ev, els) => { if (els.length) pnlGoToMonth(monthly[els[0].index].mk); },
             })
         });
     }
 
-    // Account map (whole loaded range)
+    // Account map (everything held)
     renderPnlMap();
 }
 
@@ -14958,33 +14909,33 @@ function renderPnlMap() {
     const mapBody = document.querySelector("#pnlMapTable tbody");
     const q = (document.getElementById("pnlMapSearch").value || "").toLowerCase().trim();
     let rows = pnlAggregate(state.gl.entries).map(r => ({ ...r }));
-    if (q) rows = rows.filter(r => (r.no + " " + r.name + " " + r.bcCategory + " " + r.bcSub + " " + r.group).toLowerCase().includes(q));
+    if (q) rows = rows.filter(r => (r.no + " " + r.name + " " + r.bcCategory + " " + r.group).toLowerCase().includes(q));
     sortRowsBy(rows, state.gl.mapSort);
     paintSortHeaders("#pnlMapTable", state.gl.mapSort);
     const groupColor = { "Income": "#3949ab", "Cost of Goods Sold": "#6d4c41", "Expense": "#c2185b", "Balance sheet": "#78909c", "Unclassified": "#f57c00" };
     mapBody.innerHTML = rows.map(r => "<tr>"
         + '<td style="white-space:nowrap;">' + escapeHtml(r.no) + pnlWiiseLink("G/L Account No.", r.no, "Open account " + r.no + " entries in Wiise") + "</td>"
-        + "<td>" + escapeHtml(r.name) + "</td><td>" + escapeHtml(r.bcCategory || "—") + "</td><td>" + escapeHtml(r.bcSub || "—") + "</td>"
+        + "<td>" + escapeHtml(r.name) + "</td><td>" + escapeHtml(r.bcCategory || "—") + "</td>"
         + '<td><span style="display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:700; color:white; background:' + groupColor[r.group] + ';">' + escapeHtml(r.group) + "</span></td>"
         + '<td class="num">' + fmtInt(r.count) + '</td><td class="num">' + fmtMoneyFull(r.debit) + '</td><td class="num">' + fmtMoneyFull(r.credit) + "</td>"
         + '<td class="num ' + (r.net >= 0 ? "pos" : "neg") + '">' + fmtMoneyFull(r.net) + "</td></tr>").join("");
-    document.getElementById("pnlMapCount").textContent = rows.length + " account" + (rows.length === 1 ? "" : "s") + " with entries in the loaded range";
+    document.getElementById("pnlMapCount").textContent = rows.length + " account" + (rows.length === 1 ? "" : "s") + " with entries in the loaded ledger";
 }
 
 function pnlExportCsv() {
     const view = pnlEntriesForView();
     if (!view.length) { alert("Nothing loaded to export."); return; }
     const esc = v => { const s = v == null ? "" : String(v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
-    const head = ["Entry No", "Posting Date", "Account No", "Account Name", "Wiise Category", "Wiise Sub-category", "Treated as", "Document Type", "Document No", "Description", "Debit", "Credit", "Net (P&L sign)"];
+    const head = ["Entry No", "Posting Date", "Account No", "Account Name", "Wiise Category", "Treated as", "Document Type", "Document No", "Description", "Debit", "Credit", "Net (P&L sign)"];
     const lines = [head.join(",")];
     for (const e of view.slice().sort((a, b) => a.entryNumber - b.entryNumber)) {
         const a = state.gl.accountsByNo.get(e.accountNumber); const g = pnlGroupOf(a);
-        lines.push([e.entryNumber, e.postingDate, e.accountNumber, a ? a.displayName : "", a ? pnlDecode(a.category) : "", a ? pnlDecode(a.subCategory) : "", g,
+        lines.push([e.entryNumber, e.postingDate, e.accountNumber, a ? a.displayName : "", a ? pnlDecode(a.category) : "", g,
                     e.documentType || "", e.documentNumber || "", e.description || "", e.debitAmount.toFixed(2), e.creditAmount.toFixed(2), pnlSigned(g, e.debitAmount, e.creditAmount).toFixed(2)].map(esc).join(","));
     }
     const blob = new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
-    a.download = "gl-entries-" + pnlViewRange().file + ".csv"; a.click();
+    a.download = "gl-entries-" + pnlToolbarRange().file + ".csv"; a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
 
@@ -14992,12 +14943,15 @@ function pnlExportCsv() {
     const on = (id, ev, fn) => { const el = document.getElementById(id); if (el) el.addEventListener(ev, fn); };
     on("pnlLoadBtn", "click", loadPnl);
     on("pnlCsvBtn", "click", pnlExportCsv);
-    on("pnlMonth", "change", e => { state.gl.month = e.target.value; if (state.gl.loadedAt) renderPnl(); else pnlSyncPeriodUi(); });
-    on("pnlViewFrom", "change", e => { state.gl.viewFrom = e.target.value; if (state.gl.loadedAt) renderPnl(); });
-    on("pnlViewTo",   "change", e => { state.gl.viewTo   = e.target.value; if (state.gl.loadedAt) renderPnl(); });
     on("pnlMapSearch", "input", () => { if (state.gl.loadedAt) renderPnlMap(); });
     const stmt = document.querySelector("#pnlStmtTable tbody");
     if (stmt) stmt.addEventListener("click", e => {
+        const gtr = e.target.closest("tr[data-pnl-group]");
+        if (gtr) {
+            const g = gtr.dataset.pnlGroup;
+            if (state.gl.openGroups.has(g)) state.gl.openGroups.delete(g); else state.gl.openGroups.add(g);
+            renderPnl(); return;
+        }
         const tr = e.target.closest("tr[data-pnl-acct]"); if (!tr) return;
         const no = tr.dataset.pnlAcct;
         if (state.gl.openAccounts.has(no)) state.gl.openAccounts.delete(no); else state.gl.openAccounts.add(no);
@@ -15006,9 +14960,9 @@ function pnlExportCsv() {
     const mon = document.querySelector("#pnlMonthlyTable tbody");
     if (mon) mon.addEventListener("click", e => {
         const tr = e.target.closest("tr[data-pnl-month]"); if (!tr) return;
-        state.gl.month = tr.dataset.pnlMonth; document.getElementById("pnlMonth").value = state.gl.month; renderPnl();
+        pnlGoToMonth(tr.dataset.pnlMonth);
     });
-    attachSortHandlers("#pnlMapTable", state.gl.mapSort, renderPnlMap, new Set(["no", "name", "bcCategory", "bcSub", "group"]));
+    attachSortHandlers("#pnlMapTable", state.gl.mapSort, renderPnlMap, new Set(["no", "name", "bcCategory", "group"]));
 })();
 
 // The "Targets & Run Rate" and "Lists" nav groups are visible only to
@@ -15594,6 +15548,7 @@ function wireEvents() {
     document.getElementById("quickRange").addEventListener("change", e => {
         if (e.target.value) applyQuickRange(e.target.value);
         if (state.invoices && state.invoices.length) { rebuildFiltered(); renderCurrentTab(); }
+        else if (state.tab === "pnl") renderPnl();
     });
     ["fromDate", "toDate"].forEach(id => {
         document.getElementById(id).addEventListener("change", () => {
@@ -15603,6 +15558,7 @@ function wireEvents() {
             // instant feedback. Out-of-range warning is shown by
             // updateDateRangeWarning() called from rebuildFiltered.
             if (state.invoices && state.invoices.length) { rebuildFiltered(); renderCurrentTab(); }
+            else if (state.tab === "pnl") renderPnl();
         });
     });
 
