@@ -12852,6 +12852,19 @@ const DECOMP_DIMS = {
     // Works in both modes: doc wrappers and plain invoices carry .number.
     "docNo":         { label: "Document No",    get: (doc) => doc.number || "(no number)" },
 };
+// BC web-client page ids for posted documents — lets a Document No row
+// deep-link straight to the document in Wiise.
+const BC_DOC_PAGES = {
+    "Posted Sales Invoice": 132,
+    "Posted Sales CR/Adj Note": 134,
+    "Posted Sales Shipment": 130,
+    "Posted Sales Return Receipt": 6660,
+};
+function bcDocLink(docType, docNo) {
+    const page = BC_DOC_PAGES[docType] || 132;
+    return "https://businesscentral.dynamics.com/" + BC_CONFIG.tenantId + "/" + BC_CONFIG.environment
+        + "?page=" + page + "&filter=" + encodeURIComponent("'No.' IS '" + docNo + "'");
+}
 function decompPopulateSelects() {
     const opts = Object.entries(DECOMP_DIMS).map(([k, v]) => `<option value="${escapeAttr(k)}">${escapeHtml(v.label)}</option>`).join("");
     for (let i = 1; i <= 5; i++) {
@@ -12888,6 +12901,29 @@ function buildDecompositionTree(levels) {
     // twice) — totals then read NET of returns. Without it, keep the
     // original invoices-only walk so this tab's numbers stay identical
     // to what they've always been (gross, matching the other tabs).
+    // When Document No is the DEEPEST level, each document node gets one
+    // extra expandable level: its item lines (item — description, with
+    // that line's sales/GP/qty), plus a deep link into Wiise.
+    const docNoDepth = levels.indexOf("docNo");
+    const wantLines = docNoDepth === dims.length - 1 && docNoDepth >= 0;
+    function walkLine(srcDoc, ln, docType, s, q, c) {
+        let map = root;
+        let node = null;
+        for (let d = 0; d < dims.length; d++) {
+            const val = dims[d].get(srcDoc, ln);
+            node = ensureNode(map, val, val, d);
+            node.sales += s; node.gp += (s - c); node.qty += q;
+            map = node.children;
+        }
+        if (wantLines && node) {
+            if (!node.docNo) { node.docNo = srcDoc.number || ""; node.docType = docType; }
+            const itemNo = ln.lineObjectNumber || ln.itemId || "";
+            const label = (itemNo || "(non-item)") + (ln.description ? " — " + ln.description : "");
+            const lineKey = (srcDoc.number || "?") + "|" + (ln.id || ln.sequence || itemNo || map.size);
+            const leaf = ensureNode(map, lineKey, label, dims.length);
+            leaf.sales += s; leaf.gp += (s - c); leaf.qty += q;
+        }
+    }
     if (levels.includes("docType")) {
         const inRange = getDateRangePredicate();
         const docs = allPostedDocs().filter(d => inRange(d.postingDate) && docMatchesFilters(d));
@@ -12898,34 +12934,19 @@ function buildDecompositionTree(levels) {
                 const s = lineNetAmount(ln) * doc.sign * mult;
                 const q = num(ln.quantity) * doc.sign * mult;
                 const c = totalCostFromLine(ln, doc.sign, doc.postingDate, doc.customerNumber, doc.number) * mult;
-                let map = root;
-                for (let d = 0; d < dims.length; d++) {
-                    const val = dims[d].get(doc, ln);
-                    const node = ensureNode(map, val, val, d);
-                    node.sales += s; node.gp += (s - c); node.qty += q;
-                    map = node.children;
-                }
+                walkLine(doc, ln, doc.type, s, q, c);
             }
         }
-        // Convert nested maps into arrays (shared tail below)
     } else {
-    for (const inv of state.filtered) {
-        for (const ln of (inv.salesInvoiceLines || [])) {
-            if (!lineMatchesFilters(ln)) continue;
-            const s = lineNetAmount(ln);
-            const q = num(ln.quantity);
-            const c = totalCostFromLine(ln, 1, inv.postingDate, inv.customerNumber, inv.number);
-            let map = root;
-            const path = [];
-            for (let d = 0; d < dims.length; d++) {
-                const val = dims[d].get(inv, ln);
-                const node = ensureNode(map, val, val, d);
-                node.sales += s; node.gp += (s - c); node.qty += q;
-                map = node.children;
-                path.push(val);
+        for (const inv of state.filtered) {
+            for (const ln of (inv.salesInvoiceLines || [])) {
+                if (!lineMatchesFilters(ln)) continue;
+                const s = lineNetAmount(ln);
+                const q = num(ln.quantity);
+                const c = totalCostFromLine(ln, 1, inv.postingDate, inv.customerNumber, inv.number);
+                walkLine(inv, ln, "Posted Sales Invoice", s, q, c);
             }
         }
-    }
     }
     // Convert nested maps into arrays
     function flatten(map) {
@@ -12964,8 +12985,11 @@ function renderDecomposition() {
         const bg = depth === 0 ? "background:#eef0fb; font-weight:700;"
                  : depth === 1 ? "background:#f7f8fd; font-weight:600;"
                  : depth === 2 ? "background:#fafbff;" : "";
+        const wiiseLink = node.docNo
+            ? ` <a href="${escapeAttr(bcDocLink(node.docType, node.docNo))}" target="_blank" rel="noopener" title="Open ${escapeAttr(node.docNo)} in Wiise" onclick="event.stopPropagation()" style="text-decoration:none; font-size:11px; opacity:0.7;">↗</a>`
+            : "";
         acc.push(`<tr data-decomp-key="${escapeAttr(node.key)}" data-expandable="${expandable ? 1 : 0}" style="${bg}cursor:${expandable ? "pointer" : "default"};">
-            <td>${pad}<span style="display:inline-block; width:14px; color:#3f51b5;">${arrow}</span> ${escapeHtml(node.label)}</td>
+            <td>${pad}<span style="display:inline-block; width:14px; color:#3f51b5;">${arrow}</span> ${escapeHtml(node.label)}${wiiseLink}</td>
             <td class="num">${fmtMoneyFull(node.sales)}</td>
             <td class="num ${node.gp >= 0 ? "pos" : "neg"}">${fmtMoneyFull(node.gp)}</td>
             <td class="num">${fmtPct(node.sales ? node.gp / node.sales : 0)}</td>
