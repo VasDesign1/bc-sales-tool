@@ -12885,7 +12885,10 @@ function treeRowStyle(depth, expandable) {
     // tint fades one step per level so 4/5-level hierarchies keep the
     // same scale all the way down instead of going plain mid-tree.
     if (expandable === false) return "";
-    const tints = ["#eef0fb", "#f2f4fc", "#f6f7fd", "#f9fafe", "#fbfcfe"];
+    // Wider, clearly-distinguishable steps (Faik 2026-09-23): whole ramp
+    // nudged darker so L4 and L5 read as their own shades instead of
+    // blending together — every level a visibly different blue.
+    const tints = ["#e4e8f8", "#eaedfa", "#f0f2fc", "#f6f7fd", "#fbfcfe"];
     const bgc = tints[Math.min(depth, tints.length - 1)];
     return "background:" + bgc + ";"
          + (depth === 0 ? " font-weight:700;" : depth === 1 ? " font-weight:600;" : "");
