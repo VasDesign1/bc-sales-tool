@@ -11406,7 +11406,7 @@ function renderQuoteCustomerTree(quotes) {
         const isOpen = state.expandedQuoteMatrix.has(node.key);
         const arrow = expandable ? (isOpen ? "▾" : "▸") : "";
         const pad = "&nbsp;".repeat(depth * 4);
-        const bg = treeRowStyle(depth);
+        const bg = treeRowStyle(depth, expandable);
         const statusBadge = node.status ? `<span class="badge ${quoteStatusBadgeClass(node.status)}">${escapeHtml(node.status)}</span>` : "";
         acc.push(`<tr data-key="${escapeAttr(node.key)}" data-expandable="${expandable ? 1 : 0}" style="${bg}cursor:${expandable ? "pointer" : "default"};">
             <td>${pad}<span style="display:inline-block; width:14px; color:#3f51b5;">${arrow}</span> ${escapeHtml(node.label)}${wiiseDocLinkHtml(node.docType, node.docNo)}</td>
@@ -11988,7 +11988,7 @@ function renderBlanketOrderCustomerTree(orders) {
         const isOpen = state.expandedBoMatrix.has(node.key);
         const arrow = expandable ? (isOpen ? "▾" : "▸") : "";
         const pad = "&nbsp;".repeat(depth * 4);
-        const bg = treeRowStyle(depth);
+        const bg = treeRowStyle(depth, expandable);
         const statusBadge = node.status ? `<span class="badge ${boStatusBadgeClass(node.status)}">${escapeHtml(node.status)}</span>` : "";
         acc.push(`<tr data-key="${escapeAttr(node.key)}" data-expandable="${expandable ? 1 : 0}" style="${bg}cursor:${expandable ? "pointer" : "default"};">
             <td>${pad}<span style="display:inline-block; width:14px; color:#3f51b5;">${arrow}</span> ${escapeHtml(node.label)}${wiiseDocLinkHtml(node.docType, node.docNo)}</td>
@@ -12880,10 +12880,15 @@ function wiiseDocLinkHtml(docType, docNo) {
 // One shading scale for every drill-down tree in the tool, so the blue
 // tint reads as "this row expands" identically on every tab:
 // depth 0 bold blue, depth 1 semi-bold lighter, depth 2 faint, deeper plain.
-function treeRowStyle(depth) {
-    return depth === 0 ? "background:#eef0fb; font-weight:700;"
-         : depth === 1 ? "background:#f7f8fd; font-weight:600;"
-         : depth === 2 ? "background:#fafbff;" : "";
+function treeRowStyle(depth, expandable) {
+    // Blue tint = "this row drills down". Leaf rows stay plain, and the
+    // tint fades one step per level so 4/5-level hierarchies keep the
+    // same scale all the way down instead of going plain mid-tree.
+    if (expandable === false) return "";
+    const tints = ["#eef0fb", "#f2f4fc", "#f6f7fd", "#f9fafe", "#fbfcfe"];
+    const bgc = tints[Math.min(depth, tints.length - 1)];
+    return "background:" + bgc + ";"
+         + (depth === 0 ? " font-weight:700;" : depth === 1 ? " font-weight:600;" : "");
 }
 function decompPopulateSelects() {
     const opts = Object.entries(DECOMP_DIMS).map(([k, v]) => `<option value="${escapeAttr(k)}">${escapeHtml(v.label)}</option>`).join("");
@@ -13002,7 +13007,7 @@ function renderDecomposition() {
         const isOpen = decompState.expanded.has(node.key);
         const arrow = expandable ? (isOpen ? "▾" : "▸") : "";
         const pad = "&nbsp;".repeat(depth * 4);
-        const bg = treeRowStyle(depth);
+        const bg = treeRowStyle(depth, expandable);
         const wiiseLink = wiiseDocLinkHtml(node.docType, node.docNo);
         acc.push(`<tr data-decomp-key="${escapeAttr(node.key)}" data-expandable="${expandable ? 1 : 0}" style="${bg}cursor:${expandable ? "pointer" : "default"};">
             <td>${pad}<span style="display:inline-block; width:14px; color:#3f51b5;">${arrow}</span> ${escapeHtml(node.label)}${wiiseLink}</td>
@@ -14336,7 +14341,7 @@ function renderDrillTree(roots, tableSelector) {
         const isOpen = state.expandedMatrix.has(node.key);
         const arrow = expandable ? (isOpen ? "▾" : "▸") : "";
         const pad = "&nbsp;".repeat(depth * 4);
-        const bg = treeRowStyle(depth);
+        const bg = treeRowStyle(depth, expandable);
         const usCell = hasUnitSell
             ? `<td class="num">${node.unitSell ? fmtMoneyFull(node.unitSell) : ""}</td>`
             : "";
