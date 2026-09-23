@@ -3365,12 +3365,13 @@
 
             <!-- TAB: Sales Decomposition -->
             <section data-tab-content="decomposition" style="display:none;">
-                <div class="hint">Pick a hierarchy (up to 4 levels) and the tool will roll up sales / GP across those dimensions. Each row is expandable to the next level.</div>
+                <div class="hint">Pick a hierarchy (up to 5 levels) and the tool will roll up sales / GP across those dimensions. Each row is expandable to the next level. Adding <strong>Document type</strong> anywhere in the hierarchy switches the tree to all posted documents: invoices positive, CR/Adj notes negative (so totals read net of returns), shipments and return receipts as $0 informational rows.</div>
                 <div class="toolbar">
                     <div class="field"><label>Level 1</label><select id="decompL1" class="mini-select"></select></div>
                     <div class="field"><label>Level 2</label><select id="decompL2" class="mini-select"></select></div>
                     <div class="field"><label>Level 3</label><select id="decompL3" class="mini-select"></select></div>
                     <div class="field"><label>Level 4</label><select id="decompL4" class="mini-select"></select></div>
+                    <div class="field"><label>Level 5</label><select id="decompL5" class="mini-select"></select></div>
                     <button class="btn btn-primary" id="decompApply">Build tree</button>
                 </div>
                 <div class="panel">
@@ -12842,10 +12843,16 @@ const DECOMP_DIMS = {
     "month":         { label: "Month",          get: (inv) => monthLabel(inv.postingDate) },
     "fy":            { label: "Fiscal Year",    get: (inv) => "FY " + fiscalYear(inv.postingDate) },
     "status":        { label: "Status",         get: (inv) => inv.status || "(unknown)" },
+    // Document type only carries a value when the tree is built from
+    // allPostedDocs (doc.type = "Posted Sales Invoice" / "Posted Sales
+    // CR/Adj Note" / "Posted Sales Shipment" / "Posted Sales Return
+    // Receipt") — selecting it switches the source; see
+    // buildDecompositionTree.
+    "docType":       { label: "Document type",  get: (doc) => doc.type || "Posted Sales Invoice" },
 };
 function decompPopulateSelects() {
     const opts = Object.entries(DECOMP_DIMS).map(([k, v]) => `<option value="${escapeAttr(k)}">${escapeHtml(v.label)}</option>`).join("");
-    for (let i = 1; i <= 4; i++) {
+    for (let i = 1; i <= 5; i++) {
         const sel = document.getElementById("decompL" + i);
         if (sel && !sel.dataset.populated) {
             sel.innerHTML = opts;
@@ -12873,6 +12880,33 @@ function buildDecompositionTree(levels) {
         }
         return n;
     }
+    // Source switch: with "Document type" in the hierarchy, walk ALL
+    // posted documents (invoices +, CR/Adj notes −, shipments / return
+    // receipts zeroed like every drill tree, so goods aren't counted
+    // twice) — totals then read NET of returns. Without it, keep the
+    // original invoices-only walk so this tab's numbers stay identical
+    // to what they've always been (gross, matching the other tabs).
+    if (levels.includes("docType")) {
+        const inRange = getDateRangePredicate();
+        const docs = allPostedDocs().filter(d => inRange(d.postingDate) && docMatchesFilters(d));
+        for (const doc of docs) {
+            for (const ln of (doc.lines || [])) {
+                if (!lineMatchesFilters(ln)) continue;
+                const mult = doc.countsTotal ? 1 : 0;
+                const s = lineNetAmount(ln) * doc.sign * mult;
+                const q = num(ln.quantity) * doc.sign * mult;
+                const c = totalCostFromLine(ln, doc.sign, doc.postingDate, doc.customerNumber, doc.number) * mult;
+                let map = root;
+                for (let d = 0; d < dims.length; d++) {
+                    const val = dims[d].get(doc, ln);
+                    const node = ensureNode(map, val, val, d);
+                    node.sales += s; node.gp += (s - c); node.qty += q;
+                    map = node.children;
+                }
+            }
+        }
+        // Convert nested maps into arrays (shared tail below)
+    } else {
     for (const inv of state.filtered) {
         for (const ln of (inv.salesInvoiceLines || [])) {
             if (!lineMatchesFilters(ln)) continue;
@@ -12889,6 +12923,7 @@ function buildDecompositionTree(levels) {
                 path.push(val);
             }
         }
+    }
     }
     // Convert nested maps into arrays
     function flatten(map) {
@@ -12907,7 +12942,8 @@ function renderDecomposition() {
         [document.getElementById("decompL1").value,
          document.getElementById("decompL2").value,
          document.getElementById("decompL3").value,
-         document.getElementById("decompL4").value].filter(v => v);
+         document.getElementById("decompL4").value,
+         document.getElementById("decompL5").value].filter(v => v);
     if (!levels.length) {
         document.querySelector("#decompTable tbody").innerHTML = '<tr><td colspan="6" class="empty">Pick at least one level.</td></tr>';
         document.getElementById("decompTitle").textContent = "Decomposition tree";
@@ -15403,6 +15439,7 @@ function wireEvents() {
             document.getElementById("decompL2").value,
             document.getElementById("decompL3").value,
             document.getElementById("decompL4").value,
+            document.getElementById("decompL5").value,
         ].filter(v => v);
         decompState.expanded.clear();
         renderDecomposition();
