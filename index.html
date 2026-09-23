@@ -11372,6 +11372,9 @@ function buildQuoteCustomerTreeData(universe) {
             campaign: row._campaign || "",
             children: [],
         };
+        if (row._source === "quote")        { docNode.docType = "Sales Quote";          docNode.docNo = row._docNumber || cleanDocKey; }
+        else if (row._source === "order")   { docNode.docType = "Sales Order";          docNode.docNo = row._docNumber || ""; }
+        else if (row._source === "invoice") { docNode.docType = "Posted Sales Invoice"; docNode.docNo = row._docNumber || ""; }
         custNode.children.push(docNode);
         for (const ln of (row._lines || [])) {
             if (!lineMatchesFilters(ln)) continue;
@@ -11408,7 +11411,7 @@ function renderQuoteCustomerTree(quotes) {
                  : "";
         const statusBadge = node.status ? `<span class="badge ${quoteStatusBadgeClass(node.status)}">${escapeHtml(node.status)}</span>` : "";
         acc.push(`<tr data-key="${escapeAttr(node.key)}" data-expandable="${expandable ? 1 : 0}" style="${bg}cursor:${expandable ? "pointer" : "default"};">
-            <td>${pad}<span style="display:inline-block; width:14px; color:#3f51b5;">${arrow}</span> ${escapeHtml(node.label)}</td>
+            <td>${pad}<span style="display:inline-block; width:14px; color:#3f51b5;">${arrow}</span> ${escapeHtml(node.label)}${wiiseDocLinkHtml(node.docType, node.docNo)}</td>
             <td class="num">${node.quoteCount ? fmtInt(node.quoteCount) : ""}</td>
             <td class="num">${fmtMoneyFull(node.sales)}</td>
             <td class="num">${node.qty ? fmtQty(node.qty) : ""}</td>
@@ -11956,6 +11959,7 @@ function buildBlanketOrderCustomerTreeData(orders) {
             orderDate: bo.orderDate || bo.documentDate || "",
             children: [],
         };
+        docNode.docType = "Blanket Sales Order"; docNode.docNo = bo.number || "";
         custNode.children.push(docNode);
         for (const ln of getBlanketOrderLines(bo)) {
             if (!lineMatchesFilters(ln)) continue;
@@ -11991,7 +11995,7 @@ function renderBlanketOrderCustomerTree(orders) {
                  : "";
         const statusBadge = node.status ? `<span class="badge ${boStatusBadgeClass(node.status)}">${escapeHtml(node.status)}</span>` : "";
         acc.push(`<tr data-key="${escapeAttr(node.key)}" data-expandable="${expandable ? 1 : 0}" style="${bg}cursor:${expandable ? "pointer" : "default"};">
-            <td>${pad}<span style="display:inline-block; width:14px; color:#3f51b5;">${arrow}</span> ${escapeHtml(node.label)}</td>
+            <td>${pad}<span style="display:inline-block; width:14px; color:#3f51b5;">${arrow}</span> ${escapeHtml(node.label)}${wiiseDocLinkHtml(node.docType, node.docNo)}</td>
             <td class="num">${node.docCount ? fmtInt(node.docCount) : ""}</td>
             <td class="num">${fmtMoneyFull(node.sales)}</td>
             <td class="num">${node.qty ? fmtQty(node.qty) : ""}</td>
@@ -12855,6 +12859,9 @@ const DECOMP_DIMS = {
 // BC web-client page ids for posted documents — lets a Document No row
 // deep-link straight to the document in Wiise.
 const BC_DOC_PAGES = {
+    "Sales Quote": 41,
+    "Sales Order": 42,
+    "Blanket Sales Order": 507,
     "Posted Sales Invoice": 132,
     "Posted Sales CR/Adj Note": 134,
     "Posted Sales Shipment": 130,
