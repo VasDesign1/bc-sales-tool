@@ -3605,7 +3605,7 @@
                         <h2>Ledger</h2>
                         <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
                             <span class="meta" id="pnlStatus"></span>
-                            <button class="btn btn-ghost" id="pnlCsvBtn" type="button" title="Download every G/L entry in the current date range as CSV">Export entries CSV</button>
+                            <button class="more-btn" id="pnlCsvBtn" type="button" title="Download every G/L entry in the current date range as a CSV that opens in Excel">Export to Excel</button>
                             <button class="btn btn-primary" id="pnlLoadBtn" type="button" title="Fetch the general ledger for the toolbar From / To range. About 30 seconds per month; loads merge with what is already held.">Load ledger</button>
                         </div>
                     </div>
@@ -3622,7 +3622,7 @@
                 <div id="pnlWarn" class="hint" style="display:none; border-left:4px solid #f57c00;"></div>
                 <div class="chart-grid" style="margin-bottom:16px;">
                     <div class="card span-12">
-                        <div class="head"><h3 title="One bar group per month held in memory (every month loaded so far), regardless of the toolbar range. Click a month to set the toolbar to it.">Month by month · Income vs Cost of Goods Sold vs Expenses, Net Profit line</h3><span class="meta" id="pnlChartMeta"></span></div>
+                        <div class="head"><h3 title="One bar group per month held in memory (every month loaded so far), regardless of the toolbar range. Net Profit bar is green when positive, red when negative. Click a month to set the toolbar to it.">Month by month · Income vs Cost of Goods Sold vs Expenses vs Net Profit</h3><span class="meta" id="pnlChartMeta"></span></div>
                         <div class="chart-wrap" style="min-height:260px;"><canvas id="pnlMonthlyChart"></canvas></div>
                     </div>
                 </div>
@@ -14839,7 +14839,7 @@ function renderPnl() {
             if (open) {
                 const entsAll = r.entries.slice().sort((a, b) => a.postingDate.localeCompare(b.postingDate) || (a.entryNumber - b.entryNumber));
                 const ents = entsAll.slice(0, PNL_MAX_EXPANDED);
-                if (entsAll.length > ents.length) html.push('<tr style="' + treeRowStyle(2) + ' font-size:12px; color:#b26a00;"><td style="padding-left:44px;" colspan="7">Showing the first ' + fmtInt(ents.length) + " of " + fmtInt(entsAll.length) + " entries — use Export entries CSV for the full list.</td></tr>");
+                if (entsAll.length > ents.length) html.push('<tr style="' + treeRowStyle(2) + ' font-size:12px; color:#b26a00;"><td style="padding-left:44px;" colspan="7">Showing the first ' + fmtInt(ents.length) + " of " + fmtInt(entsAll.length) + " entries — use Export to Excel for the full list.</td></tr>");
                 for (const e of ents) {
                     html.push('<tr style="' + treeRowStyle(2) + ' font-size:12px;">'
                         + '<td style="padding-left:44px; white-space:nowrap;">' + fmtDate(e.postingDate) + "</td>"
@@ -14884,6 +14884,8 @@ function renderPnl() {
     const canvas = document.getElementById("pnlMonthlyChart");
     if (canvas && monthly.length) {
         document.getElementById("pnlChartMeta").textContent = monthly.length + " month" + (monthly.length === 1 ? "" : "s") + " loaded";
+        // Net Profit is a bar like the others (green when positive, red when
+        // negative) — as a line it was a single dot lost near $0 on a $1.8M axis.
         state.charts.pnlMonthly = new Chart(canvas.getContext("2d"), {
             type: "bar",
             data: { labels: monthly.map(m => pnlMonthLabel(m.mk)),
@@ -14891,10 +14893,16 @@ function renderPnl() {
                         { label: "Income",   data: monthly.map(m => m.income),  backgroundColor: "#3949ab", borderRadius: 3 },
                         { label: "COGS",     data: monthly.map(m => m.cogs),    backgroundColor: "#6d4c41", borderRadius: 3 },
                         { label: "Expenses", data: monthly.map(m => m.expense), backgroundColor: "#e91e63", borderRadius: 3 },
-                        { label: "Net Profit", data: monthly.map(m => m.net), type: "line", borderColor: "#43a047", backgroundColor: "#43a047", tension: 0.25, yAxisID: "y" },
+                        { label: "Net Profit", data: monthly.map(m => m.net), backgroundColor: monthly.map(m => m.net >= 0 ? "#43a047" : "#c62828"), borderRadius: 3 },
                     ] },
+            plugins: [ChartDataLabels],
             options: chartBase({
-                plugins: { tooltip: { callbacks: { label: c => c.dataset.label + ": " + fmtMoneyFull(c.parsed.y) } } },
+                plugins: { tooltip: { callbacks: { label: c => c.dataset.label + ": " + fmtMoneyFull(c.parsed.y) } },
+                           datalabels: { anchor: "end", align: c => (c.dataset.data[c.dataIndex] || 0) >= 0 ? "end" : "start",
+                                         offset: 2, clamp: true, font: { size: 11, weight: "600" },
+                                         color: Chart.defaults.color || "#2c2f4a",
+                                         formatter: v => fmtMoney(v) } },
+                layout: { padding: { top: 18, bottom: 6 } },
                 scales: { y: { ticks: { callback: v => fmtMoney(v) } } },
                 onClick: (ev, els) => { if (els.length) pnlGoToMonth(monthly[els[0].index].mk); },
             })
