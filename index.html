@@ -1623,16 +1623,19 @@
             <a data-tab="pareto">Sales Pareto (80/20)</a>
             <a data-tab="decomposition">Sales Decomposition</a>
 
-            <div class="group-label">Targets &amp; Run Rate</div>
-            <a data-tab="branchTarget">Branch Sales &amp; Targets</a>
-            <a data-tab="branchSalesRate">Branch Sales Run Rate</a>
-            <a data-tab="branchMarginRate">Branch Margin Run Rate</a>
-            <a data-tab="salespersonSalesRate">Salesperson Sales Run Rate</a>
-            <a data-tab="salespersonMarginRate">Salesperson Margin Run Rate</a>
+            <!-- Restricted nav: hidden for everyone except the owner
+                 account (see updateRestrictedNav). Hidden by default so
+                 non-owners and not-signed-in viewers never see a flash. -->
+            <div class="group-label restrictedNav" style="display:none;">Targets &amp; Run Rate</div>
+            <a data-tab="branchTarget" class="restrictedNav" style="display:none;">Branch Sales &amp; Targets</a>
+            <a data-tab="branchSalesRate" class="restrictedNav" style="display:none;">Branch Sales Run Rate</a>
+            <a data-tab="branchMarginRate" class="restrictedNav" style="display:none;">Branch Margin Run Rate</a>
+            <a data-tab="salespersonSalesRate" class="restrictedNav" style="display:none;">Salesperson Sales Run Rate</a>
+            <a data-tab="salespersonMarginRate" class="restrictedNav" style="display:none;">Salesperson Margin Run Rate</a>
 
-            <div class="group-label">Lists</div>
-            <a data-tab="keyCustomers" class="stub">Key Customer Sales</a>
-            <a data-tab="ordersPastDel" class="stub">Orders past Delivery</a>
+            <div class="group-label restrictedNav" style="display:none;">Lists</div>
+            <a data-tab="keyCustomers" class="stub restrictedNav" style="display:none;">Key Customer Sales</a>
+            <a data-tab="ordersPastDel" class="stub restrictedNav" style="display:none;">Orders past Delivery</a>
         </nav>
     </aside>
 
@@ -14396,6 +14399,28 @@ function applyMonth(yyyymm) {
     setPeriodBadge();
 }
 
+// The "Targets & Run Rate" and "Lists" nav groups are visible only to
+// this account for now (Faik's call, 2026-09-23 — until he says
+// otherwise). Presentation-level gating: the links are hidden for
+// everyone else and for not-signed-in viewers (incl. passphrase-only
+// Fast lookup sessions). If a restricted tab is somehow active when
+// the nav hides, we bounce to Overview.
+const RESTRICTED_NAV_OWNER = "faiko@vicair.com.au";
+const RESTRICTED_TABS = new Set(["branchTarget", "branchSalesRate", "branchMarginRate",
+                                 "salespersonSalesRate", "salespersonMarginRate",
+                                 "keyCustomers", "ordersPastDel"]);
+function updateRestrictedNav() {
+    let user = "";
+    try {
+        initMsal();
+        const accounts = bcMsalInstance.getAllAccounts();
+        if (accounts.length) user = (accounts[0].username || "").toLowerCase();
+    } catch (e) { /* MSAL unavailable → stay hidden */ }
+    const show = user === RESTRICTED_NAV_OWNER;
+    document.querySelectorAll(".restrictedNav").forEach(el => { el.style.display = show ? "" : "none"; });
+    if (!show && RESTRICTED_TABS.has(state.tab)) setActiveTab("overview");
+}
+
 async function handleSignIn() {
     try {
         await bcGetToken();
@@ -14405,6 +14430,7 @@ async function handleSignIn() {
         document.getElementById("signinOverlay").style.display = "none";
         document.getElementById("loadBtn").disabled = false;
         document.getElementById("signOutBtn").style.display = "inline-block";
+        updateRestrictedNav();
     } catch (err) { alert("Sign-in failed: " + (err.message || err)); }
 }
 
@@ -15066,6 +15092,10 @@ function wireEvents() {
     document.querySelectorAll(".sidebar a[data-tab]").forEach(a => {
         a.addEventListener("click", () => setActiveTab(a.dataset.tab));
     });
+    // Reveal owner-only nav if a cached MSAL session already identifies
+    // the owner (e.g. page refresh mid-session). Fresh sign-ins call
+    // this again from handleSignIn.
+    updateRestrictedNav();
 
     // Drill back buttons
     document.getElementById("cdBack").addEventListener("click", closeDrill);
