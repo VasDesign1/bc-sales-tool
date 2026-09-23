@@ -12849,6 +12849,8 @@ const DECOMP_DIMS = {
     // Receipt") — selecting it switches the source; see
     // buildDecompositionTree.
     "docType":       { label: "Document type",  get: (doc) => doc.type || "Posted Sales Invoice" },
+    // Works in both modes: doc wrappers and plain invoices carry .number.
+    "docNo":         { label: "Document No",    get: (doc) => doc.number || "(no number)" },
 };
 function decompPopulateSelects() {
     const opts = Object.entries(DECOMP_DIMS).map(([k, v]) => `<option value="${escapeAttr(k)}">${escapeHtml(v.label)}</option>`).join("");
@@ -13975,7 +13977,7 @@ function allPostedDocs() {
     for (const inv of state.invoices) {
         if (!docInSnapshot(inv)) continue;
         list.push({ type: "Posted Sales Invoice", ileType: "Sales Invoice", sign: 1, countsTotal: true,
-                    id: inv.id, number: inv.number,
+                    id: inv.id, number: inv.number, status: inv.status || "",
                     customerNumber: inv.customerNumber, customerName: inv.customerName,
                     salesperson: inv.salesperson, postingDate: inv.postingDate,
                     lines: inv.salesInvoiceLines || [] });
@@ -13983,7 +13985,7 @@ function allPostedDocs() {
     for (const cm of state.creditMemos) {
         if (!docInSnapshot(cm)) continue;
         list.push({ type: "Posted Sales CR/Adj Note", ileType: "Sales Credit Memo", sign: -1, countsTotal: true,
-                    id: cm.id, number: cm.number,
+                    id: cm.id, number: cm.number, status: cm.status || "",
                     customerNumber: cm.customerNumber, customerName: cm.customerName,
                     salesperson: cm.salesperson, postingDate: cm.postingDate,
                     lines: cm.salesCreditMemoLines || [] });
@@ -13991,7 +13993,7 @@ function allPostedDocs() {
     for (const s of state.shipments) {
         if (!docInSnapshot(s)) continue;
         list.push({ type: "Posted Sales Shipment", ileType: "Sales Shipment", sign: 1, countsTotal: false,
-                    id: s.id, number: s.number,
+                    id: s.id, number: s.number, status: s.status || "",
                     customerNumber: s.customerNumber, customerName: s.customerName,
                     salesperson: s.salesperson, postingDate: s.postingDate,
                     lines: s.salesShipmentLines || [] });
@@ -13999,7 +14001,7 @@ function allPostedDocs() {
     for (const r of state.returnReceipts) {
         if (!docInSnapshot(r)) continue;
         list.push({ type: "Posted Sales Return Receipt", ileType: "Sales Return Receipt", sign: -1, countsTotal: false,
-                    id: r.id, number: r.number,
+                    id: r.id, number: r.number, status: r.status || "",
                     customerNumber: r.customerNumber, customerName: r.customerName,
                     salesperson: r.salesperson, postingDate: r.postingDate,
                     lines: r.salesReturnReceiptLines || [] });
