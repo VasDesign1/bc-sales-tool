@@ -1637,8 +1637,9 @@
             <a data-tab="keyCustomers" class="stub restrictedNav" style="display:none;">Key Customer Sales</a>
             <a data-tab="ordersPastDel" class="stub restrictedNav" style="display:none;">Orders past Delivery</a>
 
-            <div class="group-label restrictedNav" style="display:none;">Finance</div>
-            <a data-tab="pnl" class="restrictedNav" style="display:none;">Profit &amp; Loss (Ledger)</a>
+            <!-- Finance group has its own allow-list (PNL_VIEWERS), separate from the owner-only groups above. -->
+            <div class="group-label financeNav" style="display:none;">Finance</div>
+            <a data-tab="pnl" class="financeNav" style="display:none;">Profit &amp; Loss (Ledger)</a>
         </nav>
     </aside>
 
@@ -3600,7 +3601,7 @@
 
             <!-- TAB: Profit & Loss (General Ledger) — owner-only, see updateRestrictedNav -->
             <section data-tab-content="pnl" style="display:none;">
-                <div class="hint">Owner-only test tab. Reads <strong>General Ledger Entries</strong> straight from Wiise (BC API v2.0 <code>generalLedgerEntries</code>) and groups them by the <strong>Chart of Accounts</strong> category (Income / Cost of Goods Sold / Expense). Uses the From / To and Quick range in the toolbar above. Independent of the sales load and of the Rentals toggle — this is what the ledger itself shows. Balance-sheet accounts (Assets / Liabilities / Equity) are excluded from the P&amp;L but listed in the account map below.</div>
+                <div class="hint">Restricted tab (Finance allow-list). Reads <strong>General Ledger Entries</strong> straight from Wiise (BC API v2.0 <code>generalLedgerEntries</code>) and groups them by the <strong>Chart of Accounts</strong> category (Income / Cost of Goods Sold / Expense). Uses the From / To and Quick range in the toolbar above. Independent of the sales load and of the Rentals toggle — this is what the ledger itself shows. Balance-sheet accounts (Assets / Liabilities / Equity) are excluded from the P&amp;L but listed in the account map below.</div>
                 <div class="panel" style="margin-bottom:16px;">
                     <div class="panel-header">
                         <h2>Ledger</h2>
@@ -14689,13 +14690,7 @@ function pnlGroupOf(acct) {
 function pnlSigned(group, debit, credit) {
     return group === "Income" ? credit - debit : debit - credit;
 }
-function pnlIsOwner() {
-    try {
-        initMsal();
-        const accounts = bcMsalInstance.getAllAccounts();
-        return accounts.length > 0 && (accounts[0].username || "").toLowerCase() === RESTRICTED_NAV_OWNER;
-    } catch (e) { return false; }
-}
+function pnlIsOwner() { return PNL_VIEWERS.has(currentSignInName()); }
 function pnlWiiseLink(field, value, title) {
     const url = "https://businesscentral.dynamics.com/" + BC_CONFIG.tenantId + "/" + BC_CONFIG.environment
         + "?page=20&filter=" + encodeURIComponent("'" + field + "' IS '" + value + "'");
@@ -14736,7 +14731,7 @@ function pnlGoToMonth(mk) {
 }
 
 async function loadPnl() {
-    if (!pnlIsOwner()) { alert("This tab is limited to the owner account."); return; }
+    if (!pnlIsOwner()) { alert("This tab is limited to the Finance allow-list."); return; }
     const { from, to } = pnlToolbarRange();
     if (!from || !to || from > to) { alert("Set a valid From / To range in the toolbar first."); return; }
     const days = Math.round((new Date(to + "T00:00:00") - new Date(from + "T00:00:00")) / 86400000) + 1;
@@ -15170,17 +15165,33 @@ function pnlExportCsv() {
 const RESTRICTED_NAV_OWNER = "faiko@vicair.com.au";
 const RESTRICTED_TABS = new Set(["branchTarget", "branchSalesRate", "branchMarginRate",
                                  "salespersonSalesRate", "salespersonMarginRate",
-                                 "keyCustomers", "ordersPastDel", "pnl"]);
-function updateRestrictedNav() {
-    let user = "";
+                                 "keyCustomers", "ordersPastDel"]);
+// The Finance group (P&L tab) has its own allow-list (Faik 2026-09-23).
+const PNL_VIEWERS = new Set([RESTRICTED_NAV_OWNER, "michael.craggs@polyaire.com.au"]);
+// Guest accounts sign in as "name_domain.com#EXT#@VicAirPtyLtd.onmicrosoft.com";
+// fold that back to the plain email so the allow-list can use real addresses.
+function normalizeSignInName(u) {
+    u = (u || "").toLowerCase();
+    const ext = u.indexOf("#ext#");
+    if (ext > 0) { const local = u.slice(0, ext); const i = local.lastIndexOf("_"); if (i > 0) u = local.slice(0, i) + "@" + local.slice(i + 1); }
+    return u;
+}
+function currentSignInName() {
     try {
         initMsal();
         const accounts = bcMsalInstance.getAllAccounts();
-        if (accounts.length) user = (accounts[0].username || "").toLowerCase();
-    } catch (e) { /* MSAL unavailable → stay hidden */ }
+        if (accounts.length) return normalizeSignInName(accounts[0].username || (accounts[0].idTokenClaims || {}).preferred_username || (accounts[0].idTokenClaims || {}).email || "");
+    } catch (e) { /* MSAL unavailable → not signed in */ }
+    return "";
+}
+function updateRestrictedNav() {
+    const user = currentSignInName();
     const show = user === RESTRICTED_NAV_OWNER;
     document.querySelectorAll(".restrictedNav").forEach(el => { el.style.display = show ? "" : "none"; });
     if (!show && RESTRICTED_TABS.has(state.tab)) setActiveTab("overview");
+    const showPnl = PNL_VIEWERS.has(user);
+    document.querySelectorAll(".financeNav").forEach(el => { el.style.display = showPnl ? "" : "none"; });
+    if (!showPnl && state.tab === "pnl") setActiveTab("overview");
     // "Compare as of" is owner-only too: make sure a hidden filter can't stay active.
     if (!show && state.snapshotAsOf) {
         state.snapshotAsOf = null;
