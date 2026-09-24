@@ -3637,6 +3637,7 @@
                         <div class="head">
                             <h3 title="One group per month inside the toolbar From / To range (tick 'All loaded months' to see every month held in memory). Net Profit is green when positive, red when negative. Click a month to set the toolbar to it.">Month by month</h3>
                             <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                                <button type="button" class="more-btn pnlBackBtn" style="display:none;" title="Restore the toolbar range you had before clicking a month">← Back</button>
                                 <label class="meta" style="display:flex; align-items:center; gap:5px; cursor:pointer; white-space:nowrap;" title="Off: only months inside the toolbar range. On: every month loaded so far, whatever the toolbar says. Applies to this chart and the Monthly summary table.">
                                     <input type="checkbox" id="pnlAllMonths" style="margin:0;"> All loaded months
                                 </label>
@@ -3703,8 +3704,8 @@
                     </div>
                 </div>
                 <div class="panel">
-                    <div class="panel-header"><h2>Monthly summary</h2></div>
-                    <div class="hint" style="margin:0 0 8px;">One row per month inside the toolbar range (tick "All loaded months" on the chart to see every month held; a month only partly inside the range or the loaded windows shows partial figures). Click a row to set the toolbar range to that month. "Ledger check" is total debits minus total credits across every entry in the month (all accounts) — should be $0.00.</div>
+                    <div class="panel-header"><h2>Monthly summary</h2><button type="button" class="more-btn pnlBackBtn" style="display:none;" title="Restore the toolbar range you had before clicking a month">← Back</button></div>
+                    <div class="hint" style="margin:0 0 8px;">One row per month inside the toolbar range (tick "All loaded months" on the chart to see every month held; a month only partly inside the range or the loaded windows shows partial figures). Click a row to set the toolbar range to that month, and "← Back" to return to the range you had. "Ledger check" is total debits minus total credits across every entry in the month (all accounts) — should be $0.00.</div>
                     <div class="table-scroll">
                         <table id="pnlMonthlyTable">
                             <thead><tr>
@@ -14675,7 +14676,9 @@ const PNL_ACCOUNT_OVERRIDES = { /* "6319": "Expense" */ };
 const PNL_CHART_PREFS_KEY = "pnlChartPrefs";
 function pnlLoadChartPrefs() {
     const d = { catMode: "wiise", monthlyType: "column", breakGroup: "", breakType: "bar", breakTop: 15, allMonths: false, excludeOpening: false };
-    try { return Object.assign(d, JSON.parse(localStorage.getItem(PNL_CHART_PREFS_KEY) || "{}")); } catch (e) { return d; }
+    try { Object.assign(d, JSON.parse(localStorage.getItem(PNL_CHART_PREFS_KEY) || "{}")); } catch (e) {}
+    d.catMode = "wiise"; // always open on Wiise (Faik 2026-09-24); the pill only lasts the session
+    return d;
 }
 function pnlSaveChartPrefs() { try { localStorage.setItem(PNL_CHART_PREFS_KEY, JSON.stringify(state.gl.chartPrefs)); } catch (e) {} }
 function pnlPrefs() { if (!state.gl.chartPrefs) state.gl.chartPrefs = pnlLoadChartPrefs(); return state.gl.chartPrefs; }
@@ -14853,13 +14856,36 @@ function pnlRangeCovered(from, to) {
     }
     return false;
 }
-// Point the toolbar at one month (used by the monthly table + chart).
+// Point the toolbar at one month (used by the monthly table + chart). The
+// range being left is pushed on a stack so "Back" can restore it — once
+// the toolbar is on a single month the table has no other rows to click.
 function pnlGoToMonth(mk) {
+    const f = document.getElementById("fromDate"), t = document.getElementById("toDate");
+    state.gl.rangeStack = state.gl.rangeStack || [];
+    if (f && t && f.value && t.value && !(f.value === mk + "-01" && t.value.slice(0, 7) === mk)) {
+        state.gl.rangeStack.push({ from: f.value, to: t.value, qr: (document.getElementById("quickRange") || {}).value || "", mp: (document.getElementById("monthPicker") || {}).value || "" });
+    }
     applyMonth(mk);
     const qr = document.getElementById("quickRange"); if (qr) qr.value = "";
     const mp = document.getElementById("monthPicker"); if (mp) mp.value = mk;
     if (state.invoices && state.invoices.length) rebuildFiltered();
     renderCurrentTab();
+}
+function pnlGoBack() {
+    const prev = (state.gl.rangeStack || []).pop(); if (!prev) return;
+    document.getElementById("fromDate").value = prev.from; document.getElementById("toDate").value = prev.to;
+    const qr = document.getElementById("quickRange"); if (qr) qr.value = prev.qr;
+    const mp = document.getElementById("monthPicker"); if (mp) mp.value = prev.mp;
+    setPeriodBadge();
+    if (state.invoices && state.invoices.length) rebuildFiltered();
+    renderCurrentTab();
+}
+function pnlPaintBackButtons() {
+    const st = state.gl.rangeStack || [], prev = st[st.length - 1];
+    document.querySelectorAll(".pnlBackBtn").forEach(b => {
+        b.style.display = prev ? "" : "none";
+        if (prev) b.textContent = "\u2190 Back to " + fmtDate(prev.from) + " \u2192 " + fmtDate(prev.to);
+    });
 }
 
 async function loadPnl() {
@@ -14991,7 +15017,7 @@ function pnlPaintModeUi() {
 function renderPnl() {
     const vr = pnlToolbarRange();
     const rl = document.getElementById("pnlRangeLabel"); if (rl) rl.textContent = vr.label;
-    pnlPaintModeUi();
+    pnlPaintModeUi(); pnlPaintBackButtons();
     const L = pnlLayout(), mode = pnlMode();
     const loaded = !!state.gl.loadedAt;
     const stmtBody = document.querySelector("#pnlStmtTable tbody");
@@ -15330,6 +15356,7 @@ function pnlExportCsv() {
     pref("pnlMonthlyType", "monthlyType"); pref("pnlBreakGroup", "breakGroup"); pref("pnlBreakType", "breakType"); pref("pnlBreakTop", "breakTop");
     const tick = (id, key) => on(id, "change", e => { pnlPrefs()[key] = !!e.target.checked; pnlSaveChartPrefs(); if (state.gl.loadedAt) renderPnl(); });
     tick("pnlAllMonths", "allMonths"); tick("pnlExcludeOpening", "excludeOpening");
+    document.querySelectorAll(".pnlBackBtn").forEach(b => b.addEventListener("click", pnlGoBack));
     document.querySelectorAll("#pnlCatMode button").forEach(b => b.addEventListener("click", () => {
         if (pnlPrefs().catMode === b.dataset.mode) return;
         pnlPrefs().catMode = b.dataset.mode; pnlSaveChartPrefs();
