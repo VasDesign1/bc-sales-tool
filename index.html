@@ -3725,7 +3725,7 @@
                 </div>
                 <div class="panel">
                     <div class="panel-header"><h2>Account map · which G/L codes go where</h2></div>
-                    <div class="hint" style="margin:0 0 8px;">Every account with entries in the toolbar date range (<strong id="pnlMapRangeLabel">—</strong>), the category Wiise assigns it in the Chart of Accounts, and how this tab treats it. Balance-sheet accounts appear here too: Net is the movement inside the range, and <strong>Balance now</strong> is Wiise's live balance (e.g. stock on hand today). Accounts marked <strong>Unclassified</strong> have no category set in Wiise — tell me where they belong and I'll map them.</div>
+                    <div class="hint" style="margin:0 0 8px;">Every account with entries in the toolbar date range (<strong id="pnlMapRangeLabel">—</strong>), the category Wiise assigns it in the Chart of Accounts, and how this tab treats it. Balance-sheet accounts appear here too: Net is the movement inside the range (in Mapping mode a <strong>Balance now</strong> column adds Wiise's live balance, e.g. stock on hand today). Accounts marked <strong>Unclassified</strong> have no category set in Wiise — tell me where they belong and I'll map them.</div>
                     <div style="display:flex; gap:10px; align-items:center; margin:0 18px 8px;">
                         <input type="text" id="pnlMapSearch" placeholder="Filter by account no / name / category…" style="padding:7px 9px; border:1px solid #d6d8eb; border-radius:8px; font-size:13px; width:320px;">
                         <span id="pnlMapCount" style="font-size:12px; color:#6e72a6;"></span>
@@ -15291,7 +15291,10 @@ function renderPnlMap() {
     const vr = pnlToolbarRange();
     const rl = document.getElementById("pnlMapRangeLabel"); if (rl) rl.textContent = vr.label;
     const balAt = state.gl.accountsAt ? state.gl.accountsAt.toLocaleTimeString("en-AU", { hour: "2-digit", minute: "2-digit" }) : "";
-    const th = document.getElementById("pnlMapBalanceTh"); if (th) th.title = "Wiise's live account balance (all-time net change) as at the chart-of-accounts fetch" + (balAt ? " at " + balAt : "") + ". Shown for balance-sheet accounts — e.g. stock on hand right now. Reload the page to refresh.";
+    // "Balance now" (and the BS grouping label) belong to Mapping mode only — Wiise mode stays exactly as it was.
+    const mappingMode = pnlMode() === "mapping";
+    const th = document.getElementById("pnlMapBalanceTh"); if (th) th.style.display = mappingMode ? "" : "none";
+    if (th) th.title = "Wiise's live account balance (all-time net change) as at the chart-of-accounts fetch" + (balAt ? " at " + balAt : "") + ". Shown for balance-sheet accounts — e.g. stock on hand right now. Reload the page to refresh.";
     let rows = pnlAggregate(pnlEntriesForView()).map(r => ({ ...r, treated: r.group + (r.sub ? " · " + r.sub : ""), balanceShown: r.role === "balance" ? r.balance : null }));
     if (q) rows = rows.filter(r => (r.no + " " + r.name + " " + r.bcCategory + " " + r.treated).toLowerCase().includes(q));
     sortRowsBy(rows, state.gl.mapSort);
@@ -15303,7 +15306,7 @@ function renderPnlMap() {
         + '<td><span style="display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:700; color:white; background:' + (roleColor[r.role] || "#78909c") + ';">' + escapeHtml(r.group) + "</span>" + (r.sub ? ' <span style="font-size:11px; color:#6e72a6;">' + escapeHtml(r.sub) + "</span>" : "") + "</td>"
         + '<td class="num">' + fmtInt(r.count) + '</td><td class="num">' + fmtMoneyFull(r.debit) + '</td><td class="num">' + fmtMoneyFull(r.credit) + "</td>"
         + '<td class="num ' + (r.net >= 0 ? "pos" : "neg") + '">' + fmtMoneyFull(r.net) + "</td>"
-        + '<td class="num">' + (r.balanceShown != null ? fmtMoneyFull(r.balanceShown) : "") + "</td></tr>").join("");
+        + (mappingMode ? '<td class="num">' + (r.balanceShown != null ? fmtMoneyFull(r.balanceShown) : "") + "</td>" : "") + "</tr>").join("");
     document.getElementById("pnlMapCount").textContent = rows.length + " account" + (rows.length === 1 ? "" : "s") + " with entries in " + vr.label + " · " + pnlLayout().label;
 }
 
