@@ -3607,6 +3607,9 @@
                         <h2>Ledger</h2>
                         <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
                             <span class="meta" id="pnlStatus"></span>
+                            <label class="meta" style="display:flex; align-items:center; gap:5px; cursor:pointer; white-space:nowrap;" title="Wiise go-live opening balances were posted on 30 Apr 2026 as BEGIN* documents (e.g. BEGINP2). They are not trading activity: tick to leave them out of every figure on this tab.">
+                                <input type="checkbox" id="pnlExcludeOpening" style="margin:0;"> Exclude opening balances (BEGIN*)
+                            </label>
                             <button class="more-btn" id="pnlCsvBtn" type="button" title="Download every G/L entry in the current date range as a CSV that opens in Excel">Export to Excel</button>
                             <button class="btn btn-primary" id="pnlLoadBtn" type="button" title="Fetch the general ledger for the toolbar From / To range. About 30 seconds per month; loads merge with what is already held.">Load ledger</button>
                         </div>
@@ -3625,8 +3628,11 @@
                 <div class="chart-grid" style="margin-bottom:16px;">
                     <div class="card span-6">
                         <div class="head">
-                            <h3 title="One group per month held in memory (every month loaded so far), regardless of the toolbar range. Net Profit is green when positive, red when negative. Click a month to set the toolbar to it.">Month by month</h3>
-                            <div style="display:flex; gap:8px; align-items:center;">
+                            <h3 title="One group per month inside the toolbar From / To range (tick 'All loaded months' to see every month held in memory). Net Profit is green when positive, red when negative. Click a month to set the toolbar to it.">Month by month</h3>
+                            <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                                <label class="meta" style="display:flex; align-items:center; gap:5px; cursor:pointer; white-space:nowrap;" title="Off: only months inside the toolbar range. On: every month loaded so far, whatever the toolbar says. Applies to this chart and the Monthly summary table.">
+                                    <input type="checkbox" id="pnlAllMonths" style="margin:0;"> All loaded months
+                                </label>
                                 <select id="pnlMonthlyType" class="mini-select" title="Chart type">
                                     <option value="column">Column (grouped)</option>
                                     <option value="stacked">Stacked (Income vs COGS + Expenses + Net)</option>
@@ -3691,7 +3697,7 @@
                 </div>
                 <div class="panel">
                     <div class="panel-header"><h2>Monthly summary</h2></div>
-                    <div class="hint" style="margin:0 0 8px;">One row per month loaded so far (loads merge — load another range and its months are added; a month only partly inside a loaded window shows partial figures). Click a row to set the toolbar range to that month. "Ledger check" is total debits minus total credits across every entry in the month (all accounts) — should be $0.00.</div>
+                    <div class="hint" style="margin:0 0 8px;">One row per month inside the toolbar range (tick "All loaded months" on the chart to see every month held; a month only partly inside the range or the loaded windows shows partial figures). Click a row to set the toolbar range to that month. "Ledger check" is total debits minus total credits across every entry in the month (all accounts) — should be $0.00.</div>
                     <div class="table-scroll">
                         <table id="pnlMonthlyTable">
                             <thead><tr>
@@ -3712,7 +3718,7 @@
                 </div>
                 <div class="panel">
                     <div class="panel-header"><h2>Account map · which G/L codes go where</h2></div>
-                    <div class="hint" style="margin:0 0 8px;">Every account with entries in the loaded ledger, the category Wiise assigns it in the Chart of Accounts, and how this tab treats it. Accounts marked <strong>Unclassified</strong> have no category set in Wiise — tell me where they belong and I'll map them.</div>
+                    <div class="hint" style="margin:0 0 8px;">Every account with entries in the toolbar date range (<strong id="pnlMapRangeLabel">—</strong>), the category Wiise assigns it in the Chart of Accounts, and how this tab treats it. Balance-sheet accounts appear here too, so this is where to read e.g. stock movement for the month. Accounts marked <strong>Unclassified</strong> have no category set in Wiise — tell me where they belong and I'll map them.</div>
                     <div style="display:flex; gap:10px; align-items:center; margin:0 18px 8px;">
                         <input type="text" id="pnlMapSearch" placeholder="Filter by account no / name / category…" style="padding:7px 9px; border:1px solid #d6d8eb; border-radius:8px; font-size:13px; width:320px;">
                         <span id="pnlMapCount" style="font-size:12px; color:#6e72a6;"></span>
@@ -14663,7 +14669,7 @@ const PNL_ACCOUNT_OVERRIDES = { /* "6319": "Expense" */ };
 // Chart-type choices persist per device (same idea as bcSalesTheme).
 const PNL_CHART_PREFS_KEY = "pnlChartPrefs";
 function pnlLoadChartPrefs() {
-    const d = { monthlyType: "column", breakGroup: "Expense", breakType: "bar", breakTop: 15 };
+    const d = { monthlyType: "column", breakGroup: "Expense", breakType: "bar", breakTop: 15, allMonths: false, excludeOpening: false };
     try { return Object.assign(d, JSON.parse(localStorage.getItem(PNL_CHART_PREFS_KEY) || "{}")); } catch (e) { return d; }
 }
 function pnlSaveChartPrefs() { try { localStorage.setItem(PNL_CHART_PREFS_KEY, JSON.stringify(state.gl.chartPrefs)); } catch (e) {} }
@@ -14784,10 +14790,18 @@ async function loadPnl() {
     }
 }
 
+// Go-live opening balances (30 Apr 2026, documents BEGIN*) are not trading
+// activity; the "Exclude opening balances" tick removes them everywhere.
+function pnlIsOpening(e) { return /^BEGIN/i.test(e.documentNumber || ""); }
+function pnlPrefs() { if (!state.gl.chartPrefs) state.gl.chartPrefs = pnlLoadChartPrefs(); return state.gl.chartPrefs; }
+function pnlHeldEntries() {
+    return pnlPrefs().excludeOpening ? state.gl.entries.filter(e => !pnlIsOpening(e)) : state.gl.entries;
+}
 function pnlEntriesForView() {
     const { from, to } = pnlToolbarRange();
-    if (!from || !to) return state.gl.entries;
-    return state.gl.entries.filter(e => e.postingDate >= from && e.postingDate <= to);
+    const held = pnlHeldEntries();
+    if (!from || !to) return held;
+    return held.filter(e => e.postingDate >= from && e.postingDate <= to);
 }
 // Aggregate entries → per-account rows with group / debit / credit / net.
 function pnlAggregate(entries) {
@@ -14836,6 +14850,9 @@ function renderPnl() {
         destroyChart("pnlMonthly");
         return;
     }
+    const prefs = pnlPrefs();
+    const cbO = document.getElementById("pnlExcludeOpening"); if (cbO) cbO.checked = !!prefs.excludeOpening;
+    const cbM = document.getElementById("pnlAllMonths");      if (cbM) cbM.checked = !!prefs.allMonths;
     const view = pnlEntriesForView();
     const rows = pnlAggregate(view);
     const t = pnlTotals(rows);
@@ -14855,6 +14872,8 @@ function renderPnl() {
     // Cap the coverage check at today: a month that runs past today can't be "loaded" beyond it.
     const todayIso = new Date().toISOString().slice(0, 10);
     if (vr.from && vr.to && !pnlRangeCovered(vr.from, vr.to < todayIso ? vr.to : todayIso)) warns.push("The toolbar range " + vr.label + " reaches outside the loaded ledger (" + (state.gl.windows || []).map(w => fmtDate(w.from) + " → " + fmtDate(w.to)).join(", ") + ") — click Load ledger to fetch it, otherwise the figures are partial.");
+    const openingInRange = prefs.excludeOpening ? 0 : view.reduce((n, e) => n + (pnlIsOpening(e) ? 1 : 0), 0);
+    if (openingInRange) warns.push(fmtInt(openingInRange) + " go-live opening-balance entries (BEGIN* documents, 30 Apr 2026) are inside this range and inflate the figures — tick \"Exclude opening balances\" in the Ledger panel to leave them out.");
     const uncl = rows.filter(r => r.group === "Unclassified");
     if (uncl.length) warns.push("<strong>" + uncl.length + " account(s) have no category in Wiise</strong> (" + uncl.map(r => escapeHtml(r.no)).join(", ") + ") — their net " + fmtMoneyFull(t.unclassified) + " is NOT in the P&L totals. See the Unclassified group below.");
     const diff = t.debit - t.credit;
@@ -14913,10 +14932,12 @@ function renderPnl() {
     stmtBody.innerHTML = html.join("");
     paintSortHeaders("#pnlStmtTable", state.gl.stmtSort);
 
-    // Monthly summary (every month held, independent of the toolbar range)
-    const months = [...new Set(state.gl.entries.map(e => e.postingDate.slice(0, 7)))].sort();
+    // Monthly summary: months inside the toolbar range, or every month held
+    // when "All loaded months" is ticked.
+    const monthSource = prefs.allMonths ? pnlHeldEntries() : view;
+    const months = [...new Set(monthSource.map(e => e.postingDate.slice(0, 7)))].sort();
     const monthly = months.map(mk => {
-        const mt = pnlTotals(pnlAggregate(state.gl.entries.filter(e => e.postingDate.slice(0, 7) === mk)));
+        const mt = pnlTotals(pnlAggregate(monthSource.filter(e => e.postingDate.slice(0, 7) === mk)));
         return Object.assign({ mk }, mt);
     });
     const curMk = (vr.from && vr.to && vr.from.slice(0, 7) === vr.to.slice(0, 7)) ? vr.from.slice(0, 7) : "";
@@ -14927,7 +14948,7 @@ function renderPnl() {
         + '<td class="num">' + fmtMoneyFull(m.expense) + '</td><td class="num ' + (m.net >= 0 ? "pos" : "neg") + '">' + fmtMoneyFull(m.net) + "</td>"
         + '<td class="num">' + (m.unclassified ? fmtMoneyFull(m.unclassified) : "") + "</td>"
         + '<td class="num ' + (Math.abs(m.debit - m.credit) < 0.005 ? "pos" : "neg") + '">' + fmtMoneyFull(m.debit - m.credit) + "</td></tr>").join("")
-        + (monthly.length > 1 ? (() => { const a = pnlTotals(pnlAggregate(state.gl.entries)); return '<tr style="background:#eef0fb; font-weight:700;"><td>Total</td><td class="num">' + fmtInt(a.count) + '</td><td class="num">' + fmtMoneyFull(a.income) + '</td><td class="num">' + fmtMoneyFull(a.cogs) + '</td><td class="num">' + fmtMoneyFull(a.gp) + '</td><td class="num">' + fmtPct(a.gpPct) + '</td><td class="num">' + fmtMoneyFull(a.expense) + '</td><td class="num">' + fmtMoneyFull(a.net) + '</td><td class="num">' + (a.unclassified ? fmtMoneyFull(a.unclassified) : "") + '</td><td class="num">' + fmtMoneyFull(a.debit - a.credit) + "</td></tr>"; })() : "");
+        + (monthly.length > 1 ? (() => { const a = pnlTotals(pnlAggregate(monthSource)); return '<tr style="background:#eef0fb; font-weight:700;"><td>Total</td><td class="num">' + fmtInt(a.count) + '</td><td class="num">' + fmtMoneyFull(a.income) + '</td><td class="num">' + fmtMoneyFull(a.cogs) + '</td><td class="num">' + fmtMoneyFull(a.gp) + '</td><td class="num">' + fmtPct(a.gpPct) + '</td><td class="num">' + fmtMoneyFull(a.expense) + '</td><td class="num">' + fmtMoneyFull(a.net) + '</td><td class="num">' + (a.unclassified ? fmtMoneyFull(a.unclassified) : "") + '</td><td class="num">' + fmtMoneyFull(a.debit - a.credit) + "</td></tr>"; })() : "");
 
     // Charts (type selectors in each card head)
     renderPnlMonthlyChart(monthly);
@@ -14946,7 +14967,7 @@ function renderPnlMonthlyChart(monthly) {
     const ct = state.gl.chartPrefs.monthlyType || "column";
     const sel = document.getElementById("pnlMonthlyType"); if (sel && sel.value !== ct) sel.value = ct;
     if (!monthly.length) { canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height); return; }
-    document.getElementById("pnlChartMeta").textContent = monthly.length + " month" + (monthly.length === 1 ? "" : "s") + " loaded";
+    document.getElementById("pnlChartMeta").textContent = monthly.length + " month" + (monthly.length === 1 ? "" : "s") + (pnlPrefs().allMonths ? " loaded" : " in range");
     const labels = monthly.map(m => pnlMonthLabel(m.mk));
     const C = PNL_SERIES_COLORS;
     const netColors = monthly.map(m => m.net >= 0 ? C.netPos : C.netNeg);
@@ -14982,16 +15003,21 @@ function renderPnlMonthlyChart(monthly) {
     }
     const horiz = indexAxis === "y";
     const valueOf = c => horiz ? c.parsed.x : c.parsed.y;
+    // Labels only on bars tall enough to carry one (the rest stay in the
+    // tooltip) — otherwise small months' labels pile on top of each other.
+    const maxAbs = Math.max(1, ...datasets.filter(d => d.type !== "line").flatMap(d => d.data.map(v => Math.abs(v || 0))));
+    const labelOk = c => c.dataset.type !== "line" && !isLine && !stacked && Math.abs(c.dataset.data[c.dataIndex] || 0) >= maxAbs * 0.08;
     state.charts.pnlMonthly = new Chart(canvas.getContext("2d"), {
         type, data: { labels, datasets },
         plugins: [ChartDataLabels],
         options: chartBase({
             indexAxis,
+            datasets: { bar: { categoryPercentage: 0.78, barPercentage: 0.9 } },
             plugins: { legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } },
                        tooltip: { callbacks: { label: c => c.dataset.label + ": " + fmtMoneyFull(valueOf(c)) } },
-                       datalabels: { display: c => c.dataset.type !== "line" && !isLine && !stacked,
+                       datalabels: { display: labelOk,
                                      anchor: "end", align: c => (c.dataset.data[c.dataIndex] || 0) >= 0 ? "end" : "start",
-                                     offset: 2, clamp: true, font: { size: 10.5, weight: "600" },
+                                     offset: 2, clamp: true, font: { size: 10, weight: "600" },
                                      color: Chart.defaults.color || "#2c2f4a", formatter: v => fmtMoney(v) } },
             layout: { padding: horiz ? { right: 44 } : { top: 18, bottom: 4 } },
             scales: horiz ? { x: { ticks: { callback: v => fmtMoney(v) } }, y: {} }
@@ -15008,8 +15034,14 @@ function renderPnlBreakdownChart(rows, t) {
     if (!canvas) return;
     if (!state.gl.chartPrefs) state.gl.chartPrefs = pnlLoadChartPrefs();
     const prefs = state.gl.chartPrefs;
-    const grp = prefs.breakGroup || "Expense", ct = prefs.breakType || "bar", topN = Number(prefs.breakTop) || 0;
+    const grp = prefs.breakGroup || "Expense", topN = Number(prefs.breakTop) || 0;
+    let ct = prefs.breakType || "bar";
+    // Pareto only makes sense for accounts inside one section: the four
+    // sections are not parts of one whole (Net is derived from the others).
+    const sections = grp === "__categories";
+    if (sections && ct === "pareto") ct = "column";
     const gSel = document.getElementById("pnlBreakGroup"), tSel = document.getElementById("pnlBreakType"), nSel = document.getElementById("pnlBreakTop");
+    if (tSel) { const po = tSel.querySelector('option[value="pareto"]'); if (po) po.disabled = sections; }
     if (gSel && gSel.value !== grp) gSel.value = grp;
     if (tSel && tSel.value !== ct) tSel.value = ct;
     if (nSel && nSel.value !== String(topN)) nSel.value = String(topN);
@@ -15071,7 +15103,9 @@ function renderPnlBreakdownChart(rows, t) {
         datasets.push({ type: "line", label: "Cumulative %", data: cum, borderColor: "#f57c00", backgroundColor: "#f57c00", yAxisID: "y1", tension: 0.2, pointRadius: 3, borderWidth: 2, order: 1 });
         scales.y1 = { position: "right", min: 0, max: 100, grid: { drawOnChartArea: false }, ticks: { callback: v => v + "%" } };
     }
-    if (meta) meta.textContent = unitTitle + " · total " + fmtMoneyFull(values.reduce((s, v) => s + v, 0)) + " · sorted by size, sign shown as P&L net";
+    if (meta) meta.textContent = sections ? "P&L sections for the toolbar range · Net Profit = Income − COGS − Expenses"
+                                         : unitTitle + " · total " + fmtMoneyFull(values.reduce((s, v) => s + v, 0)) + " · sorted by size, sign shown as P&L net";
+    const bMaxAbs = Math.max(1, ...values.map(v => Math.abs(v || 0)));
     state.charts.pnlBreak = new Chart(canvas.getContext("2d"), {
         type: "bar",
         data: { labels: items.map(it => it.label), datasets },
@@ -15080,7 +15114,8 @@ function renderPnlBreakdownChart(rows, t) {
             indexAxis: horiz ? "y" : "x",
             plugins: { legend: { display: pareto, position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } },
                        tooltip: { callbacks: { label: c => c.dataset.type === "line" ? "Cumulative: " + c.parsed.y.toFixed(1) + "%" : fmtMoneyFull(horiz ? c.parsed.x : c.parsed.y) + (items[c.dataIndex].count != null ? " · " + fmtInt(items[c.dataIndex].count) + " entries" : "") } },
-                       datalabels: { display: c => c.dataset.type !== "line", anchor: "end", align: c => (c.dataset.data[c.dataIndex] || 0) >= 0 ? "end" : "start",
+                       datalabels: { display: c => c.dataset.type !== "line" && Math.abs(c.dataset.data[c.dataIndex] || 0) >= bMaxAbs * 0.03,
+                                     anchor: "end", align: c => (c.dataset.data[c.dataIndex] || 0) >= 0 ? "end" : "start",
                                      offset: 2, clamp: true, font: { size: 10, weight: "600" }, color: Chart.defaults.color || "#2c2f4a", formatter: v => fmtMoney(v) } },
             layout: { padding: horiz ? { right: 48 } : { top: 16 } },
             scales,
@@ -15092,7 +15127,9 @@ function renderPnlBreakdownChart(rows, t) {
 function renderPnlMap() {
     const mapBody = document.querySelector("#pnlMapTable tbody");
     const q = (document.getElementById("pnlMapSearch").value || "").toLowerCase().trim();
-    let rows = pnlAggregate(state.gl.entries).map(r => ({ ...r }));
+    const vr = pnlToolbarRange();
+    const rl = document.getElementById("pnlMapRangeLabel"); if (rl) rl.textContent = vr.label;
+    let rows = pnlAggregate(pnlEntriesForView()).map(r => ({ ...r }));
     if (q) rows = rows.filter(r => (r.no + " " + r.name + " " + r.bcCategory + " " + r.group).toLowerCase().includes(q));
     sortRowsBy(rows, state.gl.mapSort);
     paintSortHeaders("#pnlMapTable", state.gl.mapSort);
@@ -15103,7 +15140,7 @@ function renderPnlMap() {
         + '<td><span style="display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:700; color:white; background:' + groupColor[r.group] + ';">' + escapeHtml(r.group) + "</span></td>"
         + '<td class="num">' + fmtInt(r.count) + '</td><td class="num">' + fmtMoneyFull(r.debit) + '</td><td class="num">' + fmtMoneyFull(r.credit) + "</td>"
         + '<td class="num ' + (r.net >= 0 ? "pos" : "neg") + '">' + fmtMoneyFull(r.net) + "</td></tr>").join("");
-    document.getElementById("pnlMapCount").textContent = rows.length + " account" + (rows.length === 1 ? "" : "s") + " with entries in the loaded ledger";
+    document.getElementById("pnlMapCount").textContent = rows.length + " account" + (rows.length === 1 ? "" : "s") + " with entries in " + vr.label;
 }
 
 function pnlExportCsv() {
@@ -15134,6 +15171,8 @@ function pnlExportCsv() {
         if (state.gl.loadedAt) renderPnl();
     });
     pref("pnlMonthlyType", "monthlyType"); pref("pnlBreakGroup", "breakGroup"); pref("pnlBreakType", "breakType"); pref("pnlBreakTop", "breakTop");
+    const tick = (id, key) => on(id, "change", e => { pnlPrefs()[key] = !!e.target.checked; pnlSaveChartPrefs(); if (state.gl.loadedAt) renderPnl(); });
+    tick("pnlAllMonths", "allMonths"); tick("pnlExcludeOpening", "excludeOpening");
     const stmt = document.querySelector("#pnlStmtTable tbody");
     if (stmt) stmt.addEventListener("click", e => {
         const gtr = e.target.closest("tr[data-pnl-group]");
