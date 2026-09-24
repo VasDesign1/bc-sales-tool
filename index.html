@@ -15171,21 +15171,18 @@ function renderPnlMonthlyChart(monthly) {
     }
     const horiz = indexAxis === "y";
     const valueOf = c => horiz ? c.parsed.x : c.parsed.y;
-    const maxAbs = Math.max(1, ...datasets.filter(d => d.type !== "line").flatMap(d => d.data.map(v => Math.abs(v || 0))));
-    const labelOk = c => c.dataset.type !== "line" && !isLine && !stacked && Math.abs(c.dataset.data[c.dataIndex] || 0) >= maxAbs * 0.08;
+    // No value labels on this chart (Faik 2026-09-24): with April's opening
+    // balances dwarfing every other month they piled up. Values are in the
+    // hover tooltip, which lists all four series for the month.
     state.charts.pnlMonthly = new Chart(canvas.getContext("2d"), {
         type, data: { labels, datasets },
-        plugins: [ChartDataLabels],
         options: chartBase({
             indexAxis,
             datasets: { bar: { categoryPercentage: 0.78, barPercentage: 0.9 } },
+            interaction: { mode: "index", intersect: false },
             plugins: { legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } },
-                       tooltip: { callbacks: { label: c => c.dataset.label + ": " + fmtMoneyFull(valueOf(c)) } },
-                       datalabels: { display: labelOk,
-                                     anchor: "end", align: c => (c.dataset.data[c.dataIndex] || 0) >= 0 ? "end" : "start",
-                                     offset: 2, clamp: true, font: { size: 10, weight: "600" },
-                                     color: Chart.defaults.color || "#2c2f4a", formatter: v => fmtMoney(v) } },
-            layout: { padding: horiz ? { right: 44 } : { top: 18, bottom: 4 } },
+                       tooltip: { mode: "index", intersect: false, callbacks: { label: c => c.dataset.label + ": " + fmtMoneyFull(valueOf(c)) } } },
+            layout: { padding: horiz ? { right: 12 } : { top: 8, bottom: 4 } },
             scales: horiz ? { x: { ticks: { callback: v => fmtMoney(v) } }, y: {} }
                           : { x: { stacked }, y: { stacked, ticks: { callback: v => fmtMoney(v) } } },
             onClick: (ev, els) => { if (els.length) pnlGoToMonth(monthly[els[0].index].mk); },
@@ -15266,19 +15263,14 @@ function renderPnlBreakdownChart(rows, t) {
     }
     if (meta) meta.textContent = sections ? "P&L sections for the toolbar range · " + L.sectionsNote
                                          : unitTitle + " · total " + fmtMoneyFull(values.reduce((s, v) => s + v, 0)) + " · sorted by size, sign shown as P&L net";
-    const bMaxAbs = Math.max(1, ...values.map(v => Math.abs(v || 0)));
     state.charts.pnlBreak = new Chart(canvas.getContext("2d"), {
         type: "bar",
         data: { labels: items.map(it => it.label), datasets },
-        plugins: [ChartDataLabels],
         options: chartBase({
             indexAxis: horiz ? "y" : "x",
             plugins: { legend: { display: pareto, position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } },
-                       tooltip: { callbacks: { label: c => c.dataset.type === "line" ? "Cumulative: " + c.parsed.y.toFixed(1) + "%" : fmtMoneyFull(horiz ? c.parsed.x : c.parsed.y) + (items[c.dataIndex].count != null ? " · " + fmtInt(items[c.dataIndex].count) + " entries" : "") + (items[c.dataIndex].sub ? " · " + items[c.dataIndex].sub : "") } },
-                       datalabels: { display: c => c.dataset.type !== "line" && Math.abs(c.dataset.data[c.dataIndex] || 0) >= bMaxAbs * 0.03,
-                                     anchor: "end", align: c => (c.dataset.data[c.dataIndex] || 0) >= 0 ? "end" : "start",
-                                     offset: 2, clamp: true, font: { size: 10, weight: "600" }, color: Chart.defaults.color || "#2c2f4a", formatter: v => fmtMoney(v) } },
-            layout: { padding: horiz ? { right: 48 } : { top: 16 } },
+                       tooltip: { callbacks: { label: c => c.dataset.type === "line" ? "Cumulative: " + c.parsed.y.toFixed(1) + "%" : fmtMoneyFull(horiz ? c.parsed.x : c.parsed.y) + (items[c.dataIndex].count != null ? " · " + fmtInt(items[c.dataIndex].count) + " entries" : "") + (items[c.dataIndex].sub ? " · " + items[c.dataIndex].sub : "") } } },
+            layout: { padding: horiz ? { right: 12 } : { top: 8 } },
             scales,
             onClick: (ev, els) => { if (els.length) openAccount(els[0].index); },
         })
