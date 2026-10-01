@@ -6353,6 +6353,14 @@ function renderDiCalendarHeatmap() {
     });
 }
 
+// The item charts label uncategorised lines "(uncat)"; Sales by Item splits
+// the same lines into "(no category)" (item without a category) and
+// "(non-item)" (G/L / comment / charge lines). Expand when drilling.
+function diCategoryFilterFor(names) {
+    const out = [];
+    for (const n of names) { if (n === "(uncat)") out.push("(no category)", "(non-item)"); else out.push(n); }
+    return out;
+}
 // Chart #5 — Treemap of sales by Item Category (squarify-ish).
 // Picks split direction by current aspect ratio so blocks come out more
 // square-ish than pure slice-and-dice. Caps to top 20 categories + an
@@ -6407,7 +6415,7 @@ function renderDiTreemap() {
     if (allRows.length > TOP_N) {
         const top = allRows.slice(0, TOP_N);
         const rest = allRows.slice(TOP_N);
-        const other = { name: "Other (" + rest.length + ")", value: 0, cost: 0 };
+        const other = { name: "Other (" + rest.length + ")", value: 0, cost: 0, otherCats: rest.map(r => r.name), isOther: true };
         for (const r of rest) { other.value += r.value; other.cost += r.cost; }
         rows = [...top, other];
     } else {
@@ -6496,7 +6504,8 @@ function renderDiTreemap() {
         const tip = _getDiTooltipEl();
         if (!hit) { tip.style.display = "none"; canvas.style.cursor = "default"; return; }
         canvas.style.cursor = "pointer";
-        tip.textContent = hit.name + " · " + fmtMoneyFull(hit.value) + " · GP " + fmtPct(hit.value ? (hit.value - hit.cost) / hit.value : 0);
+        tip.textContent = hit.name + " · " + fmtMoneyFull(hit.value) + " · GP " + fmtPct(hit.value ? (hit.value - hit.cost) / hit.value : 0)
+            + (hit.isOther ? " · " + hit.otherCats.slice(0, 5).join(", ") + (hit.otherCats.length > 5 ? ", …" : "") + " · click to see them all" : "");
         tip.style.display = "block";
         const margin = 16;
         let tx = e.clientX + margin, ty = e.clientY + margin;
@@ -6512,7 +6521,8 @@ function renderDiTreemap() {
         const x = e.clientX - rect.left, y = e.clientY - rect.top;
         const hit = rects.find(r => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h);
         if (!hit) return;
-        state.byItemCategoryFilter = (state.byItemCategoryFilter === hit.name) ? "" : hit.name;
+        if (hit.isOther) state.byItemCategoryFilter = diCategoryFilterFor(hit.otherCats);
+        else state.byItemCategoryFilter = (state.byItemCategoryFilter === hit.name) ? "" : hit.name;
         setActiveTab("byItem");
     };
 }
@@ -6619,15 +6629,19 @@ function renderDiSankey() {
         for (const [k, v] of [...spTot]) if (v <= 0) spTot.delete(k);
         for (const [k, v] of [...catTot]) if (v <= 0) catTot.delete(k);
     }
-    const topNodes = (m, n, otherName = "Other") => {
+    const otherMembers = { sp: [], cat: [] }; // what each "Other" block is made of (largest first)
+    const topNodes = (m, n, which) => {
         const sorted = [...m.entries()].sort((a, b) => b[1] - a[1]);
         if (sorted.length <= n) return sorted;
         const top = sorted.slice(0, n);
-        const otherSum = sorted.slice(n).reduce((s, [, v]) => s + v, 0);
-        return [...top, [otherName, otherSum]];
+        const rest = sorted.slice(n);
+        otherMembers[which] = rest;
+        const otherSum = rest.reduce((s, [, v]) => s + v, 0);
+        return [...top, ["Other", otherSum]];
     };
-    const spNodes = topNodes(spTot, 8);
-    const catNodes = topNodes(catTot, 10);
+    const spNodes = topNodes(spTot, 8, "sp");
+    const catNodes = topNodes(catTot, 10, "cat");
+    const otherTip = which => { const m = otherMembers[which]; return m.length ? " · " + m.length + " smaller: " + m.slice(0, 5).map(([k, v]) => k + " " + fmtMoney(v)).join(", ") + (m.length > 5 ? ", …" : "") : ""; };
     const spIndex = new Map(spNodes.map(([k], i) => [k, i]));
     const catIndex = new Map(catNodes.map(([k], i) => [k, i]));
     const PAD = 6;
@@ -6686,13 +6700,13 @@ function renderDiSankey() {
     spLay.forEach((n, i) => {
         const isHi = !highlight || highlight === n.name;
         const op = isHi ? 1 : 0.2;
-        svgStr += '<rect class="di-sankey-sp" data-sp="' + escapeAttr(n.name) + '" data-tip="' + escapeAttr(n.name + ": " + fmtMoneyFull(n.value) + (highlight === n.name ? " · click to clear" : " · click to highlight")) + '" x="' + leftX + '" y="' + n.y + '" width="' + colW + '" height="' + n.h + '" fill="' + palette[i % palette.length] + '" opacity="' + op + '" rx="2" style="cursor:pointer;"></rect>';
+        svgStr += '<rect class="di-sankey-sp" data-sp="' + escapeAttr(n.name) + '" data-tip="' + escapeAttr(n.name + ": " + fmtMoneyFull(n.value) + (n.name === "Other" ? otherTip("sp") : "") + (highlight === n.name ? " · click to clear" : " · click to highlight")) + '" x="' + leftX + '" y="' + n.y + '" width="' + colW + '" height="' + n.h + '" fill="' + palette[i % palette.length] + '" opacity="' + op + '" rx="2" style="cursor:pointer;"></rect>';
         if (n.h > 12) svgStr += '<text x="' + (leftX + 6) + '" y="' + (n.y + n.h / 2 + 4) + '" fill="#fff" opacity="' + op + '" style="pointer-events:none;">' + escapeHtml(truncate(n.name, 20)) + '</text>';
     });
     catLay.forEach((n, i) => {
         const isHi = !highlight || connectedCats.has(n.name);
         const op = isHi ? 1 : 0.2;
-        svgStr += '<rect class="di-sankey-cat" data-cat="' + escapeAttr(n.name) + '" data-tip="' + escapeAttr(n.name + ": " + fmtMoneyFull(n.value) + " · click to drill into Sales by Item") + '" x="' + rightX + '" y="' + n.y + '" width="' + colW + '" height="' + n.h + '" fill="#5c6bc0" opacity="' + op + '" rx="2" style="cursor:pointer;"></rect>';
+        svgStr += '<rect class="di-sankey-cat" data-cat="' + escapeAttr(n.name) + '" data-tip="' + escapeAttr(n.name + ": " + fmtMoneyFull(n.value) + (n.name === "Other" ? otherTip("cat") : "") + " · click to drill into Sales by Item") + '" x="' + rightX + '" y="' + n.y + '" width="' + colW + '" height="' + n.h + '" fill="#5c6bc0" opacity="' + op + '" rx="2" style="cursor:pointer;"></rect>';
         if (n.h > 12) svgStr += '<text x="' + (rightX + colW - 6) + '" y="' + (n.y + n.h / 2 + 4) + '" text-anchor="end" fill="#fff" opacity="' + op + '" style="pointer-events:none;">' + escapeHtml(truncate(n.name, 20)) + '</text>';
     });
     svgStr += '</svg>';
@@ -6705,7 +6719,9 @@ function renderDiSankey() {
         svgEl.addEventListener("click", e => {
             const catR = e.target.closest("rect.di-sankey-cat");
             if (catR && catR.dataset.cat) {
-                state.byItemCategoryFilter = (state.byItemCategoryFilter === catR.dataset.cat) ? "" : catR.dataset.cat;
+                // "Other" is the tail beyond the top 10: drill into all of its categories.
+                if (catR.dataset.cat === "Other" && otherMembers.cat.length) state.byItemCategoryFilter = diCategoryFilterFor(otherMembers.cat.map(([k]) => k));
+                else state.byItemCategoryFilter = (state.byItemCategoryFilter === catR.dataset.cat) ? "" : catR.dataset.cat;
                 setActiveTab("byItem");
                 return;
             }
@@ -10321,16 +10337,22 @@ function renderByItem() {
         customerCount: (customersByItem.get(r.key) || new Set()).size,
     }));
 
-    // Leaf-category cross-filter (from the item-category pie)
-    if (state.byItemCategoryFilter) {
-        rows = rows.filter(r => r.category === state.byItemCategoryFilter);
+    // Leaf-category cross-filter (from the item-category pie / treemap /
+    // sankey). A string = one category; an array = the chart's "Other"
+    // bucket, i.e. every category that didn't make its top-N.
+    const catF = state.byItemCategoryFilter;
+    if (catF) {
+        const set = Array.isArray(catF) ? new Set(catF) : null;
+        rows = rows.filter(r => set ? set.has(r.category) : r.category === catF);
     }
     // Toggle banner
     const banner = document.getElementById("itCategoryFilterBanner");
     if (banner) {
-        if (state.byItemCategoryFilter) {
+        if (catF) {
             banner.style.display = "block";
-            document.getElementById("itCategoryFilterName").textContent = state.byItemCategoryFilter;
+            document.getElementById("itCategoryFilterName").textContent = Array.isArray(catF)
+                ? "Other — " + catF.length + " smaller categories (" + catF.slice(0, 6).join(", ") + (catF.length > 6 ? ", …" : "") + ")"
+                : catF;
         } else banner.style.display = "none";
     }
 
