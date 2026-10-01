@@ -250,7 +250,11 @@ async function fetchValueEntries(fromISO, toISO) {
     }
     const coName = encodeURIComponent(await bcGetCompanyInternalName());
     const filter = info.fDate + " ge " + fromISO + " and " + info.fDate + " le " + toISO;
-    const params = ["$top=200000", "$filter=" + encodeURIComponent(filter)];
+    // No $top: BC treats it as a TOTAL cap, not a page size. The old
+    // $top=200000 silently truncated the table once it passed 200k rows
+    // (2026-10-01: snapshot held entries only up to 25 Sep → September
+    // cost $360k short vs PBI). The server pages at 20k via nextLink.
+    const params = ["$filter=" + encodeURIComponent(filter)];
     // Deliberately NO $select here — verified on this tenant that adding
     // $select to the ValueEntries query object silently DROPS the date
     // $filter and returns the whole table (102k rows for a 3-month ask).
@@ -357,17 +361,15 @@ async function fetchPostedInvoiceNumbers(fromISO, toISO) {
             console.warn("[Posted invoice whitelist] salesInvoiceHeader entity not found in $metadata");
             return null;
         }
-        const token = await bcGetToken();
         const cname = await bcGetCompanyInternalName();
         const filter = "Posting_Date ge " + fromISO + " and Posting_Date le " + toISO;
-        const url = BC_ODATA_URL + "/Company('" + encodeURIComponent(cname) + "')/salesInvoiceHeader?$select=No&$filter=" + encodeURIComponent(filter) + "&$top=10000";
-        const resp = await fetch(url, { headers: { "Authorization": "Bearer " + token } });
-        if (!resp.ok) {
-            console.warn("[Posted invoice whitelist] HTTP " + resp.status);
-            return null;
-        }
-        const j = await resp.json();
-        const set = new Set((j.value || []).map(r => r.No));
+        // No $top (it is a TOTAL cap on this tenant): the 12-month window held
+        // 9,777 posted invoices on 2026-10-01 against the old 10,000 cap — one
+        // more month and real invoices would have been dropped as "unposted".
+        // bcFetchAll follows nextLink; the server pages at its default size.
+        const url = BC_ODATA_URL + "/Company('" + encodeURIComponent(cname) + "')/salesInvoiceHeader?$select=No&$filter=" + encodeURIComponent(filter);
+        const list = await bcFetchAll(url, "Posted invoice numbers");
+        const set = new Set((list || []).map(r => r.No));
         console.log("[Posted invoice whitelist] " + set.size + " posted invoice numbers in window");
         return set;
     } catch (e) {
@@ -450,7 +452,7 @@ async function fetchLocations() {
 async function fetchItems() {
     const compId = await bcGetCompanyId();
     try {
-        const data = await bcFetchAll(BC_API_URL + "/companies(" + compId + ")/items?$top=10000&$select=id,number,displayName,itemCategoryCode", "Items");
+        const data = await bcFetchAll(BC_API_URL + "/companies(" + compId + ")/items?$select=id,number,displayName,itemCategoryCode", "Items"); // no $top: 7,672 items on 2026-10-01, cap was 10k
         return data;
     } catch (e) { console.warn("Could not fetch items:", e.message); return []; }
 }
@@ -461,7 +463,7 @@ async function fetchInvoiceLines(invoiceId) {
 async function fetchCustomers() {
     const compId = await bcGetCompanyId();
     try {
-        return await bcFetchAll(BC_API_URL + "/companies(" + compId + ")/customers?$top=10000", "Customers");
+        return await bcFetchAll(BC_API_URL + "/companies(" + compId + ")/customers", "Customers"); // no $top (total cap)
     } catch (e) { console.warn("Customers fetch failed:", e.message); return []; }
 }
 async function fetchSalesCreditMemos(fromISO, toISO) {
@@ -545,8 +547,9 @@ async function fetchSalesOrderOutstandingLines() {
     }
     const coName = encodeURIComponent(await bcGetCompanyInternalName());
     const filter = fDocType + " eq 'Order'";
+    // No $top (total cap on this tenant — see fetchValueEntries); nextLink pages the rest.
     const url = BC_ODATA_URL + "/Company('" + coName + "')/" + linesInfo.entity +
-        "?$top=200000&$filter=" + encodeURIComponent(filter);
+        "?$filter=" + encodeURIComponent(filter);
     let rows = [];
     try { rows = await bcFetchAll(url, "Sales order lines (OData outstanding)"); }
     catch (e) { console.warn("[SO outstanding] OData fetch failed:", e.message); return []; }

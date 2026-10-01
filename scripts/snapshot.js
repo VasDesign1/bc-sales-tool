@@ -167,6 +167,17 @@ function isoAddDays(iso, days) {
         process.exit(1);
     }
     if (veOut > 0) console.warn("[VE check] " + veOut + " rows outside range — server filter ignored?! Snapshot keeps them (aggregation re-filters by date) but investigate.");
+    // 3. Truncation? If the newest value entry is more than 3 days older than
+    //    the end of the window (capped at today), the fetch stopped early —
+    //    a $top-style cap or a broken nextLink. Cost for the latest days
+    //    would be silently missing, so fail loudly rather than publish.
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const expectEnd = to < todayIso ? to : todayIso;
+    const staleDays = Math.round((new Date(expectEnd + "T00:00:00") - new Date(veMax + "T00:00:00")) / 86400000);
+    if ((valueEntries || []).length && staleDays > 3) {
+        console.error("[VE check] newest value entry is " + veMax + " but the window runs to " + expectEnd + " (" + staleDays + " days short) — fetch truncated? aborting snapshot");
+        process.exit(1);
+    }
 
     const payload = {
         meta: {
