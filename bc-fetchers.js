@@ -258,7 +258,7 @@ async function fetchValueEntries(fromISO, toISO) {
     // Deliberately NO $select here — verified on this tenant that adding
     // $select to the ValueEntries query object silently DROPS the date
     // $filter and returns the whole table (102k rows for a 3-month ask).
-    const url = BC_ODATA_URL + "/Company('" + coName + "')/" + info.entity + "?" + params.join("&");
+    const url = BC_ODATA_URL + "/Company('" + coName + "')/" + info.entity + (params.length ? "?" + params.join("&") : "");
     try {
         const rows = await bcFetchAll(url, "Value Entries (" + info.entity + ")");
         console.log("[Value Entry] " + info.entity + " → " + rows.length + " rows");
@@ -445,7 +445,7 @@ async function fetchItemLedgerSales(fromISO, toISO) {
 async function fetchLocations() {
     const compId = await bcGetCompanyId();
     try {
-        const data = await bcFetch(BC_API_URL + "/companies(" + compId + ")/locations?$top=1000");
+        const data = await bcFetch(BC_API_URL + "/companies(" + compId + ")/locations"); // no $top anywhere in this file — BC treats it as a total cap
         return data.value || [];
     } catch (e) { console.warn("Could not fetch locations:", e.message); return []; }
 }
@@ -458,7 +458,7 @@ async function fetchItems() {
 }
 async function fetchInvoiceLines(invoiceId) {
     const compId = await bcGetCompanyId();
-    return bcFetchAll(BC_API_URL + "/companies(" + compId + ")/salesInvoices(" + invoiceId + ")/salesInvoiceLines?$top=10000", "Invoice lines");
+    return bcFetchAll(BC_API_URL + "/companies(" + compId + ")/salesInvoices(" + invoiceId + ")/salesInvoiceLines", "Invoice lines");
 }
 async function fetchCustomers() {
     const compId = await bcGetCompanyId();
@@ -624,9 +624,9 @@ async function fetchBlanketSalesOrders(fromISO, toISO) {
     const filters = [];
     if (info.fDocDate) filters.push(info.fDocDate + " ge " + fromISO + " and " + info.fDocDate + " le " + toISO);
     if (!info.nameMatchesKind && info.fDocType) filters.push(info.fDocType + " eq '" + info.docTypeValue + "'");
-    const params = ["$top=10000"];
+    const params = []; // no $top (total cap); bcFetchAll pages via nextLink
     if (filters.length) params.push("$filter=" + encodeURIComponent(filters.join(" and ")));
-    const url = BC_ODATA_URL + "/Company('" + coName + "')/" + info.entity + "?" + params.join("&");
+    const url = BC_ODATA_URL + "/Company('" + coName + "')/" + info.entity + (params.length ? "?" + params.join("&") : "");
     try {
         const rows = await bcFetchAll(url, "Blanket sales orders (" + info.entity + ")");
         console.log("[Blanket SO] " + info.entity + " → " + rows.length + " rows");
@@ -671,7 +671,7 @@ async function fetchBlanketSalesOrders(fromISO, toISO) {
                 let lineRows;
                 if (fLineDocType && info.docTypeValue) {
                     const linesUrl = BC_ODATA_URL + "/Company('" + coName + "')/" + linesInfo.entity
-                        + "?$top=50000&$filter=" + encodeURIComponent(fLineDocType + " eq '" + info.docTypeValue + "'");
+                        + "?$filter=" + encodeURIComponent(fLineDocType + " eq '" + info.docTypeValue + "'");
                     lineRows = await bcFetchAll(linesUrl, "Blanket order lines (" + linesInfo.entity + ")");
                 } else {
                     // Fallback: chunked OR-filters, 40 document numbers per
@@ -681,7 +681,7 @@ async function fetchBlanketSalesOrders(fromISO, toISO) {
                         const chunk = docNos.slice(i, i + 40);
                         const inClause = chunk.map(n => linesInfo.fDocNo + " eq '" + String(n).replace(/'/g, "''") + "'").join(" or ");
                         const linesUrl = BC_ODATA_URL + "/Company('" + coName + "')/" + linesInfo.entity
-                            + "?$top=50000&$filter=" + encodeURIComponent(inClause);
+                            + "?$filter=" + encodeURIComponent(inClause);
                         lineRows = lineRows.concat(await bcFetchAll(linesUrl, "Blanket order lines " + Math.min(i + 40, docNos.length) + "/" + docNos.length));
                     }
                 }
@@ -857,7 +857,7 @@ async function fetchResidentialDocLookup() {
     for (const c of candidates) {
         const selectCols = [c.fNo, c.fYourRef, c.fQuote].filter(Boolean).join(",");
         const url = BC_ODATA_URL + "/Company('" + coName + "')/" + c.entity +
-            "?$select=" + selectCols + "&$top=20000";
+            "?$select=" + selectCols;
         try {
             const rows = await bcFetchAll(url, "Residential lookup (" + c.entity + ")");
             let entityHits = 0;
@@ -968,9 +968,9 @@ async function fetchSalesQuoteArchive(fromISO, toISO) {
     if (info.fDocType) {
         filter = (filter ? "(" + filter + ") and " : "") + info.fDocType + " eq 'Quote'";
     }
-    const params = ["$top=20000"];
+    const params = []; // no $top (total cap)
     if (filter) params.push("$filter=" + encodeURIComponent(filter));
-    const url = BC_ODATA_URL + "/Company('" + coName + "')/" + info.entity + "?" + params.join("&");
+    const url = BC_ODATA_URL + "/Company('" + coName + "')/" + info.entity + (params.length ? "?" + params.join("&") : "");
     let rows = [];
     try { rows = await bcFetchAll(url, "Sales Quote Archive (" + info.entity + ")"); }
     catch (e) {
@@ -1021,10 +1021,10 @@ async function fetchSalesQuoteExtras(fromISO, toISO) {
     if (info.fDocDate) filters.push(info.fDocDate + " ge " + fromISO + " and " + info.fDocDate + " le " + toISO);
     if (!info.nameMatchesKind && info.fDocType) filters.push(info.fDocType + " eq '" + info.docTypeValue + "'");
     const selectFields = [info.fNo, info.fCustNo, info.fCustName, info.fAmount, info.fCampaign, info.fAssigned, info.fDocDate].filter(Boolean);
-    const params = ["$top=10000"];
+    const params = []; // no $top (total cap)
     if (selectFields.length) params.push("$select=" + selectFields.join(","));
     if (filters.length) params.push("$filter=" + encodeURIComponent(filters.join(" and ")));
-    const url = BC_ODATA_URL + "/Company('" + coName + "')/" + info.entity + "?" + params.join("&");
+    const url = BC_ODATA_URL + "/Company('" + coName + "')/" + info.entity + (params.length ? "?" + params.join("&") : "");
     try {
         const rows = await bcFetchAll(url, "Sales quote extras (" + info.entity + ")");
         console.log("[Quote extras] " + info.entity + " → " + rows.length + " rows");
