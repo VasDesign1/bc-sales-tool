@@ -10340,7 +10340,10 @@ function renderByItem() {
     // Leaf-category cross-filter (from the item-category pie / treemap /
     // sankey). A string = one category; an array = the chart's "Other"
     // bucket, i.e. every category that didn't make its top-N.
-    const catF = state.byItemCategoryFilter;
+    // The charts' "(uncat)" node covers both of this tab's uncategorised
+    // labels, so it is matched as the pair.
+    const rawF = state.byItemCategoryFilter;
+    const catF = rawF === "(uncat)" ? ["(no category)", "(non-item)"] : rawF;
     if (catF) {
         const set = Array.isArray(catF) ? new Set(catF) : null;
         rows = rows.filter(r => set ? set.has(r.category) : r.category === catF);
@@ -10350,9 +10353,11 @@ function renderByItem() {
     if (banner) {
         if (catF) {
             banner.style.display = "block";
-            document.getElementById("itCategoryFilterName").textContent = Array.isArray(catF)
-                ? "Other — " + catF.length + " smaller categories (" + catF.slice(0, 6).join(", ") + (catF.length > 6 ? ", …" : "") + ")"
-                : catF;
+            document.getElementById("itCategoryFilterName").textContent = rawF === "(uncat)"
+                ? "Uncategorised — items with no category + non-item lines (freight, G/L, free text)"
+                : Array.isArray(catF)
+                    ? "Other — " + catF.length + " smaller categories (" + catF.slice(0, 6).join(", ") + (catF.length > 6 ? ", …" : "") + ")"
+                    : catF;
         } else banner.style.display = "none";
     }
 
