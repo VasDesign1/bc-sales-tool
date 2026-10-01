@@ -1601,8 +1601,6 @@
         <nav>
             <div class="group-label">Dashboards</div>
             <a data-tab="overview" class="active">Overview</a>
-            <!-- Mimic Overview: ledger-tied test tab, allow-list MIMIC_VIEWERS (see updateRestrictedNav). -->
-            <a data-tab="mimic" class="mimicNav" style="display:none;">Mimic Overview (ledger-tied)</a>
             <a data-tab="deepInsights">Deep Insights</a>
             <a data-tab="branch">Branch Sales</a>
             <a data-tab="salesperson">Salesperson Sales</a>
@@ -2170,86 +2168,6 @@
                                 <th class="num" data-sort="gp">GP $</th>
                                 <th class="num" data-sort="gpPct">GP %</th>
                                 <th class="num" data-sort="lastInvoiceDate">Last invoice</th>
-                            </tr></thead>
-                            <tbody></tbody>
-                        </table>
-                    </div>
-                </div>
-            </section>
-
-            <!-- TAB: Mimic Overview (ledger-tied) — test tab, MIMIC_VIEWERS only. See renderMimic(). -->
-            <section data-tab-content="mimic" style="display:none;">
-                <div class="hint">
-                    <strong>Test tab, visible only to the allow-list.</strong> Same documents and drill-downs as Overview, but Sales, Cost and Profit are tied to the
-                    General Ledger the way Finance defines gross profit: revenue accounts 4010 to 4065 and cost-of-goods-sold accounts 5010 to 5196 only
-                    (no Direct Labour, no 7005 rent). Each invoice and credit-memo line is placed by the account it posts to, and ledger entries on those
-                    accounts that are not a sales invoice or credit memo (purchase invoices, vendor payments, customer receipts, journals) are added as
-                    <em>Ledger adjustments</em>. Needs the ledger loaded for the toolbar range.
-                </div>
-                <div class="panel" style="margin-bottom:16px;">
-                    <div class="panel-header">
-                        <h2>Tie-out to the P&amp;L</h2>
-                        <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
-                            <span class="meta" id="mimicStatus"></span>
-                            <button class="btn btn-primary" id="mimicLoadBtn" type="button" title="Fetch the general ledger for the toolbar From / To range (same loader as the P&amp;L tab).">Load ledger</button>
-                        </div>
-                    </div>
-                    <div class="hint" style="margin:0;" id="mimicTie">—</div>
-                </div>
-
-                <div class="kpi-row" style="grid-template-columns: repeat(4, 1fr);">
-                    <div class="kpi k-rev" title="Posted sales invoice lines that post to revenue accounts 4010 to 4065, excl. tax, net of line and invoice discounts."><div class="label">Sales (invoices)</div><div class="value" id="mmSales">—</div><div class="sub" id="mmSalesSub">&nbsp;</div></div>
-                    <div class="kpi k-inv" title="Posted sales credit-memo lines that post to revenue accounts 4010 to 4065."><div class="label">Returns (credit memos)</div><div class="value" id="mmReturns">—</div><div class="sub" id="mmReturnsSub">&nbsp;</div></div>
-                    <div class="kpi k-loc" title="General ledger entries on 4010 to 4065 whose document is not a loaded sales invoice or credit memo: purchase invoices, vendor payments, customer receipts, journals."><div class="label">Ledger adjustments, revenue</div><div class="value" id="mmYRev">—</div><div class="sub" id="mmYRevSub">&nbsp;</div></div>
-                    <div class="kpi k-cust" title="Sales − Returns + Ledger adjustments. Equals P&amp;L Total Revenue (net) when no entity filter is active."><div class="label">Adjusted Sales = P&amp;L Revenue</div><div class="value" id="mmAdjSales">—</div><div class="sub" id="mmAdjSalesSub">&nbsp;</div></div>
-                </div>
-                <div class="kpi-row" style="grid-template-columns: repeat(4, 1fr);">
-                    <div class="kpi k-gp" title="Item cost of what was sold, from value entries (entry type Sale), credit-memo cost already netted. Equals ledger 5010 + 5020 + 5030."><div class="label">Cost of sales (item cost)</div><div class="value" id="mmVeCost">—</div><div class="sub" id="mmVeCostSub">&nbsp;</div></div>
-                    <div class="kpi k-inv" title="Credit-memo (and invoice) lines coded straight to a cost-of-goods-sold account, e.g. 5165 Cost negotiation. Overview counts these as returns; the ledger holds them as cost."><div class="label">Document lines on cost accounts</div><div class="value" id="mmCogsLines">—</div><div class="sub" id="mmCogsLinesSub">&nbsp;</div></div>
-                    <div class="kpi k-loc" title="General ledger entries on 5010 to 5196 whose document is not a loaded sales invoice or credit memo: purchase invoices, freight, item journals, accruals."><div class="label">Ledger adjustments, cost</div><div class="value" id="mmYCogs">—</div><div class="sub" id="mmYCogsSub">&nbsp;</div></div>
-                    <div class="kpi k-cust" title="Item cost + document lines on cost accounts + Ledger adjustments. Equals P&amp;L Cost of Goods Sold when no entity filter is active."><div class="label">Adjusted Cost = P&amp;L COGS</div><div class="value" id="mmAdjCost">—</div><div class="sub" id="mmAdjCostSub">&nbsp;</div></div>
-                </div>
-                <div class="kpi-row" style="grid-template-columns: repeat(4, 1fr);">
-                    <div class="kpi k-gp" title="Adjusted Sales − Adjusted Cost. Equals P&amp;L Gross Profit before Direct Labour."><div class="label">Adjusted Profit = P&amp;L GP</div><div class="value" id="mmAdjGp">—</div><div class="sub" id="mmAdjGpSub">&nbsp;</div></div>
-                    <div class="kpi k-gpp" title="Adjusted Profit ÷ Adjusted Sales."><div class="label">Adjusted Margin</div><div class="value" id="mmAdjGpp">—</div><div class="sub">P&amp;L margin before Direct Labour</div></div>
-                    <div class="kpi k-qty" title="Quantity on invoice lines that post to revenue accounts."><div class="label">Quantity sold</div><div class="value" id="mmQty">—</div><div class="sub">invoice lines</div></div>
-                    <div class="kpi k-avg" title="Invoice / credit-memo lines that post outside the gross-profit accounts (e.g. 7005 rent, other income). Counted by Overview, never by the P&amp;L gross profit, so they are left out here."><div class="label">Excluded document lines</div><div class="value" id="mmOut">—</div><div class="sub" id="mmOutSub">outside 4010–4065 / 5010–5196</div></div>
-                </div>
-
-                <div class="chart-grid">
-                    <div class="card span-6">
-                        <div class="head"><h3>Adjusted sales by branch</h3><span class="meta">invoice lines − credit-memo lines, plus the ledger adjustments bar</span></div>
-                        <div class="chart-wrap" style="min-height:300px;"><canvas id="mimicBranchChart"></canvas></div>
-                    </div>
-                    <div class="card span-6">
-                        <div class="head"><h3>Ledger adjustments in this range</h3><span class="meta" id="mimicAdjMeta"></span></div>
-                        <div class="table-scroll" style="max-height:300px;">
-                            <table id="mimicAdjTable">
-                                <thead><tr><th>Side</th><th>Account</th><th>Document type</th><th class="num">Entries</th><th class="num">Documents</th><th class="num">$</th></tr></thead>
-                                <tbody></tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="panel">
-                    <div class="panel-header">
-                        <h2>All customers, ledger-tied</h2>
-                        <div class="meta" id="mimicCustCount"></div>
-                    </div>
-                    <div class="table-scroll">
-                        <table id="mimicCustTable">
-                            <thead><tr>
-                                <th>Customer No</th>
-                                <th>Name</th>
-                                <th class="num">Invoices</th>
-                                <th class="num">Credit memos</th>
-                                <th class="num">Sales $</th>
-                                <th class="num">Returns $</th>
-                                <th class="num">Adjusted Sales $</th>
-                                <th class="num">Cost $</th>
-                                <th class="num">Adjusted Profit $</th>
-                                <th class="num">Margin</th>
                             </tr></thead>
                             <tbody></tbody>
                         </table>
@@ -4185,7 +4103,6 @@ const state = {
 
 const TAB_TITLES = {
     overview: "Overview",
-    mimic: "Mimic Overview (ledger-tied, test)",
     branch: "Branch Sales",
     salesperson: "Salesperson Sales",
     byItem: "Sales by Item",
@@ -5708,7 +5625,7 @@ function setActiveTab(name) {
     });
     document.querySelectorAll(".drill").forEach(d => d.style.display = "none");
     document.getElementById("headerTitle").textContent = TAB_TITLES[name] || "Sales";
-    if (state.invoices.length || name === "pnl" || name === "mimic") renderCurrentTab();
+    if (state.invoices.length || name === "pnl") renderCurrentTab();
     window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -5728,7 +5645,6 @@ function closeDrill() {
 function renderCurrentTab() {
     switch (state.tab) {
         case "overview":    renderOverview(); break;
-        case "mimic":       renderMimic();    break;
         case "deepInsights": renderDeepInsights(); break;
         case "branch":      renderBranch();   break;
         case "salesperson": renderSalesperson(); break;
@@ -15458,272 +15374,6 @@ function pnlExportCsv() {
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
 
-// ============================================================
-// MIMIC OVERVIEW (ledger-tied) — test tab, MIMIC_VIEWERS only (2026-10-02)
-// ============================================================
-// Proof that an Overview can equal the P&L while staying document-based.
-// Finance's reconciliation layout (August 2026, reconciled to the cent):
-//   Sales Tool  = SINV + SCR lines, each placed by the account it posts to
-//   + yellow    = G/L entries on the gross-profit accounts whose document
-//                 is NOT a loaded SINV / SCR (PPI, EFT, receipts, journals)
-//   − red       = SINV / SCR lines that post OUTSIDE the gross-profit
-//                 accounts (7005 rent, other income) — dropped here
-//   = P&L       = Total Revenue (net) and Cost of Goods Sold, mapping
-//                 buckets; Direct Labour is outside both definitions.
-// Per-customer rows stay document-based so drill-downs keep working; the
-// yellow entries carry no customer / branch / salesperson, so they are
-// shown as one "Ledger adjustments" row and are left out whenever an
-// entity filter is active (the tie-out badge says so).
-const MIMIC_REV_ACCTS  = new Set(PNL_MAP_BUCKETS["Total Revenue (net)"]);
-const MIMIC_COGS_ACCTS = new Set(PNL_MAP_BUCKETS["Cost of Goods Sold"]);
-const MIMIC_ADJ_KEY = "(ledger adjustments)";
-function mimicIsViewer() { return MIMIC_VIEWERS.has(currentSignInName()); }
-// Where a sales-document line lands in the ledger: "rev" | "cogs" | "out".
-function mimicLineBucket(ln) {
-    const t = (ln.lineType || "").toString();
-    if (t === "Comment") return "out";
-    if (t === "Account") {
-        const no = String(ln.lineObjectNumber || "");
-        if (MIMIC_REV_ACCTS.has(no)) return "rev";
-        if (MIMIC_COGS_ACCTS.has(no)) return "cogs";
-        return "out";
-    }
-    return "rev"; // Item / Resource / Charge lines post to the sales account
-}
-function mimicLineAmount(ln) { return num(ln.amountExcludingTax) - num(ln.invoiceDiscountAllocation); }
-// Location / item filters only — the Rentals toggle is irrelevant here
-// because 7005 lines are outside the gross-profit accounts regardless.
-function mimicLineOk(ln) {
-    if (state.filters.location && locationCode(ln.locationId) !== state.filters.location) return false;
-    if (state.filters.item && (ln.lineObjectNumber || ln.itemId || "") !== state.filters.item) return false;
-    return true;
-}
-function mimicCompute() {
-    const inRange = getDateRangePredicate();
-    const entityFilter = !!(state.filters.customer || state.filters.salesperson || state.filters.location || state.filters.item);
-    const veUsable = !!(state.valueEntries && state.valueEntries.length) && veUsableForCurrentFilters();
-    const rows = new Map();
-    const rowFor = (no, name) => {
-        let r = rows.get(no);
-        if (!r) { r = { customerNumber: no, customerName: name || "(unknown)", invoiceCount: 0, creditCount: 0, sales: 0, returns: 0, cogsLines: 0, out: 0, rawCost: 0, cost: 0 }; rows.set(no, r); }
-        return r;
-    };
-    const byBranch = new Map();
-    const addBranch = (code, v) => byBranch.set(code, (byBranch.get(code) || 0) + v);
-    const t = { sales: 0, returns: 0, cogsLines: 0, out: 0, rawCost: 0, qty: 0, invoices: 0, credits: 0 };
-
-    // Every loaded sales document in the range (unfiltered) — decides
-    // whether a ledger entry is "a sales document" or a yellow adjustment.
-    const docNos = new Set();
-    for (const inv of (state.invoices || [])) if (inRange(inv.postingDate) && inv.number) docNos.add(inv.number);
-    for (const cm  of (state.creditMemos || [])) if (inRange(cm.postingDate) && cm.number) docNos.add(cm.number);
-
-    // Invoices: state.filtered already applies date + toolbar filters.
-    for (const inv of (state.filtered || [])) {
-        const r = rowFor(inv.customerNumber || inv.customerId || "(unknown)", inv.customerName);
-        r.invoiceCount++; t.invoices++;
-        for (const ln of (inv.salesInvoiceLines || [])) {
-            if (!mimicLineOk(ln)) continue;
-            const a = mimicLineAmount(ln), b = mimicLineBucket(ln);
-            if (b === "rev")       { r.sales += a; t.sales += a; t.qty += num(ln.quantity); addBranch(locationCode(ln.locationId) || "(none)", a); }
-            else if (b === "cogs") { r.cogsLines -= a; t.cogsLines -= a; }   // invoice line on a cost account credits cost
-            else                   { r.out += a; t.out += a; }
-        }
-        const c = invoiceCost(inv);
-        r.rawCost += c; t.rawCost += c;
-    }
-    // Credit memos: same filters as getAdjustments / getReturnsBuckets.
-    const retCostByCust = veUsable ? null : getReturnsBuckets().byCustomer;
-    for (const cm of (state.creditMemos || [])) {
-        if (!inRange(cm.postingDate) || !docInSnapshot(cm)) continue;
-        if (state.filters.salesperson && (cm.salesperson || "(unassigned)") !== state.filters.salesperson) continue;
-        if (state.filters.customer && cm.customerNumber !== state.filters.customer) continue;
-        let touched = false;
-        const r = rowFor(cm.customerNumber || "(unknown)", cm.customerName);
-        for (const ln of (cm.salesCreditMemoLines || [])) {
-            if (!mimicLineOk(ln)) continue;
-            touched = true;
-            const a = mimicLineAmount(ln), b = mimicLineBucket(ln);
-            if (b === "rev")       { r.returns += a; t.returns += a; addBranch(locationCode(ln.locationId) || "(none)", -a); }
-            else if (b === "cogs") { r.cogsLines += a; t.cogsLines += a; }   // credit-memo line on a cost account debits cost
-            else                   { r.out -= a; t.out -= a; }
-        }
-        if (touched) { r.creditCount++; t.credits++; }
-    }
-    // Cost: VE total (returns already netted) spread by each customer's
-    // per-line share, exactly as Overview does; otherwise per-line cost
-    // net of return cost.
-    let veCost = 0;
-    if (veUsable) {
-        veCost = getValueEntryTotals().cost;
-        const ratio = t.rawCost > 0 ? veCost / t.rawCost : 1;
-        for (const r of rows.values()) r.cost = r.rawCost * ratio;
-    } else {
-        veCost = t.rawCost;
-        for (const r of rows.values()) {
-            const ret = retCostByCust && retCostByCust.get(r.customerNumber);
-            r.cost = r.rawCost - (ret ? ret.cost : 0);
-            veCost -= ret ? ret.cost : 0;
-        }
-    }
-    for (const r of rows.values()) {
-        r.adjSales = r.sales - r.returns;
-        r.adjCost  = r.cost + r.cogsLines;
-        r.adjGp    = r.adjSales - r.adjCost;
-        r.margin   = r.adjSales ? r.adjGp / r.adjSales : 0;
-    }
-
-    // Ledger side: P&L totals on the gross-profit accounts + yellow detail.
-    const vr = pnlToolbarRange();
-    const todayIso = new Date().toISOString().slice(0, 10);
-    const ledgerLoaded = !!state.gl.loadedAt;
-    const covered = ledgerLoaded && !!vr.from && !!vr.to && pnlRangeCovered(vr.from, vr.to < todayIso ? vr.to : todayIso);
-    let yRev = 0, yCogs = 0, pRev = 0, pCogs = 0, yEntries = 0;
-    const yDetail = new Map();
-    if (ledgerLoaded) {
-        for (const e of pnlEntriesForView()) {
-            const isRev = MIMIC_REV_ACCTS.has(e.accountNumber), isCogs = MIMIC_COGS_ACCTS.has(e.accountNumber);
-            if (!isRev && !isCogs) continue;
-            const net = isRev ? e.creditAmount - e.debitAmount : e.debitAmount - e.creditAmount;
-            if (isRev) pRev += net; else pCogs += net;
-            if (docNos.has(e.documentNumber)) continue;
-            if (isRev) yRev += net; else yCogs += net;
-            yEntries++;
-            const a = state.gl.accountsByNo.get(e.accountNumber);
-            const k = (isRev ? "rev" : "cogs") + "|" + e.accountNumber + "|" + (e.documentType || "");
-            const d = yDetail.get(k) || { side: isRev ? "Revenue" : "Cost", account: e.accountNumber + " " + (a ? a.displayName : ""), docType: e.documentType || "(journal / blank)", entries: 0, docs: new Set(), amount: 0 };
-            d.entries++; d.docs.add(e.documentNumber); d.amount += net;
-            yDetail.set(k, d);
-        }
-    }
-    const useAdj = ledgerLoaded && !entityFilter;
-    const adjSales = t.sales - t.returns + (useAdj ? yRev : 0);
-    const adjCost  = veCost + t.cogsLines + (useAdj ? yCogs : 0);
-    const adjGp    = adjSales - adjCost;
-    return {
-        rows: [...rows.values()], byBranch, totals: t, veCost, veUsable, entityFilter,
-        ledgerLoaded, covered, yRev, yCogs, yEntries, yDetail: [...yDetail.values()].sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount)),
-        pRev, pCogs, adjSales, adjCost, adjGp, margin: adjSales ? adjGp / adjSales : 0,
-        tie: { rev: adjSales - pRev, cogs: adjCost - pCogs, gp: adjGp - (pRev - pCogs) },
-        rangeLabel: vr.label,
-    };
-}
-function renderMimic() {
-    const el = id => document.getElementById(id);
-    const set = (id, v) => { const n = el(id); if (n) n.textContent = v; };
-    if (!state.invoices || !state.invoices.length) {
-        set("mimicStatus", "Load sales first (Load sales or Fast lookup), then this tab can tie to the ledger.");
-        set("mimicTie", "—");
-        return;
-    }
-    const m = mimicCompute();
-    const t = m.totals;
-    // Tiles
-    set("mmSales", fmtMoneyFull(t.sales));           set("mmSalesSub", t.invoices + " invoices · lines on 4010–4065");
-    set("mmReturns", "−" + fmtMoneyFull(t.returns));  set("mmReturnsSub", t.credits + " credit memos · lines on 4010–4065");
-    set("mmYRev", m.ledgerLoaded ? (m.entityFilter ? "n/a" : fmtMoneyFull(m.yRev)) : "—");
-    set("mmYRevSub", !m.ledgerLoaded ? "ledger not loaded" : m.entityFilter ? "not allocable under an entity filter" : "non-sales documents on 4010–4065");
-    set("mmAdjSales", fmtMoneyFull(m.adjSales));
-    set("mmAdjSalesSub", m.ledgerLoaded && !m.entityFilter ? ("P&L revenue " + fmtMoneyFull(m.pRev) + " · Δ " + fmtMoneyFull(m.tie.rev)) : "sales − returns" + (m.entityFilter ? " (filter active)" : ""));
-    set("mmVeCost", fmtMoneyFull(m.veCost));          set("mmVeCostSub", m.veUsable ? "value entries, returns netted (= 5010 + 5020 + 5030)" : "per-line cost · VE can't scope this filter");
-    set("mmCogsLines", fmtMoneyFull(t.cogsLines));    set("mmCogsLinesSub", "credit-memo / invoice lines coded to 5xxx");
-    set("mmYCogs", m.ledgerLoaded ? (m.entityFilter ? "n/a" : fmtMoneyFull(m.yCogs)) : "—");
-    set("mmYCogsSub", !m.ledgerLoaded ? "ledger not loaded" : m.entityFilter ? "not allocable under an entity filter" : "non-sales documents on 5010–5196");
-    set("mmAdjCost", fmtMoneyFull(m.adjCost));
-    set("mmAdjCostSub", m.ledgerLoaded && !m.entityFilter ? ("P&L COGS " + fmtMoneyFull(m.pCogs) + " · Δ " + fmtMoneyFull(m.tie.cogs)) : "item cost + lines on cost accounts");
-    set("mmAdjGp", fmtMoneyFull(m.adjGp));
-    set("mmAdjGpSub", m.ledgerLoaded && !m.entityFilter ? ("P&L GP before labour " + fmtMoneyFull(m.pRev - m.pCogs) + " · Δ " + fmtMoneyFull(m.tie.gp)) : "adjusted sales − adjusted cost");
-    set("mmAdjGpp", fmtPct(m.margin));
-    set("mmQty", fmtInt(t.qty));
-    set("mmOut", fmtMoneyFull(t.out));
-    // Tie-out banner
-    const tie = el("mimicTie");
-    if (tie) {
-        let msg, ok = false;
-        if (!m.ledgerLoaded) {
-            msg = "Ledger not loaded for " + m.rangeLabel + " — click Load ledger (about 30 s per month). Until then the tiles show the document view only.";
-        } else if (!m.covered) {
-            msg = "The toolbar range " + m.rangeLabel + " reaches outside the loaded ledger (" + (state.gl.windows || []).map(w => fmtDate(w.from) + " → " + fmtDate(w.to)).join(", ") + ") — click Load ledger to fetch it; the figures are partial until then.";
-        } else if (m.entityFilter) {
-            msg = "An entity filter is active (branch / salesperson / customer / item). Ledger adjustments carry no entity, so they are left out and this view will not equal the P&L. Clear the filter to see the tie-out.";
-        } else {
-            ok = Math.abs(m.tie.rev) < 0.005 && Math.abs(m.tie.cogs) < 0.005;
-            msg = (ok ? "✓ Ties to the P&L for " : "✗ Does NOT tie to the P&L for ") + m.rangeLabel
-                + " · Revenue Δ " + fmtMoneyFull(m.tie.rev) + " · COGS Δ " + fmtMoneyFull(m.tie.cogs) + " · Gross profit Δ " + fmtMoneyFull(m.tie.gp)
-                + " · " + m.yEntries.toLocaleString("en-AU") + " ledger adjustment entries (revenue " + fmtMoneyFull(m.yRev) + ", cost " + fmtMoneyFull(m.yCogs) + ")"
-                + (t.out ? " · " + fmtMoneyFull(t.out) + " of document lines outside the gross-profit accounts left out" : "");
-        }
-        tie.textContent = msg;
-        tie.style.borderLeftColor = !m.ledgerLoaded || !m.covered ? "#ffca28" : m.entityFilter ? "#90a4ae" : ok ? "#43a047" : "#e53935";
-    }
-    set("mimicStatus", m.ledgerLoaded ? (state.gl.entries.length.toLocaleString("en-AU") + " ledger entries held · " + (state.gl.windows || []).map(w => fmtDate(w.from) + " → " + fmtDate(w.to)).join(", ")) : "");
-    // Adjustments table
-    const adjBody = document.querySelector("#mimicAdjTable tbody");
-    if (adjBody) {
-        adjBody.innerHTML = m.yDetail.length ? m.yDetail.map(d => `
-            <tr>
-                <td>${escapeHtml(d.side)}</td>
-                <td>${escapeHtml(d.account)}</td>
-                <td>${escapeHtml(d.docType)}</td>
-                <td class="num">${fmtInt(d.entries)}</td>
-                <td class="num">${fmtInt(d.docs.size)}</td>
-                <td class="num ${d.amount >= 0 ? "pos" : "neg"}">${fmtMoneyFull(d.amount)}</td>
-            </tr>`).join("") : '<tr><td colspan="6" class="empty">' + (m.ledgerLoaded ? "No non-sales entries on the gross-profit accounts in this range." : "Load the ledger to see the adjustments.") + '</td></tr>';
-        set("mimicAdjMeta", m.ledgerLoaded ? ("revenue " + fmtMoneyFull(m.yRev) + " · cost " + fmtMoneyFull(m.yCogs)) : "");
-    }
-    // Branch chart (adjusted sales per branch + ledger adjustments bar)
-    destroyChart("mimicBranch");
-    const canvas = el("mimicBranchChart");
-    if (canvas) {
-        const bars = [...m.byBranch.entries()].map(([k, v]) => ({ label: k, value: v })).sort((a, b) => b.value - a.value);
-        if (m.ledgerLoaded && !m.entityFilter) bars.push({ label: "Ledger adjustments", value: m.yRev });
-        state.charts.mimicBranch = new Chart(canvas.getContext("2d"), buildOverviewSingleSeriesConfig("barH", {
-            labels: bars.map(b => b.label),
-            values: bars.map(b => b.value),
-            colors: bars.map((b, i) => b.label === "Ledger adjustments" ? "#8a5a12" : barShade("#3f51b5", i / Math.max(bars.length, 1))),
-            tooltipLabel: (i, v) => bars[i].label + ": " + fmtMoneyFull(v),
-            onClick: () => {},
-        }));
-    }
-    // Customer table + adjustments row + total row
-    const rows = m.rows.slice().sort((a, b) => b.adjSales - a.adjSales);
-    const body = document.querySelector("#mimicCustTable tbody");
-    if (body) {
-        const tr = (r, cls, cust) => `
-            <tr class="${cls}"${cust ? ` data-cust="${escapeAttr(cust)}"` : ""}>
-                <td>${escapeHtml(r.customerNumber || "")}</td>
-                <td>${escapeHtml(r.customerName || "")}</td>
-                <td class="num">${r.invoiceCount == null ? "" : fmtInt(r.invoiceCount)}</td>
-                <td class="num">${r.creditCount == null ? "" : fmtInt(r.creditCount)}</td>
-                <td class="num">${fmtMoneyFull(r.sales)}</td>
-                <td class="num">${r.returns ? "−" + fmtMoneyFull(r.returns) : ""}</td>
-                <td class="num">${fmtMoneyFull(r.adjSales)}</td>
-                <td class="num">${fmtMoneyFull(r.adjCost)}</td>
-                <td class="num ${r.adjGp >= 0 ? "pos" : "neg"}">${fmtMoneyFull(r.adjGp)}</td>
-                <td class="num">${fmtPct(r.margin)}</td>
-            </tr>`;
-        let html = rows.map(r => tr(r, "clickable", r.customerNumber)).join("");
-        if (m.ledgerLoaded && !m.entityFilter) {
-            html += tr({ customerNumber: "", customerName: "Ledger adjustments (non-sales documents on the gross-profit accounts)", invoiceCount: null, creditCount: null,
-                         sales: m.yRev, returns: 0, adjSales: m.yRev, adjCost: m.yCogs, adjGp: m.yRev - m.yCogs, margin: 0 }, "", "");
-        }
-        html += tr({ customerNumber: "", customerName: m.ledgerLoaded && !m.entityFilter ? "TOTAL = P&L gross-profit accounts" : "TOTAL (documents only)", invoiceCount: t.invoices, creditCount: t.credits,
-                     sales: t.sales + (m.ledgerLoaded && !m.entityFilter ? m.yRev : 0), returns: t.returns, adjSales: m.adjSales, adjCost: m.adjCost, adjGp: m.adjGp, margin: m.margin }, "", "");
-        body.innerHTML = html || '<tr><td colspan="10" class="empty">No customers.</td></tr>';
-        set("mimicCustCount", rows.length + " customers · click a row to drill into the customer");
-    }
-}
-async function mimicLoadLedger() {
-    await loadPnl();
-    if (state.tab === "mimic") renderMimic();
-}
-(function wireMimic() {
-    const on = (id, ev, fn) => { const el = document.getElementById(id); if (el) el.addEventListener(ev, fn); };
-    on("mimicLoadBtn", "click", mimicLoadLedger);
-    const tbl = document.getElementById("mimicCustTable");
-    if (tbl) tbl.addEventListener("click", e => { const tr = e.target.closest("tr[data-cust]"); if (tr && tr.dataset.cust) showCustomer(tr.dataset.cust); });
-})();
-
 (function wirePnl() {
     const on = (id, ev, fn) => { const el = document.getElementById(id); if (el) el.addEventListener(ev, fn); };
     on("pnlLoadBtn", "click", loadPnl);
@@ -15770,8 +15420,6 @@ const RESTRICTED_TABS = new Set(["branchTarget", "branchSalesRate", "branchMargi
                                  "keyCustomers", "ordersPastDel"]);
 // The Finance group (P&L tab) has its own allow-list (Faik 2026-09-23).
 const PNL_VIEWERS = new Set([RESTRICTED_NAV_OWNER, "michaelc@vicair.com.au"]);
-// Mimic Overview (ledger-tied) test tab: Faik only while it is being proven (2026-10-02).
-const MIMIC_VIEWERS = new Set([RESTRICTED_NAV_OWNER]);
 // Guest accounts sign in as "name_domain.com#EXT#@VicAirPtyLtd.onmicrosoft.com";
 // fold that back to the plain email so the allow-list can use real addresses.
 function normalizeSignInName(u) {
@@ -15796,9 +15444,6 @@ function updateRestrictedNav() {
     const showPnl = PNL_VIEWERS.has(user);
     document.querySelectorAll(".financeNav").forEach(el => { el.style.display = showPnl ? "" : "none"; });
     if (!showPnl && state.tab === "pnl") setActiveTab("overview");
-    const showMimic = MIMIC_VIEWERS.has(user);
-    document.querySelectorAll(".mimicNav").forEach(el => { el.style.display = showMimic ? "" : "none"; });
-    if (!showMimic && state.tab === "mimic") setActiveTab("overview");
     // "Compare as of" is owner-only too: make sure a hidden filter can't stay active.
     if (!show && state.snapshotAsOf) {
         state.snapshotAsOf = null;
