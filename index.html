@@ -15433,6 +15433,8 @@ const SRECON_COGS_ACCTS = new Set(PNL_MAP_BUCKETS["Cost of Goods Sold"]);
 let sreconOpen = null;                  // null | "yellow" | "red"
 let sreconExpanded = new Set();         // group keys expanded in the yellow panel
 let sreconLast = null;                  // last computed result, for the panel
+let sreconLoading = false;              // a ledger fetch kicked off by opening Yellow is in flight
+let sreconTriedRange = "";              // range we already auto-loaded for, so a refusal doesn't loop
 function sreconIsViewer() { return SRECON_VIEWERS.has(currentSignInName()); }
 // A document line posts to a revenue account unless it is an explicit
 // G/L-account line pointing somewhere else. Item / Resource / Charge
@@ -15565,7 +15567,7 @@ function sreconPaint(grossSales) {
     set("srAdj", fmtMoneyFull(m.adjSales));
     set("srAdjSub", "invoices less returns");
 
-    if (!m.ledgerLoaded)      { set("srYellow", "—"); set("srYellowSub", "ledger not loaded · click to load"); }
+    if (!m.ledgerLoaded)      { set("srYellow", "—"); set("srYellowSub", "click to load the ledger"); }
     else if (m.entityFilter)  { set("srYellow", "n/a"); set("srYellowSub", "carries no branch or customer · clear filters"); }
     else                      { set("srYellow", fmtMoneyFull(m.yellow)); set("srYellowSub", m.yEntries.toLocaleString("en-AU") + " ledger entries · click to drill down"); }
 
@@ -15589,7 +15591,16 @@ function sreconRenderPanel() {
     const tbody  = document.querySelector("#srPanelTable tbody");
     const notice = document.getElementById("srPanelNotice");
     if (!panel || !thead || !tbody) return;
-    if (!sreconOpen || !sreconLast) { panel.style.display = "none"; return; }
+    if (!sreconOpen) { panel.style.display = "none"; return; }
+    if (!sreconLast) {   // tiles never painted yet — no sales loaded
+        panel.style.display = "";
+        document.getElementById("srPanelTitle").textContent = sreconOpen === "yellow" ? "Yellow" : "Red";
+        document.getElementById("srPanelMeta").textContent = "";
+        if (notice) notice.style.display = "none";
+        thead.innerHTML = "";
+        tbody.innerHTML = '<tr><td class="empty">Load sales first (Load sales, or Fast lookup), then this breaks down.</td></tr>';
+        return;
+    }
     const m = sreconLast;
     panel.style.display = "";
     panel.style.borderLeft = "4px solid " + (sreconOpen === "yellow" ? "#ffca28" : "#e53935");
@@ -15608,12 +15619,14 @@ function sreconRenderPanel() {
             notice.style.display = (needLedger || m.entityFilter) ? "" : "none";
             const txt = document.getElementById("srPanelNoticeText");
             const btn = document.getElementById("srLoadLedgerBtn");
-            if (txt) txt.textContent = !m.ledgerLoaded
-                ? "This figure comes from the general ledger, which is not loaded for " + m.rangeLabel + ". Load it to see the accounts and documents. It takes about 30 seconds per month and merges with anything already loaded."
+            if (txt) txt.textContent = sreconLoading
+                ? "Loading the general ledger for " + m.rangeLabel + ". This takes about 30 seconds per month — the accounts and documents appear as soon as it lands."
+                : !m.ledgerLoaded
+                ? "This figure comes from the general ledger, which is not loaded for " + m.rangeLabel + ". It merges with anything already loaded."
                 : !m.covered
                 ? "The toolbar range " + m.rangeLabel + " reaches outside the loaded ledger (" + (state.gl.windows || []).map(w => fmtDate(w.from) + " → " + fmtDate(w.to)).join(", ") + "). Load the rest to complete this figure."
                 : "A branch, salesperson, customer, item or status filter is active. These entries carry none of those, so they cannot be shown for a filtered slice. Clear the filters to see them.";
-            if (btn) btn.style.display = needLedger ? "" : "none";
+            if (btn) btn.style.display = (needLedger && !sreconLoading) ? "" : "none";
         }
         if (needLedger || m.entityFilter) { tbody.innerHTML = ""; return; }
         tbody.innerHTML = m.yellowRows.map(r => {
@@ -15621,10 +15634,12 @@ function sreconRenderPanel() {
             const key = r.acct + "|" + r.type;
             const open = sreconExpanded.has(key);
             const shown = open ? docs : docs.slice(0, 6);
-            const txt = shown.map(d => escapeHtml(d[0] || "(no number)") + " (" + fmtMoneyFull(d[1]) + ")").join(", ")
+            const txt = shown.map(d => escapeHtml(d[0] || "(no number)") + " (" + fmtMoneyFull(d[1]) + ")"
+                      + (d[0] ? pnlWiiseLink("Document No.", d[0], "Open document " + d[0] + " entries in Wiise") : "")).join(", ")
                       + (!open && docs.length > 6 ? " and " + (docs.length - 6) + " more" : "");
             return '<tr class="clickable" data-srgroup="' + escapeAttr(key) + '">'
-                 + '<td>' + escapeHtml(sreconAcctLabel(r.acct)) + '</td>'
+                 + '<td style="white-space:nowrap;">' + escapeHtml(sreconAcctLabel(r.acct))
+                 + pnlWiiseLink("G/L Account No.", r.acct, "Open account " + r.acct + " entries in Wiise") + '</td>'
                  + '<td>' + escapeHtml(r.type || "General journal") + '</td>'
                  + '<td>' + txt + (docs.length > 6 ? ' <span style="opacity:0.6;">' + (open ? "▴ show fewer" : "▾ show all " + docs.length) + '</span>' : '') + '</td>'
                  + '<td class="num ' + (r.amount >= 0 ? "pos" : "neg") + '">' + fmtMoneyFull(r.amount) + '</td>'
@@ -15636,9 +15651,11 @@ function sreconRenderPanel() {
         thead.innerHTML = '<tr><th>Document</th><th>Document type</th><th>G/L account the line posted to</th><th class="num">$ in the sales tool</th><th>What it is</th></tr>';
         if (notice) notice.style.display = "none";
         tbody.innerHTML = (m.redRows.length ? m.redRows.map(r =>
-            '<tr><td>' + escapeHtml(r.doc || "") + '</td>'
+            '<tr><td style="white-space:nowrap;">' + escapeHtml(r.doc || "")
+          + (r.doc ? pnlWiiseLink("Document No.", r.doc, "Open document " + r.doc + " entries in Wiise") : "") + '</td>'
           + '<td>' + escapeHtml(r.type) + '</td>'
-          + '<td>' + escapeHtml(sreconAcctLabel(r.acct)) + '</td>'
+          + '<td style="white-space:nowrap;">' + escapeHtml(sreconAcctLabel(r.acct))
+          + (r.acct ? pnlWiiseLink("G/L Account No.", r.acct, "Open account " + r.acct + " entries in Wiise") : "") + '</td>'
           + '<td class="num ' + (r.amount >= 0 ? "pos" : "neg") + '">' + fmtMoneyFull(r.amount) + '</td>'
           + '<td>' + escapeHtml(r.why) + '</td></tr>').join("")
           : '<tr><td colspan="5" class="empty">No sales-document lines post outside the revenue accounts in this range.</td></tr>')
@@ -15652,11 +15669,29 @@ function sreconToggle(which) {
     if (sreconOpen) {
         const p = document.getElementById("srPanel");
         if (p && p.scrollIntoView) p.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        if (which === "yellow") sreconAutoLoad();
     }
 }
+// Opening Yellow fetches the ledger for the toolbar range by itself, so
+// there is nothing to click first. loadPnl still asks before pulling more
+// than about two months. Once a range has been attempted we don't retry it
+// automatically — the button in the panel is the manual retry.
+async function sreconAutoLoad() {
+    const m = sreconLast;
+    if (!m || sreconLoading || m.entityFilter) return;
+    if (m.ledgerLoaded && m.covered) return;
+    if (sreconTriedRange === m.rangeLabel) return;
+    sreconTriedRange = m.rangeLabel;
+    await sreconLoadLedger();
+}
 async function sreconLoadLedger() {
-    await loadPnl();
-    if (state.tab === "overview") renderOverview();
+    if (sreconLoading) return;
+    sreconLoading = true;
+    sreconRenderPanel();
+    try { await loadPnl(); }
+    catch (e) { console.warn("[srecon] ledger load failed", e); }
+    finally { sreconLoading = false; }
+    if (state.tab === "overview") renderOverview(); else sreconRenderPanel();
 }
 (function wireSrecon() {
     const on = (id, ev, fn) => { const el = document.getElementById(id); if (el) el.addEventListener(ev, fn); };
