@@ -2038,7 +2038,7 @@
                     <div class="kpi-row" style="grid-template-columns: repeat(4, 1fr);" title="How the Adjusted Cost figure above becomes the P&amp;L's Cost of Goods Sold. Direct Labour is outside both definitions and is not included. Click either middle tile to see the accounts and documents behind it.">
                         <div class="kpi k-inv" title="The item cost of what was sold, from value entries with returns netted — exactly as the Adjusted Cost tile above."><div class="label">Adjusted Cost</div><div class="value" id="srcAdj">—</div><div class="sub" id="srcAdjSub">sales tool</div></div>
                         <div class="kpi k-avg" id="srcYellowTile" style="cursor:pointer;" title="Click to see the accounts and documents. General ledger entries on cost-of-goods-sold accounts 5010 to 5196 whose document is NOT a posted sales invoice or credit memo: purchase invoices, freight, item journals, cost adjustments."><div class="label">+ in the ledger, not in the cost figure</div><div class="value" id="srcYellow">—</div><div class="sub" id="srcYellowSub">click to drill down</div></div>
-                        <div class="kpi k-cust" id="srcRedTile" style="cursor:pointer;" title="Click to see the documents and accounts. Sales invoice and credit memo lines that the ledger puts into cost of goods sold but the sales tool's cost figure never sees."><div class="label">− a sales document the ledger costs differently</div><div class="value" id="srcRed">—</div><div class="sub" id="srcRedSub">click to drill down</div></div>
+                        <div class="kpi k-cust" id="srcRedTile" style="cursor:pointer;" title="Click to see what it is made of. Cost the sales tool counts that does not post to the cost-of-goods-sold accounts, chiefly the non-inventoriable part of the value entries such as item charges."><div class="label">− in the cost figure, not in the ledger's cost accounts</div><div class="value" id="srcRed">—</div><div class="sub" id="srcRedSub">click to drill down</div></div>
                         <div class="kpi k-rev" title="Adjusted Cost, plus the ledger-only postings, less the documents the ledger treats differently. This is what the P&amp;L reports as Cost of Goods Sold."><div class="label">= Result</div><div class="value" id="srcResult">—</div><div class="sub" id="srcResultSub">P&amp;L cost of goods sold</div></div>
                     </div>
                     <div class="panel" id="srPanel" style="display:none; margin-bottom:16px;">
@@ -15413,6 +15413,18 @@ function pnlExportCsv() {
 // Read-only and additive: no existing tile, chart, table or tab changes.
 const SRECON_REV_ACCTS  = new Set(PNL_MAP_BUCKETS["Total Revenue (net)"]);
 const SRECON_COGS_ACCTS = new Set(PNL_MAP_BUCKETS["Cost of Goods Sold"]);
+// The accounts the sales tool's own cost figure actually lands on. Every
+// other cost account in the mapping is a purchase, freight, clearing or
+// adjustment account whose postings that figure never sees.
+//
+// This is deliberately a whitelist. The first two attempts tried to name
+// the exceptions instead — first shipments, then expected-cost clearing
+// accounts — and each time a posting type nobody had thought of (a stock
+// revaluation reusing a sale's document number, through 5180) was quietly
+// treated as already counted and the row went short. A whitelist fails the
+// safe way round: anything new lands in the ledger column, where it is
+// visible, rather than silently disappearing from the bridge.
+const SRECON_ITEM_COST_ACCTS = new Set(["5010", "5020", "5030"]);
 // Ledger entries for just these accounts, fetched on demand and kept apart
 // from state.gl so the P&L tab's own statement is never built from a
 // partial pull.
@@ -15451,7 +15463,6 @@ let sreconLast = null;            // last computed result, for the panel
 let sreconLoading = false;        // a silent ledger fetch is in flight
 let sreconTried = "";             // range already attempted, so a failure doesn't loop
 let sreconError = "";             // last fetch error, surfaced with a retry button
-let sreconNameWarned = false;     // only warn once about missing account names
 state.srglAccounts = new Map();   // account number -> display name, travels with the ledger slice
 
 function sreconIsViewer() { return SRECON_VIEWERS.has(currentSignInName()); }
@@ -15467,9 +15478,6 @@ function sreconLineIsRevenue(ln) {
     if (t === "Comment") return false;
     if (t !== "Account") return true;
     return SRECON_REV_ACCTS.has(String(ln.lineObjectNumber || ""));
-}
-function sreconLineIsCogs(ln) {
-    return (ln.lineType || "") === "Account" && SRECON_COGS_ACCTS.has(String(ln.lineObjectNumber || ""));
 }
 function sreconAcctLabel(no) {
     const n = sreconAcctDisplayName(no);
@@ -15487,22 +15495,10 @@ function sreconAcctDisplayName(no) {
     const a = state.gl && state.gl.accountsByNo ? state.gl.accountsByNo.get(k) : null;
     return (a && a.displayName) || "";
 }
-function sreconIsInterimAccount(no) {
-    const name = sreconAcctDisplayName(no);
-    // No name at hand means some path supplied ledger rows without the
-    // chart of accounts. Fall back to the known list and say so, rather
-    // than quietly deciding this is not a clearing account and leaving the
-    // cost row short by the whole expected-cost balance.
-    if (!name) {
-        if (!sreconNameWarned) { sreconNameWarned = true; console.warn("[srecon] no account names loaded — falling back to " + GL_RECON_INTERIM_FALLBACK.join(", ") + " for expected-cost accounts"); }
-        return GL_RECON_INTERIM_FALLBACK.indexOf(String(no)) >= 0;
-    }
-    return /interim|expected/i.test(name);
-}
 function sreconYellowWhy(docType, row) {
     const where = row === "cogs" ? "a cost-of-goods-sold account" : "a revenue account";
-    if (row === "cogs" && docType === "__interim__")
-        return "Expected cost on goods shipped but not yet invoiced. The sales tool counts cost only once a sale is invoiced, so this sits on the ledger side until then.";
+    if (row === "cogs" && docType === "__salesdoc__")
+        return "Posted by a sales document, but to an account the sales tool's cost figure never reads: expected cost on goods shipped but not yet invoiced, a stock revaluation, or a cost adjustment.";
     switch ((docType || "").trim()) {
         case "Invoice":     return "Purchase invoice posted to " + where + ".";
         case "Credit Memo": return "Purchase credit memo posted to " + where + ".";
@@ -15628,12 +15624,24 @@ function sreconCompute(grossSales, grossGp) {
             // (+ on an invoice, − on a credit memo); the ledger puts
             // nothing into revenue unless it posts to a revenue account.
             if (!sreconLineIsRevenue(ln)) addRed("sales", docNo, isCredit, sreconLineAccount(ln), isCredit ? -a : a);
-            // Cost row: the tool puts nothing into its cost figure; the
-            // ledger debits cost on a credit memo and credits it on an
-            // invoice. Red is the tool's view minus the ledger's.
-            if (sreconLineIsCogs(ln)) addRed("cogs", docNo, isCredit, sreconLineAccount(ln), isCredit ? -a : a);
         }
     };
+    // Cost row: the only thing the sales tool's cost figure holds that the
+    // ledger's cost accounts do not is the non-inventoriable part of the
+    // value entries — item charges and the like, which post outside them.
+    // Document lines coded to a cost account are NOT here: the whitelist
+    // already leaves those on the ledger side, so counting them again would
+    // remove them twice.
+    if (state.valueEntries && state.valueEntries.length && veUsableForCurrentFilters()) {
+        const ve = getValueEntryTotals();
+        const nonInv = ve.cost - ve.costActual;
+        if (Math.abs(nonInv) >= 0.005) {
+            red.cogs += nonInv;
+            redRows.cogs.set("__noninv__", { doc: "Value entries", type: "Non-inventoriable cost",
+                acct: "", amount: nonInv,
+                why: "Item charges and other non-inventoriable cost on the goods sold. The sales tool's cost figure includes it; it posts outside the cost-of-goods-sold accounts, so the ledger's figure does not." });
+        }
+    }
     for (const inv of (state.filtered || [])) walk(inv.salesInvoiceLines, false, inv.number);
     for (const cm of (state.creditMemos || [])) {
         if (!inRange(cm.postingDate)) continue;
@@ -15682,11 +15690,14 @@ function sreconCompute(grossSales, grossGp) {
             const net = isRev ? e.creditAmount - e.debitAmount : e.debitAmount - e.creditAmount;
             pTotal[row] += net;
             // Entries the sales tool's own figure already carries are not
-            // part of the bridge. On the cost row an expected-cost clearing
-            // account is the exception: a sales shipment created it, but
-            // Adjusted Cost (actual cost only) does not include it.
-            const interim = row === "cogs" && sreconIsInterimAccount(e.accountNumber);
-            if (docNos[row].has(e.documentNumber) && !interim) {
+            // part of the bridge. On the cost row that means a sales
+            // document AND one of the accounts the cost figure reads;
+            // a sales document posting anywhere else on the cost accounts
+            // (expected cost, revaluation, adjustment) stays on the
+            // ledger side where it belongs.
+            const fromSalesDoc = docNos[row].has(e.documentNumber);
+            const itemCost = row !== "cogs" || SRECON_ITEM_COST_ACCTS.has(e.accountNumber);
+            if (fromSalesDoc && itemCost) {
                 counted[row] += net;
                 countedByAcct[row].set(e.accountNumber, (countedByAcct[row].get(e.accountNumber) || 0) + net);
                 continue;
@@ -15696,7 +15707,7 @@ function sreconCompute(grossSales, grossGp) {
             const m = yellowRows[row];
             const r = m.get(k) || { acct: e.accountNumber, type: e.documentType || "", entries: 0,
                                     amount: 0, docs: new Map(),
-                                    why: sreconYellowWhy(interim ? "__interim__" : e.documentType, row) };
+                                    why: sreconYellowWhy(fromSalesDoc && row === "cogs" ? "__salesdoc__" : e.documentType, row) };
             r.entries++; r.amount += net;
             r.docs.set(e.documentNumber, (r.docs.get(e.documentNumber) || 0) + net);
             m.set(k, r);
@@ -15766,7 +15777,7 @@ const SRECON_TITLES = {
     "sales|yellow": "In the ledger's revenue accounts, not a sales document",
     "sales|red":    "A sales document, not in the ledger's revenue accounts",
     "cogs|yellow":  "In the ledger's cost-of-goods-sold accounts, not in the sales tool's cost",
-    "cogs|red":     "A sales document the ledger counts as cost but the sales tool does not",
+    "cogs|red":     "In the sales tool's cost figure, but not in the ledger's cost accounts",
 };
 function sreconRenderPanel() {
     const panel  = document.getElementById("srPanel");
@@ -15856,7 +15867,7 @@ function sreconRenderPanel() {
             '<tr><td style="white-space:nowrap;">' + escapeHtml(r.doc || "")
           + (r.doc ? pnlWiiseLink("Document No.", r.doc, "Open document " + r.doc + " entries in Wiise") : "") + '</td>'
           + '<td>' + escapeHtml(r.type) + '</td>'
-          + '<td style="white-space:nowrap;">' + escapeHtml(sreconAcctLabel(r.acct))
+          + '<td style="white-space:nowrap;">' + (r.acct ? escapeHtml(sreconAcctLabel(r.acct)) : "—")
           + (r.acct ? pnlWiiseLink("G/L Account No.", r.acct, "Open account " + r.acct + " entries in Wiise") : "") + '</td>'
           + '<td class="num ' + (r.amount >= 0 ? "pos" : "neg") + '">' + fmtMoneyFull(r.amount) + '</td>'
           + '<td>' + escapeHtml(r.why) + '</td></tr>').join("")
