@@ -1041,6 +1041,44 @@ async function fetchSalesQuoteExtras(fromISO, toISO) {
 }
 
 
+// ============================================================
+// GENERAL LEDGER — reconciliation slice
+// ============================================================
+// The Overview's two reconciliation rows bridge the sales tool's figures
+// to the P&L. They only ever look at the revenue and cost-of-goods-sold
+// accounts, so this pulls those and nothing else: on this tenant that is
+// roughly half a month's ledger instead of all of it, which is what makes
+// it cheap enough to ride along with a sales load and a snapshot.
+// KEEP IN SYNC with PNL_MAP_BUCKETS in index.html ("Total Revenue (net)"
+// and "Cost of Goods Sold"); index.html logs a warning if they drift.
+const GL_RECON_REVENUE = ["4010", "4015", "4020", "4030", "4050", "4055", "4060", "4065"];
+const GL_RECON_COGS    = ["5010", "5020", "5030", "5125", "5126", "5130", "5131", "5135", "5140",
+                          "5145", "5150", "5155", "5160", "5165", "5170", "5175", "5180", "5195", "5196"];
+const GL_RECON_ACCOUNTS = GL_RECON_REVENUE.concat(GL_RECON_COGS);
+// Rows travel as compact arrays, not objects: a 12-month snapshot holds
+// several hundred thousand of them and the key names would dwarf the data.
+const GL_RECON_COLS = ["postingDate", "documentNumber", "documentType", "accountNumber", "debitAmount", "creditAmount"];
+function glReconDecode(s) { return (s == null ? "" : String(s)).replace(/_x([0-9a-fA-F]{4})_/g, (m, h) => String.fromCharCode(parseInt(h, 16))).trim(); }
+async function fetchGLReconEntries(fromISO, toISO) {
+    const compId = await bcGetCompanyId();
+    const dateFilter = "postingDate ge " + fromISO + " and postingDate le " + toISO;
+    const acctFilter = "(" + GL_RECON_ACCOUNTS.map(a => "accountNumber eq '" + a + "'").join(" or ") + ")";
+    const base = BC_API_URL + "/companies(" + compId + ")/generalLedgerEntries"
+               + "?$select=postingDate,documentNumber,documentType,accountNumber,debitAmount,creditAmount"
+               + "&$orderby=entryNumber&$filter=";
+    // No $top anywhere in this file — BC treats it as a total cap.
+    const rows = await bcFetchAll(base + encodeURIComponent(dateFilter + " and " + acctFilter), "Ledger (reconciliation accounts)");
+    return (rows || []).map(e => [
+        (e.postingDate || "").toString().slice(0, 10),
+        e.documentNumber || "",
+        glReconDecode(e.documentType),
+        String(e.accountNumber || ""),
+        num(e.debitAmount),
+        num(e.creditAmount),
+    ]);
+}
+
+
 // Node (snapshot Action) entry point. Classic-script browsers skip this.
 if (typeof module !== "undefined" && module.exports) {
     module.exports = {
@@ -1054,5 +1092,6 @@ if (typeof module !== "undefined" && module.exports) {
         fetchSalesOrderOutstandingLines, fetchSalesShipments, fetchSalesReturnReceipts,
         fetchSalesQuotes, fetchBlanketSalesOrders, fetchResidentialDocLookup,
         fetchSalesQuoteArchive, fetchSalesQuoteExtras,
+        fetchGLReconEntries, GL_RECON_REVENUE, GL_RECON_COGS, GL_RECON_ACCOUNTS, GL_RECON_COLS,
     };
 }

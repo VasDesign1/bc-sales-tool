@@ -1736,11 +1736,6 @@
                         <span id="includeRentalsState" style="font-size:11px; opacity:0.65;">off</span>
                     </div>
                 </div>
-                <!-- Owner-only (restrictedNav, see updateRestrictedNav): a PBI-reconciliation aid nobody else needs. -->
-                <div class="field restrictedNav" style="display:none;" title="Hide documents modified after this timestamp — useful for matching a stale Power BI refresh">
-                    <label for="snapshotAsOf">Compare as of</label>
-                    <input type="datetime-local" id="snapshotAsOf">
-                </div>
             </div>
 
             <div class="filter-chips" id="filterChips"></div>
@@ -2034,17 +2029,17 @@
 
                 <!-- Sales reconciliation to the P&L. Hidden for everyone except SRECON_VIEWERS (see updateRestrictedNav). -->
                 <div class="sreconWrap" style="display:none;">
-                    <div class="kpi-row" style="grid-template-columns: repeat(4, 1fr);" title="How the Adjusted Sales figure above becomes the P&amp;L's Total Revenue (net). Click Yellow or Red to see the accounts and documents behind them.">
+                    <div class="kpi-row" style="grid-template-columns: repeat(4, 1fr);" title="How the Adjusted Sales figure above becomes the P&amp;L's Total Revenue (net). Click either middle tile to see the accounts and documents behind it.">
                         <div class="kpi k-inv" title="Posted sales invoices less posted credit memos, exactly as the Adjusted Sales tile above."><div class="label">Adjusted Sales</div><div class="value" id="srAdj">—</div><div class="sub" id="srAdjSub">sales tool</div></div>
-                        <div class="kpi k-avg" id="srYellowTile" style="cursor:pointer;" title="Click to see the accounts and documents. General ledger entries on revenue accounts 4010 to 4065 whose document is NOT a posted sales invoice or credit memo: purchase invoices, vendor payments, customer receipts, journals."><div class="label">+ Yellow <span style="font-weight:400; opacity:0.6;">· in the ledger, not a sales document</span></div><div class="value" id="srYellow">—</div><div class="sub" id="srYellowSub">click to drill down</div></div>
-                        <div class="kpi k-cust" id="srRedTile" style="cursor:pointer;" title="Click to see the documents and accounts. Sales invoice and credit memo lines counted in Adjusted Sales that do NOT post to revenue accounts 4010 to 4065."><div class="label">− Red <span style="font-weight:400; opacity:0.6;">· a sales document, not in ledger revenue</span></div><div class="value" id="srRed">—</div><div class="sub" id="srRedSub">click to drill down</div></div>
-                        <div class="kpi k-rev" title="Adjusted Sales + Yellow − Red. This is what the P&amp;L reports as Total Revenue (net)."><div class="label">= Result</div><div class="value" id="srResult">—</div><div class="sub" id="srResultSub">P&amp;L total revenue (net)</div></div>
+                        <div class="kpi k-avg" id="srYellowTile" style="cursor:pointer;" title="Click to see the accounts and documents. General ledger entries on revenue accounts 4010 to 4065 whose document is NOT a posted sales invoice or credit memo: purchase invoices, vendor payments, customer receipts, journals."><div class="label">+ in the ledger, not a sales document</div><div class="value" id="srYellow">—</div><div class="sub" id="srYellowSub">click to drill down</div></div>
+                        <div class="kpi k-cust" id="srRedTile" style="cursor:pointer;" title="Click to see the documents and accounts. Sales invoice and credit memo lines counted in Adjusted Sales that do NOT post to revenue accounts 4010 to 4065."><div class="label">− a sales document, not in ledger revenue</div><div class="value" id="srRed">—</div><div class="sub" id="srRedSub">click to drill down</div></div>
+                        <div class="kpi k-rev" title="Adjusted Sales, plus the ledger-only postings, less the documents the ledger treats differently. This is what the P&amp;L reports as Total Revenue (net)."><div class="label">= Result</div><div class="value" id="srResult">—</div><div class="sub" id="srResultSub">P&amp;L total revenue (net)</div></div>
                     </div>
-                    <div class="kpi-row" style="grid-template-columns: repeat(4, 1fr);" title="How the Adjusted Cost figure above becomes the P&amp;L's Cost of Goods Sold. Direct Labour is outside both definitions and is not included. Click Yellow or Red to see the accounts and documents behind them.">
+                    <div class="kpi-row" style="grid-template-columns: repeat(4, 1fr);" title="How the Adjusted Cost figure above becomes the P&amp;L's Cost of Goods Sold. Direct Labour is outside both definitions and is not included. Click either middle tile to see the accounts and documents behind it.">
                         <div class="kpi k-inv" title="The item cost of what was sold, from value entries with returns netted — exactly as the Adjusted Cost tile above."><div class="label">Adjusted Cost</div><div class="value" id="srcAdj">—</div><div class="sub" id="srcAdjSub">sales tool</div></div>
-                        <div class="kpi k-avg" id="srcYellowTile" style="cursor:pointer;" title="Click to see the accounts and documents. General ledger entries on cost-of-goods-sold accounts 5010 to 5196 whose document is NOT a posted sales invoice or credit memo: purchase invoices, freight, item journals, cost adjustments."><div class="label">+ Yellow <span style="font-weight:400; opacity:0.6;">· in the ledger, not a sales document</span></div><div class="value" id="srcYellow">—</div><div class="sub" id="srcYellowSub">click to drill down</div></div>
-                        <div class="kpi k-cust" id="srcRedTile" style="cursor:pointer;" title="Click to see the documents and accounts. Sales invoice and credit memo lines that the ledger puts into cost of goods sold but the sales tool's cost figure never sees."><div class="label">− Red <span style="font-weight:400; opacity:0.6;">· a sales document the ledger costs differently</span></div><div class="value" id="srcRed">—</div><div class="sub" id="srcRedSub">click to drill down</div></div>
-                        <div class="kpi k-rev" title="Adjusted Cost + Yellow − Red. This is what the P&amp;L reports as Cost of Goods Sold."><div class="label">= Result</div><div class="value" id="srcResult">—</div><div class="sub" id="srcResultSub">P&amp;L cost of goods sold</div></div>
+                        <div class="kpi k-avg" id="srcYellowTile" style="cursor:pointer;" title="Click to see the accounts and documents. General ledger entries on cost-of-goods-sold accounts 5010 to 5196 whose document is NOT a posted sales invoice or credit memo: purchase invoices, freight, item journals, cost adjustments."><div class="label">+ in the ledger, not in the cost figure</div><div class="value" id="srcYellow">—</div><div class="sub" id="srcYellowSub">click to drill down</div></div>
+                        <div class="kpi k-cust" id="srcRedTile" style="cursor:pointer;" title="Click to see the documents and accounts. Sales invoice and credit memo lines that the ledger puts into cost of goods sold but the sales tool's cost figure never sees."><div class="label">− a sales document the ledger costs differently</div><div class="value" id="srcRed">—</div><div class="sub" id="srcRedSub">click to drill down</div></div>
+                        <div class="kpi k-rev" title="Adjusted Cost, plus the ledger-only postings, less the documents the ledger treats differently. This is what the P&amp;L reports as Cost of Goods Sold."><div class="label">= Result</div><div class="value" id="srcResult">—</div><div class="sub" id="srcResultSub">P&amp;L cost of goods sold</div></div>
                     </div>
                     <div class="panel" id="srPanel" style="display:none; margin-bottom:16px;">
                         <div class="panel-header">
@@ -4114,7 +4109,6 @@ const state = {
     treeSort: { key: "sales", dir: "desc" },
     custFilter: "", itemFilter: "", eomFilter: "", customerItemFilter: "",
     filters: { location: "", salesperson: "", customer: "", customerName: "", item: "", itemDesc: "", status: "" },
-    snapshotAsOf: null,
     // Rentals (G/L line 7005) are excluded from all figures by default;
     // the toolbar toggle flips this. Remembered per device.
     includeRentals: (function () {
@@ -4713,12 +4707,6 @@ function lineMatchesFilters(ln) {
     if (state.filters.item && (ln.lineObjectNumber || ln.itemId || "") !== state.filters.item) return false;
     return true;
 }
-function docInSnapshot(doc) {
-    if (!state.snapshotAsOf) return true;
-    const t = doc && doc.lastModifiedDateTime;
-    if (!t) return true; // no timestamp — include conservatively
-    return new Date(t) <= state.snapshotAsOf;
-}
 // Read the From / To inputs once and return a predicate that accepts
 // any ISO-style date string (YYYY-MM-DD…) inside the inclusive range.
 // Empty inputs ⇒ no constraint on that side.
@@ -4740,7 +4728,7 @@ function getDateRangePredicate() {
 function rebuildFiltered() {
     const inRange = getDateRangePredicate();
     state.filtered = state.invoices.filter(inv =>
-        inRange(inv.postingDate) && docInSnapshot(inv) && invoiceMatchesFilters(inv));
+        inRange(inv.postingDate) && invoiceMatchesFilters(inv));
     state.byCustomer = aggregateByCustomer(state.filtered);
     state.byItem     = aggregateByItem(state.filtered);
     state.byLocation = aggregateByLocation(state.filtered);
@@ -6010,11 +5998,6 @@ function renderFilterChips() {
         chips.push('<span class="chip">Item: ' + escapeHtml(label) + ' <span class="x" data-clear="item">×</span></span>');
     }
     if (state.filters.status) chips.push('<span class="chip">Status: ' + escapeHtml(state.filters.status) + ' <span class="x" data-clear="status">×</span></span>');
-    if (state.snapshotAsOf) {
-        const t = state.snapshotAsOf;
-        const label = t.toLocaleDateString("en-AU") + " " + t.toLocaleTimeString("en-AU", { hour: "2-digit", minute: "2-digit" });
-        chips.push('<span class="chip" style="background:#fff3e0; color:#e65100;">As of ' + escapeHtml(label) + ' <span class="x" data-clear="snapshot">×</span></span>');
-    }
     if (chips.length >= 2) {
         chips.push('<span class="chip" style="background:#ffebee; color:#c62828;">Clear all <span class="x" data-clear="all">×</span></span>');
     }
@@ -6028,11 +6011,6 @@ function renderFilterChips() {
                 document.getElementById("salespersonFilter").value = "";
                 document.getElementById("customerFilter").value = "";
                 document.getElementById("itemFilterBox").value = "";
-                state.snapshotAsOf = null;
-                document.getElementById("snapshotAsOf").value = "";
-            } else if (k === "snapshot") {
-                state.snapshotAsOf = null;
-                document.getElementById("snapshotAsOf").value = "";
             } else {
                 state.filters[k] = "";
                 if (k === "customer") { state.filters.customerName = ""; document.getElementById("customerFilter").value = ""; }
@@ -13809,7 +13787,6 @@ function renderMTD() {
     const rows = state.invoices.filter(inv => {
         const d = new Date(inv.postingDate);
         if (!(d >= mStart && d <= today)) return false;
-        if (!docInSnapshot(inv)) return false;
         return invoiceMatchesFilters(inv);
     });
     // VE totals scoped to the MTD window — NOT the toolbar From/To,
@@ -14245,7 +14222,6 @@ function _newNode(key, label) {
 function allPostedDocs() {
     const list = [];
     for (const inv of state.invoices) {
-        if (!docInSnapshot(inv)) continue;
         list.push({ type: "Posted Sales Invoice", ileType: "Sales Invoice", sign: 1, countsTotal: true,
                     id: inv.id, number: inv.number, status: inv.status || "",
                     customerNumber: inv.customerNumber, customerName: inv.customerName,
@@ -14253,7 +14229,6 @@ function allPostedDocs() {
                     lines: inv.salesInvoiceLines || [] });
     }
     for (const cm of state.creditMemos) {
-        if (!docInSnapshot(cm)) continue;
         list.push({ type: "Posted Sales CR/Adj Note", ileType: "Sales Credit Memo", sign: -1, countsTotal: true,
                     id: cm.id, number: cm.number, status: cm.status || "",
                     customerNumber: cm.customerNumber, customerName: cm.customerName,
@@ -14261,7 +14236,6 @@ function allPostedDocs() {
                     lines: cm.salesCreditMemoLines || [] });
     }
     for (const s of state.shipments) {
-        if (!docInSnapshot(s)) continue;
         list.push({ type: "Posted Sales Shipment", ileType: "Sales Shipment", sign: 1, countsTotal: false,
                     id: s.id, number: s.number, status: s.status || "",
                     customerNumber: s.customerNumber, customerName: s.customerName,
@@ -14269,7 +14243,6 @@ function allPostedDocs() {
                     lines: s.salesShipmentLines || [] });
     }
     for (const r of state.returnReceipts) {
-        if (!docInSnapshot(r)) continue;
         list.push({ type: "Posted Sales Return Receipt", ileType: "Sales Return Receipt", sign: -1, countsTotal: false,
                     id: r.id, number: r.number, status: r.status || "",
                     customerNumber: r.customerNumber, customerName: r.customerName,
@@ -15444,6 +15417,29 @@ const SRECON_COGS_ACCTS = new Set(PNL_MAP_BUCKETS["Cost of Goods Sold"]);
 // from state.gl so the P&L tab's own statement is never built from a
 // partial pull.
 state.srgl = { entries: [], windows: [], loadedAt: null };
+// The fetch layer carries its own copy of the account list because the
+// snapshot robot runs without index.html. Shout if the two ever drift.
+(function checkGlReconAccounts() {
+    try {
+        const mine = [...SRECON_REV_ACCTS, ...SRECON_COGS_ACCTS].sort().join(",");
+        const theirs = GL_RECON_ACCOUNTS.slice().sort().join(",");
+        if (mine !== theirs) console.warn("[srecon] account lists have drifted between index.html and bc-fetchers.js, so the reconciliation rows will not tie. mapping table: " + mine + " | fetch layer: " + theirs);
+    } catch (e) {}
+})();
+// Pour a fetched or snapshotted ledger slice into state.srgl. Rows arrive
+// as compact arrays (see GL_RECON_COLS); null means it was not fetched,
+// which leaves whatever is already held alone.
+function hydrateGlRecon(rows, from, to) {
+    if (!rows || !from || !to) return;
+    state.srgl.entries = rows.map(r => ({
+        postingDate: r[0], documentNumber: r[1], documentType: r[2],
+        accountNumber: r[3], debitAmount: num(r[4]), creditAmount: num(r[5]),
+    }));
+    state.srgl.windows = [{ from, to }];
+    state.srgl.loadedAt = new Date();
+    sreconTried = ""; sreconError = "";
+    console.log("[srecon] ledger slice ready: " + state.srgl.entries.length.toLocaleString("en-AU") + " entries " + from + " → " + to);
+}
 let sreconOpen = null;            // null | { row: "sales"|"cogs", side: "yellow"|"red" }
 let sreconExpanded = new Set();   // "row|side|account|docType" groups expanded in a Yellow panel
 let sreconLast = null;            // last computed result, for the panel
@@ -15541,51 +15537,31 @@ function sreconLedgerSource() {
     }
     return { entries: [], ok: false };
 }
-// Silent, on-demand fetch of just the 27 accounts these rows need. No
-// confirmation and no alert whatever the range: the panel shows that it is
-// loading and fills in when it lands.
+// On-demand fetch, used when a range outside the loaded window is picked.
+// Silent: no confirmation and no alert whatever the range, because it asks
+// only for the accounts these rows need. Shares one fetcher with the
+// snapshot robot, so there is a single definition of that slice.
 async function sreconFetchLedger() {
     const { from, to } = pnlToolbarRange();
     if (!from || !to || from > to) return;
-    const compId = await bcGetCompanyId();
-    if (!state.gl.accounts.length) {
-        const accts = await bcFetchAll(BC_API_URL + "/companies(" + compId + ")/accounts", "Chart of accounts");
-        state.gl.accounts = accts;
-        state.gl.accountsByNo = new Map(accts.map(a => [String(a.number), a]));
-    }
-    const wanted = [...SRECON_REV_ACCTS, ...SRECON_COGS_ACCTS];
-    const dateFilter = "postingDate ge " + from + " and postingDate le " + to;
-    const acctFilter = "(" + wanted.map(a => "accountNumber eq '" + a + "'").join(" or ") + ")";
-    const base = BC_API_URL + "/companies(" + compId + ")/generalLedgerEntries"
-               + "?$select=entryNumber,postingDate,documentNumber,documentType,accountNumber,description,debitAmount,creditAmount"
-               + "&$orderby=entryNumber&$filter=";
-    let rows;
     try {
-        rows = await bcFetchAll(base + encodeURIComponent(dateFilter + " and " + acctFilter), "Ledger (reconciliation accounts)");
-    } catch (e) {
-        console.warn("[srecon] account-filtered fetch failed, falling back to the full range", e);
-        rows = await bcFetchAll(base + encodeURIComponent(dateFilter), "Ledger (full range)");
+        if (!state.gl.accounts.length) {
+            const compId = await bcGetCompanyId();
+            const accts = await bcFetchAll(BC_API_URL + "/companies(" + compId + ")/accounts", "Chart of accounts");
+            state.gl.accounts = accts;
+            state.gl.accountsByNo = new Map(accts.map(a => [String(a.number), a]));
+        }
+        hydrateGlRecon(await fetchGLReconEntries(from, to), from, to);
+    } finally {
+        hideBCProgress();
     }
-    for (const e of rows) {
-        e.postingDate   = (e.postingDate || "").toString().slice(0, 10);
-        e.debitAmount   = num(e.debitAmount);
-        e.creditAmount  = num(e.creditAmount);
-        e.accountNumber = String(e.accountNumber || "");
-        e.documentType  = pnlDecode(e.documentType);
-    }
-    const kept = state.srgl.entries.filter(e => e.postingDate < from || e.postingDate > to);
-    state.srgl.entries = kept.concat(rows);
-    state.srgl.windows = (state.srgl.windows || []).filter(w => w.to < from || w.from > to)
-                            .concat([{ from, to }]).sort((a, b) => a.from.localeCompare(b.from));
-    state.srgl.loadedAt = new Date();
-    console.log("[srecon] loaded", rows.length, "ledger entries", from, "→", to, "| held:", state.srgl.entries.length);
 }
 async function sreconEnsureLedger(force) {
     if (sreconLoading) return;
     if (!state.invoices || !state.invoices.length) return;   // nothing to reconcile against yet
     const { from, to } = pnlToolbarRange();
     const key = from + "_" + to;
-    if (sreconLedgerSource().ok) return;
+    if (sreconLedgerSource().ok) { sreconError = ""; return; }
     if (!force && sreconTried === key) return;   // already tried and failed for this range
     sreconTried = key;
     sreconError = "";
@@ -15765,10 +15741,10 @@ function sreconPaint(grossSales, grossGp) {
 
 // ---- the drill-down panel ------------------------------------------
 const SRECON_TITLES = {
-    "sales|yellow": "Yellow · in the ledger's revenue accounts, not a sales document",
-    "sales|red":    "Red · a sales document, not in the ledger's revenue accounts",
-    "cogs|yellow":  "Yellow · in the ledger's cost-of-goods-sold accounts, not a sales document",
-    "cogs|red":     "Red · a sales document the ledger counts as cost but the sales tool does not",
+    "sales|yellow": "In the ledger's revenue accounts, not a sales document",
+    "sales|red":    "A sales document, not in the ledger's revenue accounts",
+    "cogs|yellow":  "In the ledger's cost-of-goods-sold accounts, not in the sales tool's cost",
+    "cogs|red":     "A sales document the ledger counts as cost but the sales tool does not",
 };
 function sreconRenderPanel() {
     const panel  = document.getElementById("srPanel");
@@ -15816,7 +15792,10 @@ function sreconRenderPanel() {
             showNotice("The ledger could not be loaded: " + sreconError, true);
             tbody.innerHTML = ""; return;
         }
-        if (!m.ledgerOk) { showNotice("Fetching the general ledger for " + m.rangeLabel + "…", false); tbody.innerHTML = ""; return; }
+        if (!m.ledgerOk) {
+            showNotice("The general ledger is not held for " + m.rangeLabel + ". It loads with Load sales and with Fast lookup; use the button for a range outside that.", true);
+            tbody.innerHTML = ""; return;
+        }
         if (m.entityFilter) {
             showNotice("A branch, salesperson, customer, item or status filter is active. These entries carry none of those, so they cannot be shown for a filtered slice. Clear the filters to see them.", false);
             tbody.innerHTML = ""; return;
@@ -15846,7 +15825,7 @@ function sreconRenderPanel() {
                  + '<td class="num ' + (r.amount >= 0 ? "pos" : "neg") + '">' + fmtMoneyFull(r.amount) + '</td>'
                  + '<td>' + escapeHtml(r.why) + '</td></tr>';
         }).join("") : '<tr><td colspan="5" class="empty">No non-sales entries on these accounts in this range.</td></tr>')
-        + total("Total yellow, " + (row === "cogs" ? "cost of goods sold" : "sales"), d.yellow);
+        + total("Total in the ledger, not in the " + (row === "cogs" ? "cost figure" : "sales figure"), d.yellow);
     } else {
         if (meta) meta.textContent = d.redRows.length + " document lines · " + fmtMoneyFull(d.red);
         showNotice("", false);
@@ -15860,7 +15839,7 @@ function sreconRenderPanel() {
           + '<td class="num ' + (r.amount >= 0 ? "pos" : "neg") + '">' + fmtMoneyFull(r.amount) + '</td>'
           + '<td>' + escapeHtml(r.why) + '</td></tr>').join("")
           : '<tr><td colspan="5" class="empty">No sales-document lines are classified differently by the ledger in this range.</td></tr>')
-        + total("Total red, " + (row === "cogs" ? "cost of goods sold" : "sales"), d.red);
+        + total("Total sales documents the ledger treats differently", d.red);
     }
 }
 function sreconToggle(row, side) {
@@ -15964,12 +15943,6 @@ function updateRestrictedNav() {
     if (!showPnl && state.tab === "pnl") setActiveTab("overview");
     const showSrecon = SRECON_VIEWERS.has(user);
     document.querySelectorAll(".sreconWrap").forEach(el => { el.style.display = showSrecon ? "" : "none"; });
-    // "Compare as of" is owner-only too: make sure a hidden filter can't stay active.
-    if (!show && state.snapshotAsOf) {
-        state.snapshotAsOf = null;
-        const asOf = document.getElementById("snapshotAsOf"); if (asOf) asOf.value = "";
-        if (state.invoices && state.invoices.length) { rebuildFiltered(); renderCurrentTab(); }
-    }
 }
 
 async function handleSignIn() {
@@ -16155,7 +16128,8 @@ function hydrateSnapshot(payload) {
 function applyLoadedData(d) {
     const { locs, items, customers, invoices, iles, creditMemos, shipments, returnReceipts,
             quotes, quoteExtras, blanketOrders, valueEntries, salesOrders, salesOrderOutstanding,
-            from, to } = d;
+            glRecon, from, to } = d;
+        hydrateGlRecon(glRecon, from, to);
         state.deferredDocsPending = false;
         state.salesOrders = salesOrders || [];
         state.salesOrderOutstandingLines = salesOrderOutstanding || [];
@@ -16384,7 +16358,7 @@ async function handleLoad() {
     btn.disabled = true;
     btn.textContent = "Loading…";
     try {
-        const [locs, items, customers, invoices, iles, creditMemos, shipments, returnReceipts, quotes, quoteExtras, blanketOrders, valueEntries, salesOrders, salesOrderOutstanding, _residentialLookup, _quoteArchive] = await Promise.all([
+        const [locs, items, customers, invoices, iles, creditMemos, shipments, returnReceipts, quotes, quoteExtras, blanketOrders, valueEntries, salesOrders, salesOrderOutstanding, _residentialLookup, _quoteArchive, glRecon] = await Promise.all([
             fetchLocations(),
             fetchItems(),
             fetchCustomers(),
@@ -16401,10 +16375,17 @@ async function handleLoad() {
             fetchSalesOrderOutstandingLines(),
             fetchResidentialDocLookup(),
             fetchSalesQuoteArchive(from, to),
+            // The reconciliation rows' ledger slice, pulled alongside the
+            // sales data so the figures are there without a second wait.
+            // Only for the accounts that need it, and a failure (no ledger
+            // permission, a throttle) must never take the sales load down.
+            sreconIsViewer()
+                ? fetchGLReconEntries(from, to).catch(e => { console.warn("[Ledger] slice failed:", e.message); return null; })
+                : Promise.resolve(null),
         ]);
         applyLoadedData({ locs, items, customers, invoices, iles, creditMemos, shipments, returnReceipts,
                          quotes, quoteExtras, blanketOrders, valueEntries, salesOrders, salesOrderOutstanding,
-                         from, to });
+                         glRecon, from, to });
     } catch (err) {
         alert("Load failed: " + (err.message || err));
     } finally {
@@ -16604,11 +16585,6 @@ function wireEvents() {
         state.filters.customer = e.target.value;
         const opt = e.target.selectedOptions[0];
         state.filters.customerName = opt ? (opt.dataset.name || "") : "";
-        rebuildFiltered(); renderCurrentTab();
-    });
-    document.getElementById("snapshotAsOf").addEventListener("change", e => {
-        const v = e.target.value;
-        state.snapshotAsOf = v ? new Date(v) : null;
         rebuildFiltered(); renderCurrentTab();
     });
     document.getElementById("itemFilterBox").addEventListener("change", e => {
