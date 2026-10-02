@@ -287,6 +287,10 @@
         }
 
         .table-scroll { overflow-x: auto; max-height: 70vh; overflow-y: auto; }
+        .srecon-frame { border: 1.5px solid rgba(127,127,127,0.5); border-radius: 14px; background: rgba(127,127,127,0.06);
+                        padding: 8px 14px 0; margin: 0 0 18px 0; min-width: 0; }
+        .srecon-frame > legend { padding: 0 10px; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+        .srecon-frame > legend span { margin-left: 10px; font-weight: 400; letter-spacing: 0; text-transform: none; opacity: 0.65; }
         table { width: 100%; border-collapse: collapse; font-size: 13px; }
         th {
             position: sticky; top: 0; z-index: 2;
@@ -1689,19 +1693,18 @@
                 <div class="field">
                     <label for="quickRange">Quick range</label>
                     <select id="quickRange">
-                        <option value="">Custom</option>
+                        <option value="" hidden>—</option>
                         <option value="30">Last 30 days</option>
                         <option value="90">Last 90 days</option>
                         <option value="180">Last 6 months</option>
                         <option value="365" selected>Last 12 months</option>
                         <option value="ytd">Year to date</option>
                         <option value="fy">Current Fiscal Year (Jul–Jun)</option>
-                        <option value="month">Specific month…</option>
                     </select>
                 </div>
-                <div class="field" id="monthPickerField" style="display:none;">
+                <div class="field" id="monthPickerField" title="Months from Wiise's first month onwards. Picking one clears Quick range, and the other way round; typed dates clear both.">
                     <label for="monthPicker">Month</label>
-                    <select id="monthPicker"><option value="">— pick a month —</option></select>
+                    <select id="monthPicker"><option value="" hidden>—</option></select>
                 </div>
                 <div class="field">
                     <label for="locationFilter">Branch</label>
@@ -2029,6 +2032,8 @@
 
                 <!-- Sales reconciliation to the P&L. Hidden for everyone except SRECON_VIEWERS (see updateRestrictedNav). -->
                 <div class="sreconWrap" style="display:none;">
+                    <fieldset class="srecon-frame">
+                    <legend>Reconciliation to the P&amp;L<span>sales tool figures bridged to the general ledger · restricted view</span></legend>
                     <div class="kpi-row" style="grid-template-columns: repeat(4, 1fr);" title="How the Adjusted Sales figure above becomes the P&amp;L's Total Revenue (net). Click either middle tile to see the accounts and documents behind it.">
                         <div class="kpi k-inv" title="Posted sales invoices less posted credit memos, exactly as the Adjusted Sales tile above."><div class="label">Adjusted Sales</div><div class="value" id="srAdj">—</div><div class="sub" id="srAdjSub">sales tool</div></div>
                         <div class="kpi k-avg" id="srYellowTile" style="cursor:pointer;" title="Click to see the accounts and documents. General ledger entries on revenue accounts 4010 to 4065 whose document is NOT a posted sales invoice or credit memo: purchase invoices, vendor payments, customer receipts, journals."><div class="label">+ in the ledger, not a sales document</div><div class="value" id="srYellow">—</div><div class="sub" id="srYellowSub">click to drill down</div></div>
@@ -2062,6 +2067,7 @@
                             </table>
                         </div>
                     </div>
+                    </fieldset>
                 </div>
 
                 <div class="chart-grid">
@@ -6347,6 +6353,7 @@ function renderDiCalendarHeatmap() {
             document.getElementById("fromDate").value = pr.from;
             document.getElementById("toDate").value = pr.to;
             document.getElementById("quickRange").value = "";
+            document.getElementById("monthPicker").value = "";
             setPeriodBadge();
             rebuildFiltered();
             renderCurrentTab();
@@ -6361,6 +6368,7 @@ function renderDiCalendarHeatmap() {
             document.getElementById("fromDate").value = d;
             document.getElementById("toDate").value = d;
             document.getElementById("quickRange").value = "";
+            document.getElementById("monthPicker").value = "";
             setPeriodBadge();
             rebuildFiltered();
             renderCurrentTab();
@@ -14621,17 +14629,7 @@ function populateFilterDropdowns() {
 function applyQuickRange(value) {
     const today = new Date();
     const toEl = document.getElementById("toDate"), fromEl = document.getElementById("fromDate");
-    const mpField = document.getElementById("monthPickerField");
-    if (value === "month") {
-        // Reveal the month sub-picker; don't change the date inputs
-        // until the user picks a specific month. Populate the dropdown
-        // on first reveal (last 24 months).
-        if (mpField) mpField.style.display = "";
-        populateMonthPicker();
-        setPeriodBadge();
-        return;
-    }
-    if (mpField) mpField.style.display = "none";
+    const mp = document.getElementById("monthPicker"); if (mp) mp.value = "";
     if (value === "ytd") {
         fromEl.value = today.getFullYear() + "-01-01";
         toEl.value   = today.toISOString().slice(0, 10);
@@ -14649,15 +14647,18 @@ function applyQuickRange(value) {
     setPeriodBadge();
 }
 
-// Populate the Month sub-picker with the last 24 months (most recent first).
-// Idempotent — only fills options once.
+// The Month filter lists every month from Wiise's first month to this one,
+// newest first, so no month without data is offered. Idempotent.
+const WIISE_FIRST_MONTH = "2026-04";   // go-live: opening balances and first invoices, April 2026
 function populateMonthPicker() {
     const sel = document.getElementById("monthPicker");
     if (!sel || sel.options.length > 1) return;
     const monthNames = ["January", "February", "March", "April", "May", "June",
                         "July", "August", "September", "October", "November", "December"];
     const today = new Date();
-    for (let i = 0; i < 24; i++) {
+    const [fy, fm] = WIISE_FIRST_MONTH.split("-").map(Number);
+    const count = (today.getFullYear() - fy) * 12 + (today.getMonth() + 1 - fm) + 1;
+    for (let i = 0; i < count; i++) {
         const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
         const yyyy = d.getFullYear();
         const mm   = String(d.getMonth() + 1).padStart(2, "0");
@@ -14894,7 +14895,7 @@ async function loadPnl() {
     const days = Math.round((new Date(to + "T00:00:00") - new Date(from + "T00:00:00")) / 86400000) + 1;
     if (days > 62) {
         const months = Math.ceil(days / 30);
-        if (!confirm("The toolbar range spans about " + months + " months — roughly " + (months * 100).toLocaleString("en-AU") + "k ledger entries and " + Math.round(months * 0.5) + " minutes to load.\n\nTip: pick one month in Quick range → Specific month and load month by month (loads merge).\n\nLoad the whole range anyway?")) return;
+        if (!confirm("The toolbar range spans about " + months + " months — roughly " + (months * 100).toLocaleString("en-AU") + "k ledger entries and " + Math.round(months * 0.5) + " minutes to load.\n\nTip: pick one month in the Month filter and load month by month (loads merge).\n\nLoad the whole range anyway?")) return;
     }
     const btn = document.getElementById("pnlLoadBtn");
     btn.disabled = true; pnlSetStatus("Loading " + fmtDate(from) + " → " + fmtDate(to) + "…");
@@ -15025,7 +15026,7 @@ function renderPnl() {
     const warn = document.getElementById("pnlWarn");
     if (!loaded) {
         ["Income", "Cogs", "Gp", "Gpp", "Exp", "Net"].forEach(k => { document.getElementById("pnlKpi" + k).textContent = "—"; document.getElementById("pnlKpi" + k + "Sub").textContent = ""; });
-        stmtBody.innerHTML = '<tr><td colspan="7" style="color:#888; font-style:italic;">Set the toolbar range (Quick range → Specific month is the quickest) and click Load ledger.</td></tr>';
+        stmtBody.innerHTML = '<tr><td colspan="7" style="color:#888; font-style:italic;">Set the toolbar range (the Month filter is the quickest) and click Load ledger.</td></tr>';
         monBody.innerHTML = ""; mapBody.innerHTML = ""; warn.style.display = "none";
         document.getElementById("pnlStmtTitle").textContent = "";
         destroyChart("pnlMonthly"); destroyChart("pnlBreak");
@@ -16206,7 +16207,7 @@ function hydrateSnapshot(payload) {
     document.getElementById("fromDate").value = payload.meta.from;
     document.getElementById("toDate").value = payload.meta.to;
     const qr = document.getElementById("quickRange"); if (qr) qr.value = "";
-    const mp = document.getElementById("monthPickerField"); if (mp) mp.style.display = "none";
+    const mp = document.getElementById("monthPicker"); if (mp) mp.value = "";
     applyLoadedData({ ...d, from: payload.meta.from, to: payload.meta.to });
     const sb = document.getElementById("snapshotBadge");
     if (sb) sb.innerHTML = '<span style="color:#ffca28;">figures as of ' + escapeHtml(payload.meta.fetchedAtMelbourne || "") + " (snapshot)</span>";
@@ -16595,6 +16596,7 @@ function wireEvents() {
     document.getElementById("monthPicker").addEventListener("change", e => {
         const v = e.target.value;
         if (!v) return;
+        document.getElementById("quickRange").value = "";
         applyMonth(v);
         rebuildFiltered(); renderCurrentTab();
     });
@@ -16606,6 +16608,7 @@ function wireEvents() {
     ["fromDate", "toDate"].forEach(id => {
         document.getElementById(id).addEventListener("change", () => {
             document.getElementById("quickRange").value = "";
+            document.getElementById("monthPicker").value = "";
             setPeriodBadge();
             // Already-loaded data: re-filter in place so the user gets
             // instant feedback. Out-of-range warning is shown by
@@ -17269,6 +17272,7 @@ function wireEvents() {
 // ============================================================
 // BOOT
 // ============================================================
+populateMonthPicker();
 applyQuickRange("365");
 wireEvents();
 state.itemFilterOptions = state.itemFilterOptions || [];
