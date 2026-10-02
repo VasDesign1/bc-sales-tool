@@ -235,6 +235,31 @@ async function bcDiscoverValueEntryEntity() {
     return null;
 }
 
+// Does $select keep the date filter on this value-entry service? Asks for at
+// most 200 rows of the last month of the range twice, with and without a
+// column list ($top is used deliberately here: a cap is exactly what a probe
+// wants). Safe only if both agree and every row is inside the range.
+const veSelectOk = {};
+async function veProbeSelect(base, info, sel, fromISO, toISO) {
+    if (veSelectOk[info.entity] !== undefined) return veSelectOk[info.entity];
+    let ok = false;
+    try {
+        const end = toISO;
+        const d = new Date(toISO + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() - 30);
+        const start = d.toISOString().slice(0, 10) > fromISO ? d.toISOString().slice(0, 10) : fromISO;
+        const filt = "$filter=" + encodeURIComponent(info.fDate + " ge " + start + " and " + info.fDate + " le " + end);
+        const a = await bcFetch(base + "?" + filt + "&$select=" + sel.join(",") + "&$top=200");
+        const b = await bcFetch(base + "?" + filt + "&$top=200");
+        const ra = (a && a.value) || [], rb = (b && b.value) || [];
+        const inRange = r => { const k = String(r[info.fDate] || "").slice(0, 10); return k >= start && k <= end; };
+        ok = ra.length > 0 && ra.length === rb.length && ra.every(inRange)
+          && ra.every(r => Object.keys(r).filter(k => k[0] !== "@").length <= sel.length);
+    } catch (e) { ok = false; }
+    veSelectOk[info.entity] = ok;
+    console.log("[Value Entry] column list on " + info.entity + ": " + (ok ? "honoured — fetching " + sel.length + " columns" : "not safe — fetching all columns"));
+    return ok;
+}
+
 // Fetch Value Entries for the period, with discovered field names.
 // Returns an array of normalised rows {postingDate, itemNumber,
 // documentNumber, documentType, sourceNumber, sourceType, salesAmount,
@@ -261,13 +286,22 @@ async function fetchValueEntries(fromISO, toISO) {
     // (2026-10-01: snapshot held entries only up to 25 Sep → September
     // cost $360k short vs PBI). The server pages at 20k via nextLink.
     const params = ["$filter=" + encodeURIComponent(filter)];
-    // Deliberately NO $select here — verified on this tenant that adding
-    // $select to the ValueEntries query object silently DROPS the date
-    // $filter and returns the whole table (102k rows for a 3-month ask).
-    const url = BC_ODATA_URL + "/Company('" + coName + "')/" + info.entity + (params.length ? "?" + params.join("&") : "");
+    // Ask only for the columns the tool reads (15 of ~66 on ValueEntriesFull)
+    // — but only if this service still honours the date filter with a
+    // column list. The older ValueEntries query object was seen to DROP the
+    // $filter when $select was added and return the whole table, so a small
+    // probe decides first; if it fails, nothing changes from before.
+    const base = BC_ODATA_URL + "/Company('" + coName + "')/" + info.entity;
+    const sel = [info.fDate, info.fDocDate, info.fItem, info.fDocNo, info.fDocType, info.fSourceNo, info.fSourceTyp,
+                 info.fSales, info.fCost, info.fCostNI, info.fQtyInvd, info.fEntryType, info.fEntryNo, info.fCostExp, info.fValueType]
+                .filter(Boolean);
+    if (await veProbeSelect(base, info, sel, fromISO, toISO)) params.push("$select=" + sel.join(","));
+    const url = base + "?" + params.join("&");
     try {
+        const t0 = Date.now();
         const rows = await bcFetchAll(url, "Value Entries (" + info.entity + ")");
-        console.log("[Value Entry] " + info.entity + " → " + rows.length + " rows");
+        console.log("[Value Entry] " + info.entity + " → " + rows.length + " rows in " + ((Date.now() - t0) / 1000).toFixed(1) + "s"
+                    + (params.length > 1 ? " (" + sel.length + " columns)" : " (all columns)"));
         if (rows.length) console.log("[Value Entry] sample row keys:", Object.keys(rows[0]).join(", "));
         const normalised = rows.map(r => ({
             postingDate:      info.fDate      ? r[info.fDate]      : "",
@@ -1203,6 +1237,23 @@ async function attachGLReconLinks(rows) {
 async function fetchGLReconSlice(fromISO, toISO) {
     return attachGLReconLinks(await fetchGLReconEntries(fromISO, toISO));
 }
+// Top-up for a slice taken from a snapshot: every reconciliation-account
+// entry posted after the snapshot's last entry number, with its links.
+// Ledger entries are never changed once posted, so the snapshot's rows stay
+// right; going by entry number (not date) also catches back-dated postings.
+async function fetchGLReconSince(afterEntryNo, fromISO, toISO) {
+    const compId = await bcGetCompanyId();
+    const filter = "entryNumber gt " + afterEntryNo + " and postingDate ge " + fromISO + " and postingDate le " + toISO
+                 + " and (" + GL_RECON_ACCOUNTS.map(a => "accountNumber eq '" + a + "'").join(" or ") + ")";
+    const rows = await bcFetchAll(BC_API_URL + "/companies(" + compId + ")/generalLedgerEntries"
+        + "?$select=entryNumber,postingDate,documentNumber,documentType,accountNumber,debitAmount,creditAmount"
+        + "&$orderby=entryNumber&$filter=" + encodeURIComponent(filter), "Ledger (since the snapshot)");
+    const packed = (rows || []).map(e => [
+        (e.postingDate || "").toString().slice(0, 10), e.documentNumber || "", glReconDecode(e.documentType),
+        String(e.accountNumber || ""), num(e.debitAmount), num(e.creditAmount), Number(e.entryNumber) || 0, 0,
+    ]);
+    return attachGLReconLinks(packed);
+}
 
 // Node (snapshot Action) entry point. Classic-script browsers skip this.
 if (typeof module !== "undefined" && module.exports) {
@@ -1218,6 +1269,7 @@ if (typeof module !== "undefined" && module.exports) {
         fetchSalesQuotes, fetchBlanketSalesOrders, fetchResidentialDocLookup,
         fetchSalesQuoteArchive, fetchSalesQuoteExtras,
         fetchGLReconEntries, fetchGLReconAccountNames, fetchGLReconSlice, attachGLReconLinks, bcDiscoverGLItemRelation,
+        fetchGLReconSince,
         PNL_MAP_BUCKETS, PNL_MAP_BS,
         GL_RECON_REVENUE, GL_RECON_COGS, GL_RECON_ACCOUNTS, GL_RECON_COLS,
     };

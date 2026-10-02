@@ -249,8 +249,21 @@ function isoAddDays(iso, days) {
     console.log("Wrote " + slot + ".bin (" + (bin.length / 1048576).toFixed(2) + " MB, "
         + (json.length / 1048576).toFixed(1) + " MB raw JSON)");
 
+    // The reconciliation slice on its own, encrypted the same way, so Load
+    // sales can take it without downloading the whole snapshot.
+    const glPayload = { meta: { slot, fetchedAtUtc: payload.meta.fetchedAtUtc, fetchedAtMelbourne: payload.meta.fetchedAtMelbourne, from, to },
+                        glRecon, glAccounts, glReconCols: F.GL_RECON_COLS };
+    const glJson = Buffer.from(JSON.stringify(glPayload), "utf8");
+    const glGz = zlib.gzipSync(glJson, { level: 9 });
+    const glSalt = crypto.randomBytes(16), glIv = crypto.randomBytes(12);
+    const glKey = crypto.pbkdf2Sync(PASSPHRASE, glSalt, PBKDF2_ITERATIONS, 32, "sha256");
+    const glCipher = crypto.createCipheriv("aes-256-gcm", glKey, glIv);
+    const glBin = Buffer.concat([glSalt, glIv, glCipher.update(glGz), glCipher.final(), glCipher.getAuthTag()]);
+    fs.writeFileSync(path.join(outDir, slot + ".gl.bin"), glBin);
+    console.log("Wrote " + slot + ".gl.bin (" + (glBin.length / 1048576).toFixed(2) + " MB, " + (glJson.length / 1048576).toFixed(1) + " MB raw JSON)");
+
     console.log("Publishing to SharePoint…");
-    await SP.publishSnapshot(slot, bin, metaJson);
+    await SP.publishSnapshot(slot, bin, metaJson, glBin);
     console.log("Published " + slot + " to SharePoint");
 })().catch(e => {
     console.error("SNAPSHOT FAILED:", e.message);

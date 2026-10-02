@@ -156,9 +156,10 @@ async function deleteFile(driveId, itemPath) {
 
 // Publish a finished snapshot: .bin first, .meta.json last so the menu
 // never advertises a slot whose bytes are still uploading.
-async function publishSnapshot(slot, bin, metaJson) {
+async function publishSnapshot(slot, bin, metaJson, glBin) {
     const driveId = await resolveDrive(SP_CONFIG.host);
     await uploadFile(driveId, SP_CONFIG.folder + "/snapshots/" + slot + ".bin", bin);
+    if (glBin) await uploadFile(driveId, SP_CONFIG.folder + "/snapshots/" + slot + ".gl.bin", glBin);
     await uploadFile(driveId, SP_CONFIG.folder + "/snapshots/" + slot + ".meta.json", Buffer.from(metaJson, "utf8"));
 }
 

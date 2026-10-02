@@ -15573,13 +15573,52 @@ async function sreconFetchLedger() {
         hideBCProgress();
     }
 }
-// Load sales paints first, then this fetches the slice and its links in
-// the background (about a minute per month on this tenant) and repaints.
+// The reconciliation slice from the newest snapshot that covers the range,
+// plus whatever has been posted since. Returns null when that is not
+// possible (no saved passphrase, no access, no slice file yet, range older
+// than the snapshot) and the caller falls back to a full fetch. Never
+// prompts: Load sales should not ask for the passphrase.
+async function sreconSliceFromSnapshot(from, to) {
+    let pass = "";
+    try { pass = localStorage.getItem("snapshotPassphrase") || ""; } catch (e) {}
+    if (!pass) return null;
+    const t0 = Date.now();
+    const metas = (await Promise.all(SNAPSHOT_SLOTS.map(async s => {
+        try { const r = await spFetch("snapshots/" + s.slot + ".meta.json"); return r.ok ? { slot: s.slot, meta: await r.json() } : null; }
+        catch (e) { return null; }
+    }))).filter(x => x && x.meta && x.meta.from && x.meta.from <= from)
+        .sort((a, b) => String(b.meta.fetchedAtUtc).localeCompare(String(a.meta.fetchedAtUtc)));
+    for (const m of metas) {
+        try {
+            updateBCProgress("Reconciliation data", "from the " + m.meta.fetchedAtMelbourne + " snapshot…");
+            const resp = await spFetch("snapshots/" + m.slot + ".gl.bin");
+            if (!resp.ok) continue;
+            const payload = await decryptSnapshot(await resp.arrayBuffer(), pass);
+            const rows = (payload.glRecon || []).filter(r => r[0] >= from && r[0] <= to);
+            let maxNo = 0; for (const r of (payload.glRecon || [])) if (r[6] > maxNo) maxNo = r[6];
+            if (!maxNo) continue;
+            updateBCProgress("Reconciliation data", "adding entries posted since the snapshot…");
+            const extra = await fetchGLReconSince(maxNo, from, to);
+            console.log("[srecon] slice from the " + m.meta.fetchedAtMelbourne + " snapshot: " + rows.length.toLocaleString("en-AU")
+                + " entries + " + extra.length + " posted since, in " + ((Date.now() - t0) / 1000).toFixed(1) + "s");
+            return { rows: rows.concat(extra), names: payload.glAccounts || null };
+        } catch (e) { console.warn("[srecon] snapshot slice " + m.slot + " not usable:", e.message || e); }
+    }
+    return null;
+}
+// Load sales paints first, then this fills the reconciliation rows in the
+// background: from the newest snapshot plus a top-up when it can (seconds),
+// otherwise a full fetch with links (about a minute per month).
 function sreconBackgroundLoad(from, to) {
     if (sreconLoading || !from || !to) return;
     sreconLoading = true; sreconError = "";
     if (state.tab === "overview") renderOverview();
-    Promise.all([fetchGLReconSlice(from, to), fetchGLReconAccountNames().catch(() => null)])
+    const t0 = Date.now();
+    sreconSliceFromSnapshot(from, to).catch(e => { console.warn("[srecon] snapshot route failed:", e.message || e); return null; })
+        .then(fromSnap => fromSnap
+            ? [fromSnap.rows, fromSnap.names]
+            : Promise.all([fetchGLReconSlice(from, to), fetchGLReconAccountNames().catch(() => null)])
+                .then(r => { console.log("[srecon] full slice fetched in " + ((Date.now() - t0) / 1000).toFixed(1) + "s"); return r; }))
         .then(([slice, names]) => hydrateGlRecon(slice, from, to, names))
         .catch(e => { sreconError = e && e.message ? e.message : String(e); console.warn("[srecon] background ledger load failed", e); })
         .finally(() => {
