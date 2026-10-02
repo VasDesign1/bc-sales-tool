@@ -41,13 +41,26 @@ const GRAPH_SCOPES = ["https://graph.microsoft.com/Files.Read.All"];
 
 let bcCompanyId = null, bcCompanyInternalName = null, bcODataMetadata = null;
 
+// A dropped connection makes fetch throw rather than return a status; retry
+// those a few times before giving up, so one network blip doesn't sink a
+// whole load or snapshot.
+async function bcFetchRetrying(url, opts) {
+    for (let attempt = 0; ; attempt++) {
+        try { return await fetch(url, opts); }
+        catch (e) {
+            if (attempt >= 3) throw e;
+            console.warn("[BC] connection dropped (" + e.message + ") — retrying in " + (2 * (attempt + 1)) + " s");
+            await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
+        }
+    }
+}
 async function bcFetch(url) {
     const token = await bcGetToken();
-    let resp = await fetch(url, { headers: { "Authorization": "Bearer " + token, "Accept": "application/json" } });
+    let resp = await bcFetchRetrying(url, { headers: { "Authorization": "Bearer " + token, "Accept": "application/json" } });
     if (resp.status === 401) {
         bcAccessToken = null;
         const newToken = await bcGetToken();
-        resp = await fetch(url, { headers: { "Authorization": "Bearer " + newToken, "Accept": "application/json" } });
+        resp = await bcFetchRetrying(url, { headers: { "Authorization": "Bearer " + newToken, "Accept": "application/json" } });
     }
     if (!resp.ok) {
         const errBody = await resp.text().catch(() => "");
@@ -95,7 +108,7 @@ async function bcGetCompanyInternalName() {
 async function bcGetODataMetadata() {
     if (bcODataMetadata) return bcODataMetadata;
     const token = await bcGetToken();
-    const resp = await fetch(BC_ODATA_URL + "/$metadata", { headers: { "Authorization": "Bearer " + token } });
+    const resp = await bcFetchRetrying(BC_ODATA_URL + "/$metadata", { headers: { "Authorization": "Bearer " + token } });
     if (!resp.ok) throw new Error("OData $metadata fetch " + resp.status);
     const xml = await resp.text();
     const entitySets = {};

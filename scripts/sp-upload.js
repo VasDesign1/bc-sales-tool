@@ -55,7 +55,16 @@ async function graphFetch(url, opts, attempt) {
     attempt = attempt || 0;
     const token = await graphToken();
     const headers = Object.assign({ Authorization: "Bearer " + token }, (opts && opts.headers) || {});
-    const resp = await fetch(url, Object.assign({}, opts, { headers }));
+    let resp;
+    try { resp = await fetch(url, Object.assign({}, opts, { headers })); }
+    catch (e) {
+        // A dropped connection throws instead of returning a status.
+        if (attempt >= 4) throw e;
+        const wait = 2000 * (attempt + 1);
+        console.log("  [graph] connection dropped (" + e.message + ") — retrying in " + wait + " ms");
+        await new Promise(r => setTimeout(r, wait));
+        return graphFetch(url, opts, attempt + 1);
+    }
     if ((resp.status === 429 || resp.status >= 500) && attempt < 4) {
         const wait = parseInt(resp.headers.get("Retry-After") || "0", 10) * 1000 || (2000 * (attempt + 1));
         console.log("  [graph] HTTP " + resp.status + " — retrying in " + wait + " ms");
@@ -112,14 +121,23 @@ async function uploadLarge(driveId, itemPath, buf) {
         let resp;
         for (let attempt = 0; ; attempt++) {
             // Upload-session URLs are pre-authenticated: no Authorization header.
-            resp = await fetch(session.uploadUrl, {
-                method: "PUT",
-                headers: {
-                    "Content-Length": String(chunk.length),
-                    "Content-Range": "bytes " + start + "-" + (end - 1) + "/" + total,
-                },
-                body: chunk,
-            });
+            try {
+                resp = await fetch(session.uploadUrl, {
+                    method: "PUT",
+                    headers: {
+                        "Content-Length": String(chunk.length),
+                        "Content-Range": "bytes " + start + "-" + (end - 1) + "/" + total,
+                    },
+                    body: chunk,
+                });
+            } catch (e) {
+                // A dropped connection mid-chunk: resend the same chunk.
+                if (attempt >= 4) throw e;
+                const wait = 2000 * (attempt + 1);
+                console.log("  [graph] chunk " + start + "-" + (end - 1) + " connection dropped — retrying in " + wait + " ms");
+                await new Promise(r => setTimeout(r, wait));
+                continue;
+            }
             if (resp.ok || attempt >= 4) break;
             const wait = 2000 * (attempt + 1);
             console.log("  [graph] chunk " + start + "-" + (end - 1) + " HTTP " + resp.status + " — retrying in " + wait + " ms");
