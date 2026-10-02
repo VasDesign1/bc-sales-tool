@@ -87,7 +87,7 @@
         .toolbar .field { display: flex; flex-direction: column; gap: 4px; }
         .period-frame { display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-end; min-width: 0; margin: 0;
                         border: 1.5px solid rgba(127,127,127,0.45); border-radius: 12px; padding: 0 12px 10px; }
-        .period-frame > legend { padding: 0 6px; }
+        .period-frame > legend { padding: 0 6px; margin-left: auto; margin-right: auto; }
         .period-frame > legend label { font-size: 11px; letter-spacing: 0.08em; }
         .period-frame .field label { font-size: 9.5px; font-weight: 600; text-transform: none; letter-spacing: 0.2px; }
         .toolbar label { font-size: 10px; font-weight: 700; color: #6e72a6; text-transform: uppercase; letter-spacing: 0.5px; }
@@ -294,7 +294,7 @@
         .table-scroll { overflow-x: auto; max-height: 70vh; overflow-y: auto; }
         .srecon-frame { border: 2px solid rgba(127,127,127,0.8); border-radius: 14px; background: rgba(127,127,127,0.28);
                         padding: 8px 14px 0; margin: 0 0 18px 0; min-width: 0; }
-        .srecon-frame > legend { padding: 0 10px; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+        .srecon-frame > legend { margin-left: auto; margin-right: auto; padding: 0 10px; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
         .srecon-frame > legend span { margin-left: 10px; font-weight: 400; letter-spacing: 0; text-transform: none; opacity: 0.65; }
         table { width: 100%; border-collapse: collapse; font-size: 13px; }
         th {
@@ -3668,7 +3668,7 @@
                             <button class="btn btn-primary" id="pnlLoadBtn" type="button" title="Fetch the general ledger for the toolbar From / To range. About 30 seconds per month; loads merge with what is already held.">Load ledger</button>
                         </div>
                     </div>
-                    <div class="hint" style="margin:0;" id="pnlLoadHint">Loads the ledger for the toolbar range (<strong id="pnlRangeLabel">—</strong>). About 30 s per month on this tenant; loads merge, so pull one month at a time and the monthly summary fills in.</div>
+                    <div class="hint" style="margin:0;" id="pnlLoadHint">The ledger loads automatically with Load sales and Fast lookup, for the same period. Load ledger is only needed to fetch it on its own for the toolbar range (<strong id="pnlRangeLabel">—</strong>), about 30 s per month; loads merge.</div>
                 </div>
                 <div class="kpi-row" style="grid-template-columns: repeat(6, 1fr);">
                     <div class="kpi k-rev" title="INCOME — every G/L entry in the date range on accounts whose Wiise Account Category is 'Income' (accounts 4xxx, 7005 rent, 7030 interest, 8026 other income). Netted the P&L way: credits minus debits, because a sale credits the income account. Straight from the ledger — no sales-tool adjustments and the Rentals toggle does not apply."><div class="label">Income</div><div class="value" id="pnlKpiIncome">—</div><div class="sub" id="pnlKpiIncomeSub"></div></div>
@@ -14897,17 +14897,24 @@ function pnlPaintBackButtons() {
     });
 }
 
-async function loadPnl() {
-    if (!pnlIsOwner()) { alert("This tab is limited to the Finance allow-list."); return; }
-    const { from, to } = pnlToolbarRange();
-    if (!from || !to || from > to) { alert("Set a valid From / To range in the toolbar first."); return; }
+// opts.auto: called by Load sales / Fast lookup with their own range — no
+// confirmation and no alerts; progress and any failure show in the
+// Ledger panel's status line instead. The button click passes an event,
+// which is never {auto:true}, so a click keeps the original behaviour.
+let pnlAutoLoading = false, pnlAutoFailed = false;
+async function loadPnl(opts) {
+    const auto = !!(opts && opts.auto === true);
+    if (!pnlIsOwner()) { if (!auto) alert("This tab is limited to the Finance allow-list."); return; }
+    const { from, to } = auto ? { from: opts.from, to: opts.to } : pnlToolbarRange();
+    if (!from || !to || from > to) { if (!auto) alert("Set a valid From / To range in the toolbar first."); return; }
     const days = Math.round((new Date(to + "T00:00:00") - new Date(from + "T00:00:00")) / 86400000) + 1;
-    if (days > 62) {
+    if (auto) { pnlAutoLoading = true; pnlAutoFailed = false; }
+    if (!auto && days > 62) {
         const months = Math.ceil(days / 30);
         if (!confirm("The toolbar range spans about " + months + " months — roughly " + (months * 100).toLocaleString("en-AU") + "k ledger entries and " + Math.round(months * 0.5) + " minutes to load.\n\nTip: pick one month in the Month filter and load month by month (loads merge).\n\nLoad the whole range anyway?")) return;
     }
     const btn = document.getElementById("pnlLoadBtn");
-    btn.disabled = true; pnlSetStatus("Loading " + fmtDate(from) + " → " + fmtDate(to) + "…");
+    btn.disabled = true; pnlSetStatus("Loading " + fmtDate(from) + " → " + fmtDate(to) + (auto ? " with the sales data" : "") + "…");
     try {
         const compId = await bcGetCompanyId();
         if (!state.gl.accounts.length) {
@@ -14946,11 +14953,33 @@ async function loadPnl() {
         renderPnl();
     } catch (err) {
         console.error("[P&L] load failed", err);
-        pnlSetStatus("Load failed: " + (err.message || err));
-        alert("Ledger load failed: " + (err.message || err));
+        pnlSetStatus("Load failed: " + (err.message || err) + (auto ? " — use Load ledger to try again." : ""));
+        if (auto) pnlAutoFailed = true; else alert("Ledger load failed: " + (err.message || err));
     } finally {
-        btn.disabled = false; hideBCProgress();
+        if (auto) pnlAutoLoading = false;
+        hideBCProgress();
+        pnlPaintLoadButton();
     }
+}
+// Load ledger stays for loading the ledger on its own. Once Load sales or
+// Fast lookup has run, the ledger comes with them, so the button fades out
+// — unless that automatic load failed, when it is the way to retry.
+function pnlPaintLoadButton() {
+    const btn = document.getElementById("pnlLoadBtn"); if (!btn) return;
+    const salesLoaded = !!(state.invoices && state.invoices.length);
+    const off = pnlAutoLoading || (salesLoaded && !pnlAutoFailed);
+    btn.disabled = off;
+    btn.style.opacity = off ? "0.45" : "";
+    btn.style.cursor = off ? "not-allowed" : "";
+    btn.title = off
+        ? "The ledger loads automatically with Load sales and Fast lookup, for the same period."
+        : "Fetch the general ledger for the toolbar From / To range. About 30 seconds per month; loads merge with what is already held.";
+}
+// Called after Load sales and Fast lookup: same period as the sales data.
+function pnlAutoLoad(from, to) {
+    if (!pnlIsOwner() || !from || !to) return;
+    loadPnl({ auto: true, from, to });
+    pnlPaintLoadButton();
 }
 
 // Go-live opening balances (30 Apr 2026, documents BEGIN*) are not trading
@@ -16218,6 +16247,9 @@ function hydrateSnapshot(payload) {
     const qr = document.getElementById("quickRange"); if (qr) qr.value = "";
     const mp = document.getElementById("monthPicker"); if (mp) mp.value = "";
     applyLoadedData({ ...d, from: payload.meta.from, to: payload.meta.to });
+    // The snapshot carries no full ledger, so the P&L's is fetched live for
+    // the snapshot's period, in the background.
+    pnlAutoLoad(payload.meta.from, payload.meta.to);
     const sb = document.getElementById("snapshotBadge");
     if (sb) sb.innerHTML = '<span style="color:#ffca28;">figures as of ' + escapeHtml(payload.meta.fetchedAtMelbourne || "") + " (snapshot)</span>";
 }
@@ -16483,6 +16515,8 @@ async function handleLoad() {
         // background once the sales figures are on screen — only for the
         // people who can see those rows.
         if (sreconIsViewer()) sreconBackgroundLoad(from, to);
+        // The P&L ledger for the same period, for the Finance allow-list.
+        pnlAutoLoad(from, to);
     } catch (err) {
         alert("Load failed: " + (err.message || err));
     } finally {
