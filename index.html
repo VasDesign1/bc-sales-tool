@@ -88,6 +88,10 @@
         .period-frame { display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-end; min-width: 0; margin: 0;
                         border: 1.5px solid rgba(127,127,127,0.45); border-radius: 12px; padding: 0 12px 10px; }
         .period-frame > legend { padding: 0 6px; margin-left: auto; margin-right: auto; }
+        /* The Period frame's controls sit 10px padding + 1.5px border above
+           its bottom edge; lift the filters beside it by the same amount so
+           every box lines up on one row. */
+        .toolbar > .field { padding-bottom: 11.5px; }
         .period-frame > legend label { font-size: 11px; letter-spacing: 0.08em; }
         .period-frame .field label { font-size: 9.5px; font-weight: 600; text-transform: none; letter-spacing: 0.2px; }
         .toolbar label { font-size: 10px; font-weight: 700; color: #6e72a6; text-transform: uppercase; letter-spacing: 0.5px; }
