@@ -308,6 +308,9 @@
         th:hover { background: #dde0f4; }
         th.sorted-asc::after  { content: ' ▲'; font-size: 10px; }
         th.sorted-desc::after { content: ' ▼'; font-size: 10px; }
+        /* Reconciliation drill-down: every sortable header shows a faint ⇅
+           until it is the sorted column, so it is obvious the columns sort. */
+        #srPanelTable th[data-srsort]:not(.sorted-asc):not(.sorted-desc)::after { content: ' ⇅'; font-size: 10px; opacity: 0.45; }
         td { padding: 9px 14px; border-bottom: 1px solid #f1f2f8; white-space: nowrap; }
         tr:hover { background: #f5f7ff; }
         tr.clickable { cursor: pointer; }
