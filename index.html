@@ -15472,8 +15472,20 @@ function sreconAcctLabel(no) {
     const a = state.gl && state.gl.accountsByNo ? state.gl.accountsByNo.get(String(no)) : null;
     return a && a.displayName ? no + " " + a.displayName : String(no || "(no account)");
 }
+// Expected-cost clearing accounts. When goods ship, Wiise posts their
+// expected cost here and reverses it at invoicing. The sales tool's cost
+// comes from value entries, which only carry ACTUAL cost, so these
+// postings belong on the ledger side of the bridge even though a sales
+// shipment created them. Detected by name so a new one is picked up on
+// its own; the residual check below shouts if one is ever missed.
+function sreconIsInterimAccount(no) {
+    const a = state.gl && state.gl.accountsByNo ? state.gl.accountsByNo.get(String(no)) : null;
+    return /interim|expected/i.test((a && a.displayName) || "");
+}
 function sreconYellowWhy(docType, row) {
     const where = row === "cogs" ? "a cost-of-goods-sold account" : "a revenue account";
+    if (row === "cogs" && docType === "__interim__")
+        return "Expected cost on goods shipped but not yet invoiced. The sales tool counts cost only once a sale is invoiced, so this sits on the ledger side until then.";
     switch ((docType || "").trim()) {
         case "Invoice":     return "Purchase invoice posted to " + where + ".";
         case "Credit Memo": return "Purchase credit memo posted to " + where + ".";
@@ -15639,6 +15651,8 @@ function sreconCompute(grossSales, grossGp) {
     // ---- YELLOW, both rows, from the ledger ----
     const src = sreconLedgerSource();
     const yellow = { sales: 0, cogs: 0 }, pTotal = { sales: 0, cogs: 0 }, yEntries = { sales: 0, cogs: 0 };
+    const counted = { sales: 0, cogs: 0 };   // ledger entries the sales tool's own figure already carries
+    const countedByAcct = { sales: new Map(), cogs: new Map() };
     const yellowRows = { sales: new Map(), cogs: new Map() };
     if (src.ok) {
         // Which documents the sales tool has already counted. The two rows
@@ -15669,12 +15683,22 @@ function sreconCompute(grossSales, grossGp) {
             const row = isRev ? "sales" : "cogs";
             const net = isRev ? e.creditAmount - e.debitAmount : e.debitAmount - e.creditAmount;
             pTotal[row] += net;
-            if (docNos[row].has(e.documentNumber)) continue;
+            // Entries the sales tool's own figure already carries are not
+            // part of the bridge. On the cost row an expected-cost clearing
+            // account is the exception: a sales shipment created it, but
+            // Adjusted Cost (actual cost only) does not include it.
+            const interim = row === "cogs" && sreconIsInterimAccount(e.accountNumber);
+            if (docNos[row].has(e.documentNumber) && !interim) {
+                counted[row] += net;
+                countedByAcct[row].set(e.accountNumber, (countedByAcct[row].get(e.accountNumber) || 0) + net);
+                continue;
+            }
             yellow[row] += net; yEntries[row]++;
             const k = e.accountNumber + "|" + (e.documentType || "");
             const m = yellowRows[row];
             const r = m.get(k) || { acct: e.accountNumber, type: e.documentType || "", entries: 0,
-                                    amount: 0, docs: new Map(), why: sreconYellowWhy(e.documentType, row) };
+                                    amount: 0, docs: new Map(),
+                                    why: sreconYellowWhy(interim ? "__interim__" : e.documentType, row) };
             r.entries++; r.amount += net;
             r.docs.set(e.documentNumber, (r.docs.get(e.documentNumber) || 0) + net);
             m.set(k, r);
@@ -15686,6 +15710,11 @@ function sreconCompute(grossSales, grossGp) {
         return {
             base, yellow: yellow[row], red: red[row], result, pTotal: pTotal[row],
             delta: result - pTotal[row], yEntries: yEntries[row],
+            // What the ledger shows for the documents the sales tool has
+            // already counted. It should equal that tool figure; anything
+            // left over means a posting type the bridge does not know about.
+            counted: counted[row], residual: counted[row] - (base - red[row]),
+            countedByAcct: [...countedByAcct[row].entries()].sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])),
             yellowRows: [...yellowRows[row].values()].sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount)),
             redRows:    [...redRows[row].values()].sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount)),
         };
@@ -15792,7 +15821,15 @@ function sreconRenderPanel() {
             showNotice("A branch, salesperson, customer, item or status filter is active. These entries carry none of those, so they cannot be shown for a filtered slice. Clear the filters to see them.", false);
             tbody.innerHTML = ""; return;
         }
-        showNotice("", false);
+        if (Math.abs(d.delta) >= 0.005) {
+            showNotice("This row is out by " + fmtMoneyFull(d.delta) + ". The ledger shows " + fmtMoneyFull(d.counted)
+                + " against the documents the sales tool has already counted, where it should show " + fmtMoneyFull(d.base - d.red)
+                + ". The accounts carrying that, largest first: "
+                + d.countedByAcct.slice(0, 6).map(x => sreconAcctLabel(x[0]) + " " + fmtMoneyFull(x[1])).join(", ")
+                + ". One of those is posting something the sales tool's own figure does not include.", false);
+        } else {
+            showNotice("", false);
+        }
         tbody.innerHTML = (d.yellowRows.length ? d.yellowRows.map(r => {
             const docs = [...r.docs.entries()].sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
             const key = row + "|yellow|" + r.acct + "|" + r.type;
