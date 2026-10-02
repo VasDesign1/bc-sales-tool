@@ -287,7 +287,7 @@
         }
 
         .table-scroll { overflow-x: auto; max-height: 70vh; overflow-y: auto; }
-        .srecon-frame { border: 1.5px solid rgba(127,127,127,0.5); border-radius: 14px; background: rgba(127,127,127,0.06);
+        .srecon-frame { border: 1.5px solid rgba(127,127,127,0.65); border-radius: 14px; background: rgba(127,127,127,0.16);
                         padding: 8px 14px 0; margin: 0 0 18px 0; min-width: 0; }
         .srecon-frame > legend { padding: 0 10px; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
         .srecon-frame > legend span { margin-left: 10px; font-weight: 400; letter-spacing: 0; text-transform: none; opacity: 0.65; }
@@ -15797,11 +15797,11 @@ function sreconPaint(grossSales, grossGp) {
         else if (!m.ledgerOk)    { set(id.yellow, "—");   set(id.yellowSub, "click to load the ledger"); }
         else if (needLink)       { set(id.yellow, "—");   set(id.yellowSub, "needs the ledger link · click to load"); }
         else if (m.entityFilter) { set(id.yellow, "n/a"); set(id.yellowSub, "carries no branch or customer · clear filters"); }
-        else                     { set(id.yellow, fmtMoneyFull(d.yellow)); set(id.yellowSub, d.yEntries.toLocaleString("en-AU") + " ledger postings · click to drill down"); }
+        else                     { set(id.yellow, fmtMoneyFull(d.yellow)); set(id.yellowSub, d.yEntries.toLocaleString("en-AU") + (d.yEntries === 1 ? " ledger posting" : " ledger postings") + " · click to drill down"); }
 
         set(id.red, fmtMoneyFull(d.red));
         if (needLink && !sreconLoading) { set(id.red, "—"); set(id.redSub, "needs the ledger link"); }
-        else set(id.redSub, d.redRows.length ? d.redRows.length + (row === "cogs" ? " documents" : " document lines") + " · click to drill down" : "none in this range");
+        else set(id.redSub, d.redRows.length ? d.redRows.length + (row === "cogs" ? (d.redRows.length === 1 ? " document" : " documents") : (d.redRows.length === 1 ? " document line" : " document lines")) + " · click to drill down" : "none in this range");
 
         if (!d.usable) {
             set(id.result, "—");
