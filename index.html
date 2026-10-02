@@ -16115,9 +16115,12 @@ const RESTRICTED_TABS = new Set(["branchTarget", "branchSalesRate", "branchMargi
                                  "salespersonSalesRate", "salespersonMarginRate",
                                  "keyCustomers", "ordersPastDel"]);
 // The Finance group (P&L tab) has its own allow-list (Faik 2026-09-23).
-const PNL_VIEWERS = new Set([RESTRICTED_NAV_OWNER, "michaelc@vicair.com.au"]);
-// Overview "sales reconciliation to the P&L" row: Faik only while it is being tested (2026-10-02).
-const SRECON_VIEWERS = new Set([RESTRICTED_NAV_OWNER]);
+// Finance view (P&L tab + Overview reconciliation rows): Faik, Michael,
+// Daniel and Shane — approved by Faik 2026-10-03. Nobody else.
+const FINANCE_VIEWERS = [RESTRICTED_NAV_OWNER, "michaelc@vicair.com.au", "danielw@vicair.com.au", "shanec@vicair.com.au"];
+const PNL_VIEWERS = new Set(FINANCE_VIEWERS);
+// Overview reconciliation rows: the same four people as the P&L tab.
+const SRECON_VIEWERS = new Set(FINANCE_VIEWERS);
 // Guest accounts sign in as "name_domain.com#EXT#@VicAirPtyLtd.onmicrosoft.com";
 // fold that back to the plain email so the allow-list can use real addresses.
 function normalizeSignInName(u) {
