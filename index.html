@@ -3675,7 +3675,7 @@
                             <button class="btn btn-primary" id="pnlLoadBtn" type="button" title="Fetch the general ledger for the toolbar From / To range. About 30 seconds per month; loads merge with what is already held.">Load ledger</button>
                         </div>
                     </div>
-                    <div class="hint" style="margin:0;" id="pnlLoadHint">The ledger loads automatically with Load sales and Fast lookup, for the same period. Load ledger is only needed to fetch it on its own for the toolbar range (<strong id="pnlRangeLabel">—</strong>), about 30 s per month; loads merge.</div>
+                    <div class="hint" style="margin:0;" id="pnlLoadHint">Loads the ledger for the toolbar range (<strong id="pnlRangeLabel">—</strong>). About 30 s per month on this tenant; loads merge, so pull one month at a time and the monthly summary fills in.</div>
                 </div>
                 <div class="kpi-row" style="grid-template-columns: repeat(6, 1fr);">
                     <div class="kpi k-rev" title="INCOME — every G/L entry in the date range on accounts whose Wiise Account Category is 'Income' (accounts 4xxx, 7005 rent, 7030 interest, 8026 other income). Netted the P&L way: credits minus debits, because a sale credits the income account. Straight from the ledger — no sales-tool adjustments and the Rentals toggle does not apply."><div class="label">Income</div><div class="value" id="pnlKpiIncome">—</div><div class="sub" id="pnlKpiIncomeSub"></div></div>
@@ -14904,24 +14904,17 @@ function pnlPaintBackButtons() {
     });
 }
 
-// opts.auto: called by Load sales / Fast lookup with their own range — no
-// confirmation and no alerts; progress and any failure show in the
-// Ledger panel's status line instead. The button click passes an event,
-// which is never {auto:true}, so a click keeps the original behaviour.
-let pnlAutoLoading = false, pnlAutoFailed = false;
-async function loadPnl(opts) {
-    const auto = !!(opts && opts.auto === true);
-    if (!pnlIsOwner()) { if (!auto) alert("This tab is limited to the Finance allow-list."); return; }
-    const { from, to } = auto ? { from: opts.from, to: opts.to } : pnlToolbarRange();
-    if (!from || !to || from > to) { if (!auto) alert("Set a valid From / To range in the toolbar first."); return; }
+async function loadPnl() {
+    if (!pnlIsOwner()) { alert("This tab is limited to the Finance allow-list."); return; }
+    const { from, to } = pnlToolbarRange();
+    if (!from || !to || from > to) { alert("Set a valid From / To range in the toolbar first."); return; }
     const days = Math.round((new Date(to + "T00:00:00") - new Date(from + "T00:00:00")) / 86400000) + 1;
-    if (auto) { pnlAutoLoading = true; pnlAutoFailed = false; }
-    if (!auto && days > 62) {
+    if (days > 62) {
         const months = Math.ceil(days / 30);
         if (!confirm("The toolbar range spans about " + months + " months — roughly " + (months * 100).toLocaleString("en-AU") + "k ledger entries and " + Math.round(months * 0.5) + " minutes to load.\n\nTip: pick one month in the Month filter and load month by month (loads merge).\n\nLoad the whole range anyway?")) return;
     }
     const btn = document.getElementById("pnlLoadBtn");
-    btn.disabled = true; pnlSetStatus("Loading " + fmtDate(from) + " → " + fmtDate(to) + (auto ? " with the sales data" : "") + "…");
+    btn.disabled = true; pnlSetStatus("Loading " + fmtDate(from) + " → " + fmtDate(to) + "…");
     try {
         const compId = await bcGetCompanyId();
         if (!state.gl.accounts.length) {
@@ -14960,33 +14953,11 @@ async function loadPnl(opts) {
         renderPnl();
     } catch (err) {
         console.error("[P&L] load failed", err);
-        pnlSetStatus("Load failed: " + (err.message || err) + (auto ? " — use Load ledger to try again." : ""));
-        if (auto) pnlAutoFailed = true; else alert("Ledger load failed: " + (err.message || err));
+        pnlSetStatus("Load failed: " + (err.message || err));
+        alert("Ledger load failed: " + (err.message || err));
     } finally {
-        if (auto) pnlAutoLoading = false;
-        hideBCProgress();
-        pnlPaintLoadButton();
+        btn.disabled = false; hideBCProgress();
     }
-}
-// Load ledger stays for loading the ledger on its own. Once Load sales or
-// Fast lookup has run, the ledger comes with them, so the button fades out
-// — unless that automatic load failed, when it is the way to retry.
-function pnlPaintLoadButton() {
-    const btn = document.getElementById("pnlLoadBtn"); if (!btn) return;
-    const salesLoaded = !!(state.invoices && state.invoices.length);
-    const off = pnlAutoLoading || (salesLoaded && !pnlAutoFailed);
-    btn.disabled = off;
-    btn.style.opacity = off ? "0.45" : "";
-    btn.style.cursor = off ? "not-allowed" : "";
-    btn.title = off
-        ? "The ledger loads automatically with Load sales and Fast lookup, for the same period."
-        : "Fetch the general ledger for the toolbar From / To range. About 30 seconds per month; loads merge with what is already held.";
-}
-// Called after Load sales and Fast lookup: same period as the sales data.
-function pnlAutoLoad(from, to) {
-    if (!pnlIsOwner() || !from || !to) return;
-    loadPnl({ auto: true, from, to });
-    pnlPaintLoadButton();
 }
 
 // Go-live opening balances (30 Apr 2026, documents BEGIN*) are not trading
@@ -15458,32 +15429,19 @@ function hydrateGlRecon(rows, from, to, accounts) {
     console.log("[srecon] ledger slice ready: " + state.srgl.entries.length.toLocaleString("en-AU") + " entries " + from + " → " + to
                 + " · " + state.srglAccounts.size + " account names");
 }
-// Pour a snapshot's full ledger into the P&L tab (state.gl) and point the
-// reconciliation rows (state.srgl) at the revenue and cost entries in it —
-// the same objects, not a second copy. Only for people who can see either.
+// Compatibility for the few snapshots made with the full ledger (3 Oct
+// 2026): take only the revenue and cost entries the reconciliation rows
+// need. The P&L tab stays manual and is never filled from a snapshot.
 function hydrateGlFull(rows, accounts, from, to) {
     if (!rows || !from || !to) return;
-    const seesPnl = pnlIsOwner(), seesRows = sreconIsViewer();
-    if (!seesPnl && !seesRows) return;
-    if (accounts && accounts.length) {
-        state.gl.accounts = accounts;
-        state.gl.accountsByNo = new Map(accounts.map(a => [String(a.number), a]));
-        state.gl.accountsAt = new Date();
-        state.srglAccounts = new Map(accounts.map(a => [String(a.number), a.displayName || ""]));
-    }
+    if (!sreconIsViewer()) return;
+    if (accounts && accounts.length) state.srglAccounts = new Map(accounts.map(a => [String(a.number), a.displayName || ""]));
     const entries = rows.map(r => ({
         postingDate: r[0], documentNumber: r[1], documentType: r[2], accountNumber: r[3],
         debitAmount: num(r[4]), creditAmount: num(r[5]), entryNumber: r[6] || 0,
         valueEntries: Array.isArray(r[7]) ? r[7] : null, description: r[8] || "",
     }));
     const now = new Date();
-    if (seesPnl) {
-        state.gl.entries = entries;
-        state.gl.windows = [{ from, to }];
-        state.gl.from = from; state.gl.to = to; state.gl.loadedAt = now;
-        state.gl.openGroups = new Set(); state.gl.openSubs = new Set(); state.gl.openAccounts = new Set();
-        pnlSetStatus(entries.length.toLocaleString("en-AU") + " entries from the snapshot · " + (state.gl.accounts || []).length + " accounts");
-    }
     const gp = new Set([...SRECON_REV_ACCTS, ...SRECON_COGS_ACCTS]);
     state.srgl.entries = entries.filter(e => gp.has(e.accountNumber));
     state.srgl.hasLinks = true;
@@ -16322,9 +16280,6 @@ function hydrateSnapshot(payload) {
     const qr = document.getElementById("quickRange"); if (qr) qr.value = "";
     const mp = document.getElementById("monthPicker"); if (mp) mp.value = "";
     applyLoadedData({ ...d, from: payload.meta.from, to: payload.meta.to });
-    // A snapshot with the full ledger has just filled the P&L tab. An older
-    // one without it falls back to fetching the ledger live, in the background.
-    if (!(payload.data && payload.data.glFull)) pnlAutoLoad(payload.meta.from, payload.meta.to);
     const sb = document.getElementById("snapshotBadge");
     if (sb) sb.innerHTML = '<span style="color:#ffca28;">figures as of ' + escapeHtml(payload.meta.fetchedAtMelbourne || "") + " (snapshot)</span>";
 }
@@ -16593,8 +16548,6 @@ async function handleLoad() {
         // background once the sales figures are on screen — only for the
         // people who can see those rows.
         if (sreconIsViewer()) sreconBackgroundLoad(from, to);
-        // The P&L ledger for the same period, for the Finance allow-list.
-        pnlAutoLoad(from, to);
     } catch (err) {
         alert("Load failed: " + (err.message || err));
     } finally {
