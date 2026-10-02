@@ -15641,9 +15641,27 @@ function sreconCompute(grossSales, grossGp) {
     const yellow = { sales: 0, cogs: 0 }, pTotal = { sales: 0, cogs: 0 }, yEntries = { sales: 0, cogs: 0 };
     const yellowRows = { sales: new Map(), cogs: new Map() };
     if (src.ok) {
-        const docNos = new Set();
-        for (const inv of (state.invoices || []))    if (inRange(inv.postingDate) && inv.number) docNos.add(inv.number);
-        for (const cm  of (state.creditMemos || [])) if (inRange(cm.postingDate)  && cm.number)  docNos.add(cm.number);
+        // Which documents the sales tool has already counted. The two rows
+        // need different sets. Revenue only ever posts against the invoice
+        // or the credit memo. Cost does not: on this tenant goods ship
+        // first and are invoiced later, so the cost of a sale lands on the
+        // posted sales shipment, and later cost-adjustment runs reuse that
+        // same number. Matching invoice numbers alone left almost the whole
+        // item cost looking like a non-sales posting. The value entries are
+        // the authority here, being the very rows Adjusted Cost is summed
+        // from, with shipments and return receipts as a fallback for when
+        // they are not loaded.
+        const docNos = { sales: new Set(), cogs: new Set() };
+        for (const inv of (state.invoices || []))    if (inRange(inv.postingDate) && inv.number) { docNos.sales.add(inv.number); docNos.cogs.add(inv.number); }
+        for (const cm  of (state.creditMemos || [])) if (inRange(cm.postingDate)  && cm.number)  { docNos.sales.add(cm.number);  docNos.cogs.add(cm.number); }
+        const veDateField = state.veDateField || "postingDate";
+        for (const v of (state.valueEntries || [])) {
+            if (!isSalesValueEntry(v) || !v.documentNumber) continue;
+            if (!inRange(v[veDateField] || v.postingDate)) continue;
+            docNos.cogs.add(v.documentNumber);
+        }
+        for (const sh of (state.shipments || []))      if (sh.number && inRange(sh.postingDate)) docNos.cogs.add(sh.number);
+        for (const rr of (state.returnReceipts || [])) if (rr.number && inRange(rr.postingDate)) docNos.cogs.add(rr.number);
         for (const e of src.entries) {
             const isRev  = SRECON_REV_ACCTS.has(e.accountNumber);
             const isCogs = !isRev && SRECON_COGS_ACCTS.has(e.accountNumber);
@@ -15651,7 +15669,7 @@ function sreconCompute(grossSales, grossGp) {
             const row = isRev ? "sales" : "cogs";
             const net = isRev ? e.creditAmount - e.debitAmount : e.debitAmount - e.creditAmount;
             pTotal[row] += net;
-            if (docNos.has(e.documentNumber)) continue;
+            if (docNos[row].has(e.documentNumber)) continue;
             yellow[row] += net; yEntries[row]++;
             const k = e.accountNumber + "|" + (e.documentType || "");
             const m = yellowRows[row];
