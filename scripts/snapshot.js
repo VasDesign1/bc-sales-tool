@@ -127,7 +127,7 @@ function isoAddDays(iso, days) {
     // second round trip to Business Central.
     const [locs, items, customers, invoices, iles, creditMemos, shipments, returnReceipts,
            quotes, quoteExtras, blanketOrders, valueEntries, salesOrders, salesOrderOutstanding,
-           _residentialLookup, _quoteArchive, glRecon, glAccounts] = await Promise.all([
+           _residentialLookup, _quoteArchive, glFull, glAccountsFull] = await Promise.all([
         F.fetchLocations(),
         F.fetchItems(),
         F.fetchCustomers(),
@@ -144,7 +144,7 @@ function isoAddDays(iso, days) {
         F.fetchSalesOrderOutstandingLines(),
         F.fetchResidentialDocLookup(),
         F.fetchSalesQuoteArchive(from, to),
-        F.fetchGLReconSlice(from, to).catch(e => {
+        F.fetchGLFullSlice(from, to).catch(e => {
             // Never fail a whole snapshot over the ledger slice: the rows
             // that use it fall back to fetching on demand.
             console.warn("  [Ledger] reconciliation slice failed: " + e.message);
@@ -152,7 +152,7 @@ function isoAddDays(iso, days) {
         }),
         // Account names travel with the entries: the cost row tells an
         // expected-cost clearing account apart by its name.
-        F.fetchGLReconAccountNames().catch(e => {
+        F.fetchGLAccountsFull().catch(e => {
             console.warn("  [Ledger] account names failed: " + e.message);
             return [];
         }),
@@ -160,8 +160,8 @@ function isoAddDays(iso, days) {
     console.log("Fetched in " + ((Date.now() - t0) / 1000).toFixed(1) + "s: "
         + invoices.length + " invoices · " + (valueEntries || []).length + " VE · "
         + (iles || []).length + " ILE · " + (quotes || []).length + " quotes · "
-        + (glRecon || []).length + " ledger rows (" + (glRecon || []).filter(r => Array.isArray(r[7])).length + " cost rows linked) · "
-        + (glAccounts || []).length + " accounts");
+        + (glFull || []).length + " ledger rows, all accounts (" + (glFull || []).filter(r => Array.isArray(r[7])).length + " cost rows linked) · "
+        + (glAccountsFull || []).length + " accounts");
 
     // ---- Integrity checks (fail loudly rather than snapshot bad data) ----
     // 1. VE date filter actually applied? (this tenant has form — $select
@@ -207,7 +207,7 @@ function isoAddDays(iso, days) {
         },
         data: { locs, items, customers, invoices, iles, creditMemos, shipments, returnReceipts,
                 quotes, quoteExtras, blanketOrders, valueEntries, salesOrders, salesOrderOutstanding,
-                glRecon, glAccounts, glReconCols: F.GL_RECON_COLS },
+                glFull, glAccountsFull, glFullCols: F.GL_FULL_COLS },
         // Side effects the discovery-style fetchers write into `state`,
         // which handleLoad doesn't receive via return values. Maps are
         // serialised as entry arrays.

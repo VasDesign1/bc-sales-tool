@@ -15451,6 +15451,40 @@ function hydrateGlRecon(rows, from, to, accounts) {
     console.log("[srecon] ledger slice ready: " + state.srgl.entries.length.toLocaleString("en-AU") + " entries " + from + " → " + to
                 + " · " + state.srglAccounts.size + " account names");
 }
+// Pour a snapshot's full ledger into the P&L tab (state.gl) and point the
+// reconciliation rows (state.srgl) at the revenue and cost entries in it —
+// the same objects, not a second copy. Only for people who can see either.
+function hydrateGlFull(rows, accounts, from, to) {
+    if (!rows || !from || !to) return;
+    const seesPnl = pnlIsOwner(), seesRows = sreconIsViewer();
+    if (!seesPnl && !seesRows) return;
+    if (accounts && accounts.length) {
+        state.gl.accounts = accounts;
+        state.gl.accountsByNo = new Map(accounts.map(a => [String(a.number), a]));
+        state.gl.accountsAt = new Date();
+        state.srglAccounts = new Map(accounts.map(a => [String(a.number), a.displayName || ""]));
+    }
+    const entries = rows.map(r => ({
+        postingDate: r[0], documentNumber: r[1], documentType: r[2], accountNumber: r[3],
+        debitAmount: num(r[4]), creditAmount: num(r[5]), entryNumber: r[6] || 0,
+        valueEntries: Array.isArray(r[7]) ? r[7] : null, description: r[8] || "",
+    }));
+    const now = new Date();
+    if (seesPnl) {
+        state.gl.entries = entries;
+        state.gl.windows = [{ from, to }];
+        state.gl.from = from; state.gl.to = to; state.gl.loadedAt = now;
+        state.gl.openGroups = new Set(); state.gl.openSubs = new Set(); state.gl.openAccounts = new Set();
+        pnlSetStatus(entries.length.toLocaleString("en-AU") + " entries from the snapshot · " + (state.gl.accounts || []).length + " accounts");
+    }
+    const gp = new Set([...SRECON_REV_ACCTS, ...SRECON_COGS_ACCTS]);
+    state.srgl.entries = entries.filter(e => gp.has(e.accountNumber));
+    state.srgl.hasLinks = true;
+    state.srgl.windows = [{ from, to }];
+    state.srgl.loadedAt = now;
+    sreconTried = ""; sreconError = "";
+    console.log("[ledger] snapshot ledger ready: " + entries.length.toLocaleString("en-AU") + " entries, " + state.srgl.entries.length.toLocaleString("en-AU") + " on the gross-profit accounts, " + from + " → " + to);
+}
 let sreconOpen = null;            // null | { row: "sales"|"cogs", side: "yellow"|"red" }
 let sreconExpanded = new Set();   // "row|side|account|docType" groups expanded in a Yellow panel
 let sreconLast = null;            // last computed result, for the panel
@@ -16281,9 +16315,9 @@ function hydrateSnapshot(payload) {
     const qr = document.getElementById("quickRange"); if (qr) qr.value = "";
     const mp = document.getElementById("monthPicker"); if (mp) mp.value = "";
     applyLoadedData({ ...d, from: payload.meta.from, to: payload.meta.to });
-    // The snapshot carries no full ledger, so the P&L's is fetched live for
-    // the snapshot's period, in the background.
-    pnlAutoLoad(payload.meta.from, payload.meta.to);
+    // A snapshot with the full ledger has just filled the P&L tab. An older
+    // one without it falls back to fetching the ledger live, in the background.
+    if (!(payload.data && payload.data.glFull)) pnlAutoLoad(payload.meta.from, payload.meta.to);
     const sb = document.getElementById("snapshotBadge");
     if (sb) sb.innerHTML = '<span style="color:#ffca28;">figures as of ' + escapeHtml(payload.meta.fetchedAtMelbourne || "") + " (snapshot)</span>";
 }
@@ -16294,8 +16328,11 @@ function hydrateSnapshot(payload) {
 function applyLoadedData(d) {
     const { locs, items, customers, invoices, iles, creditMemos, shipments, returnReceipts,
             quotes, quoteExtras, blanketOrders, valueEntries, salesOrders, salesOrderOutstanding,
-            glRecon, glAccounts, from, to } = d;
-        hydrateGlRecon(glRecon, from, to, glAccounts);
+            glRecon, glAccounts, glFull, glAccountsFull, from, to } = d;
+        // A snapshot from today on carries the full ledger; older ones carry
+        // only the reconciliation slice.
+        if (glFull) hydrateGlFull(glFull, glAccountsFull, from, to);
+        else hydrateGlRecon(glRecon, from, to, glAccounts);
         state.deferredDocsPending = false;
         state.salesOrders = salesOrders || [];
         state.salesOrderOutstandingLines = salesOrderOutstanding || [];

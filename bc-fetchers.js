@@ -1204,6 +1204,37 @@ async function fetchGLReconSlice(fromISO, toISO) {
     return attachGLReconLinks(await fetchGLReconEntries(fromISO, toISO));
 }
 
+// The full ledger, every account, exactly what the P&L tab's Load ledger
+// fetches, plus the value-entry links on the cost rows. Carried in the
+// snapshot so Fast lookup fills the P&L tab and the reconciliation rows
+// from one copy. Same columns as the reconciliation slice, plus the entry
+// description the P&L drill-down shows.
+const GL_FULL_COLS = GL_RECON_COLS.concat(["description"]);
+async function fetchGLFullSlice(fromISO, toISO) {
+    const compId = await bcGetCompanyId();
+    const filter = "postingDate ge " + fromISO + " and postingDate le " + toISO;
+    const rows = await bcFetchAll(BC_API_URL + "/companies(" + compId + ")/generalLedgerEntries?$filter=" + encodeURIComponent(filter)
+        + "&$select=entryNumber,postingDate,documentNumber,documentType,accountNumber,description,debitAmount,creditAmount"
+        + "&$orderby=entryNumber", "General ledger (all accounts)");
+    const packed = (rows || []).map(e => [
+        (e.postingDate || "").toString().slice(0, 10),
+        e.documentNumber || "",
+        glReconDecode(e.documentType),
+        String(e.accountNumber || ""),
+        num(e.debitAmount),
+        num(e.creditAmount),
+        Number(e.entryNumber) || 0,
+        0,
+        e.description || "",
+    ]);
+    return attachGLReconLinks(packed);
+}
+// The chart of accounts as the P&L tab uses it (category, live balance).
+async function fetchGLAccountsFull() {
+    const compId = await bcGetCompanyId();
+    return bcFetchAll(BC_API_URL + "/companies(" + compId + ")/accounts", "Chart of accounts");
+}
+
 // Node (snapshot Action) entry point. Classic-script browsers skip this.
 if (typeof module !== "undefined" && module.exports) {
     module.exports = {
@@ -1218,6 +1249,7 @@ if (typeof module !== "undefined" && module.exports) {
         fetchSalesQuotes, fetchBlanketSalesOrders, fetchResidentialDocLookup,
         fetchSalesQuoteArchive, fetchSalesQuoteExtras,
         fetchGLReconEntries, fetchGLReconAccountNames, fetchGLReconSlice, attachGLReconLinks, bcDiscoverGLItemRelation,
+        fetchGLFullSlice, fetchGLAccountsFull, GL_FULL_COLS,
         PNL_MAP_BUCKETS, PNL_MAP_BS,
         GL_RECON_REVENUE, GL_RECON_COGS, GL_RECON_ACCOUNTS, GL_RECON_COLS,
     };
