@@ -15855,9 +15855,27 @@ function sreconPaint(grossSales, grossGp) {
 }
 
 // ---- the drill-down panel ------------------------------------------
-// Documents listed per drill-down line before "Show all": two keeps every
+// Documents listed per drill-down line before "See N more": one keeps every
 // line short enough that the amount and the explanation stay on screen.
-const SRECON_DOCS_SHOWN = 2;
+const SRECON_DOCS_SHOWN = 1;
+// Drill-down sort: null = largest amount first. Clicking a header sorts by
+// that column; clicking it again reverses it.
+let sreconSort = null;
+function sreconSortRows(rows, getters) {
+    if (!sreconSort || !getters[sreconSort.key]) return rows;
+    const g = getters[sreconSort.key], dir = sreconSort.dir === "asc" ? 1 : -1;
+    return rows.slice().sort((a, b) => {
+        const x = g(a), y = g(b);
+        if (typeof x === "number" && typeof y === "number") return (x - y) * dir;
+        return String(x).localeCompare(String(y), undefined, { numeric: true, sensitivity: "base" }) * dir;
+    });
+}
+function sreconHead(cols) {
+    return "<tr>" + cols.map(([key, label, num]) => {
+        const cls = [num ? "num" : "", sreconSort && sreconSort.key === key ? (sreconSort.dir === "asc" ? "sorted-asc" : "sorted-desc") : ""].filter(Boolean).join(" ");
+        return '<th data-srsort="' + key + '"' + (cls ? ' class="' + cls + '"' : "") + ' title="Sort by ' + escapeAttr(label) + '">' + escapeHtml(label) + "</th>";
+    }).join("") + "</tr>";
+}
 const SRECON_TITLES = {
     "sales|yellow": "In the ledger's revenue accounts, not a sales document",
     "sales|red":    "A sales document, not in the ledger's revenue accounts",
@@ -15901,7 +15919,7 @@ function sreconRenderPanel() {
     if (side === "yellow") {
         if (meta) meta.textContent = m.ledgerOk && !m.entityFilter
             ? d.yellowRows.length + " account / document-type groups · " + d.yEntries.toLocaleString("en-AU") + " entries · " + fmtMoneyFull(d.yellow) : "";
-        thead.innerHTML = '<tr><th>Account</th><th>Document type</th><th>Documents</th><th class="num">$</th><th>What it is</th></tr>';
+        thead.innerHTML = sreconHead([["acct", "Account"], ["type", "Document type"], ["docs", "Documents"], ["amount", "$", true], ["why", "What it is"]]);
         if (sreconLoading) {
             showNotice("Loading the general ledger for " + m.rangeLabel + ". The accounts and documents appear as soon as it lands.", false);
             tbody.innerHTML = ""; return;
@@ -15934,19 +15952,22 @@ function sreconRenderPanel() {
         } else {
             showNotice("", false);
         }
-        tbody.innerHTML = (d.yellowRows.length ? d.yellowRows.map(r => {
+        const ySorted = sreconSortRows(d.yellowRows, {
+            acct: r => sreconAcctLabel(r.acct), type: r => r.type || "General journal",
+            docs: r => r.docs.size, amount: r => r.amount, why: r => r.why });
+        tbody.innerHTML = (ySorted.length ? ySorted.map(r => {
             const docs = [...r.docs.entries()].sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
             const key = row + "|yellow|" + r.acct + "|" + r.type;
             const open = sreconExpanded.has(key);
             const shown = open ? docs : docs.slice(0, SRECON_DOCS_SHOWN);
             const txt = shown.map(x => escapeHtml(x[0] || "(no number)") + " (" + fmtMoneyFull(x[1]) + ")"
                       + (x[0] ? pnlWiiseLink("Document No.", x[0], "Open document " + x[0] + " entries in Wiise") : "")).join(", ")
-                      + (!open && docs.length > SRECON_DOCS_SHOWN ? " and " + (docs.length - SRECON_DOCS_SHOWN) + " more" : "");
+                      ;
             return '<tr class="clickable" data-srgroup="' + escapeAttr(key) + '">'
                  + '<td style="white-space:nowrap;">' + escapeHtml(sreconAcctLabel(r.acct))
                  + pnlWiiseLink("G/L Account No.", r.acct, "Open account " + r.acct + " entries in Wiise") + '</td>'
                  + '<td>' + escapeHtml(r.type || "General journal") + '</td>'
-                 + '<td>' + txt + (docs.length > SRECON_DOCS_SHOWN ? ' <button type="button" class="more-btn sr-more" style="margin-left:6px; padding:2px 8px; font-size:11px;">' + (open ? "Show fewer" : "Show all " + docs.length) + '</button>' : '') + '</td>'
+                 + '<td>' + txt + (docs.length > SRECON_DOCS_SHOWN ? ' <button type="button" class="more-btn sr-more" style="margin-left:6px; padding:2px 8px; font-size:11px;">' + (open ? "Show fewer" : "See " + (docs.length - SRECON_DOCS_SHOWN).toLocaleString("en-AU") + " more") + '</button>' : '') + '</td>'
                  + '<td class="num ' + (r.amount >= 0 ? "pos" : "neg") + '">' + fmtMoneyFull(r.amount) + '</td>'
                  + '<td>' + escapeHtml(r.why) + '</td></tr>';
         }).join("") : '<tr><td colspan="5" class="empty">Nothing on these accounts in this range.</td></tr>')
@@ -15958,8 +15979,12 @@ function sreconRenderPanel() {
             thead.innerHTML = ""; tbody.innerHTML = ""; return;
         }
         showNotice("", false);
-        thead.innerHTML = '<tr><th>Document</th><th>' + (row === "cogs" ? "Value entry type" : "Document type") + '</th><th>' + (row === "cogs" ? "G/L account" : "G/L account the line posted to") + '</th><th class="num">$</th><th>What it is</th></tr>';
-        tbody.innerHTML = (d.redRows.length ? d.redRows.map(r =>
+        thead.innerHTML = sreconHead([["doc", "Document"], ["type", row === "cogs" ? "Value entry type" : "Document type"],
+                                      ["acct", row === "cogs" ? "G/L account" : "G/L account the line posted to"], ["amount", "$", true], ["why", "What it is"]]);
+        const rSorted = sreconSortRows(d.redRows, {
+            doc: r => r.doc || "", type: r => r.type || "", acct: r => r.acct ? sreconAcctLabel(r.acct) : "",
+            amount: r => r.amount, why: r => r.why || "" });
+        tbody.innerHTML = (rSorted.length ? rSorted.map(r =>
             '<tr><td style="white-space:nowrap;">' + escapeHtml(r.doc || "")
           + (r.doc ? pnlWiiseLink("Document No.", r.doc, "Open document " + r.doc + " entries in Wiise") : "") + '</td>'
           + '<td>' + escapeHtml(r.type) + '</td>'
@@ -15975,6 +16000,7 @@ function sreconToggle(row, side) {
     const same = sreconOpen && sreconOpen.row === row && sreconOpen.side === side;
     sreconOpen = same ? null : { row, side };
     sreconExpanded = new Set();
+    sreconSort = null;
     sreconRenderPanel();
     if (!sreconOpen) return;
     const p = document.getElementById("srPanel");
@@ -15991,6 +16017,14 @@ function sreconToggle(row, side) {
     on("srLoadLedgerBtn", "click", () => sreconEnsureLedger(true));
     const tbl = document.getElementById("srPanelTable");
     if (tbl) tbl.addEventListener("click", e => {
+        const th = e.target.closest("th[data-srsort]");
+        if (th) {
+            const key = th.dataset.srsort;
+            if (sreconSort && sreconSort.key === key) sreconSort.dir = sreconSort.dir === "asc" ? "desc" : "asc";
+            else sreconSort = { key, dir: (key === "amount" || key === "docs") ? "desc" : "asc" };
+            sreconRenderPanel();
+            return;
+        }
         const tr = e.target.closest("tr[data-srgroup]"); if (!tr) return;
         const k = tr.dataset.srgroup;
         if (sreconExpanded.has(k)) sreconExpanded.delete(k); else sreconExpanded.add(k);
