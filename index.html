@@ -15816,6 +15816,9 @@ function sreconPaint(grossSales, grossGp) {
 }
 
 // ---- the drill-down panel ------------------------------------------
+// Documents listed per drill-down line before "Show all": two keeps every
+// line short enough that the amount and the explanation stay on screen.
+const SRECON_DOCS_SHOWN = 2;
 const SRECON_TITLES = {
     "sales|yellow": "In the ledger's revenue accounts, not a sales document",
     "sales|red":    "A sales document, not in the ledger's revenue accounts",
@@ -15896,15 +15899,15 @@ function sreconRenderPanel() {
             const docs = [...r.docs.entries()].sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
             const key = row + "|yellow|" + r.acct + "|" + r.type;
             const open = sreconExpanded.has(key);
-            const shown = open ? docs : docs.slice(0, 6);
+            const shown = open ? docs : docs.slice(0, SRECON_DOCS_SHOWN);
             const txt = shown.map(x => escapeHtml(x[0] || "(no number)") + " (" + fmtMoneyFull(x[1]) + ")"
                       + (x[0] ? pnlWiiseLink("Document No.", x[0], "Open document " + x[0] + " entries in Wiise") : "")).join(", ")
-                      + (!open && docs.length > 6 ? " and " + (docs.length - 6) + " more" : "");
+                      + (!open && docs.length > SRECON_DOCS_SHOWN ? " and " + (docs.length - SRECON_DOCS_SHOWN) + " more" : "");
             return '<tr class="clickable" data-srgroup="' + escapeAttr(key) + '">'
                  + '<td style="white-space:nowrap;">' + escapeHtml(sreconAcctLabel(r.acct))
                  + pnlWiiseLink("G/L Account No.", r.acct, "Open account " + r.acct + " entries in Wiise") + '</td>'
                  + '<td>' + escapeHtml(r.type || "General journal") + '</td>'
-                 + '<td>' + txt + (docs.length > 6 ? ' <span style="opacity:0.6;">' + (open ? "▴ show fewer" : "▾ show all " + docs.length) + '</span>' : '') + '</td>'
+                 + '<td>' + txt + (docs.length > SRECON_DOCS_SHOWN ? ' <button type="button" class="more-btn sr-more" style="margin-left:6px; padding:2px 8px; font-size:11px;">' + (open ? "Show fewer" : "Show all " + docs.length) + '</button>' : '') + '</td>'
                  + '<td class="num ' + (r.amount >= 0 ? "pos" : "neg") + '">' + fmtMoneyFull(r.amount) + '</td>'
                  + '<td>' + escapeHtml(r.why) + '</td></tr>';
         }).join("") : '<tr><td colspan="5" class="empty">Nothing on these accounts in this range.</td></tr>')
