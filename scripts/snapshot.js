@@ -127,7 +127,7 @@ function isoAddDays(iso, days) {
     // second round trip to Business Central.
     const [locs, items, customers, invoices, iles, creditMemos, shipments, returnReceipts,
            quotes, quoteExtras, blanketOrders, valueEntries, salesOrders, salesOrderOutstanding,
-           _residentialLookup, _quoteArchive, glRecon] = await Promise.all([
+           _residentialLookup, _quoteArchive, glRecon, glAccounts] = await Promise.all([
         F.fetchLocations(),
         F.fetchItems(),
         F.fetchCustomers(),
@@ -150,11 +150,17 @@ function isoAddDays(iso, days) {
             console.warn("  [Ledger] reconciliation slice failed: " + e.message);
             return [];
         }),
+        // Account names travel with the entries: the cost row tells an
+        // expected-cost clearing account apart by its name.
+        F.fetchGLReconAccountNames().catch(e => {
+            console.warn("  [Ledger] account names failed: " + e.message);
+            return [];
+        }),
     ]);
     console.log("Fetched in " + ((Date.now() - t0) / 1000).toFixed(1) + "s: "
         + invoices.length + " invoices · " + (valueEntries || []).length + " VE · "
         + (iles || []).length + " ILE · " + (quotes || []).length + " quotes · "
-        + (glRecon || []).length + " ledger rows");
+        + (glRecon || []).length + " ledger rows · " + (glAccounts || []).length + " accounts");
 
     // ---- Integrity checks (fail loudly rather than snapshot bad data) ----
     // 1. VE date filter actually applied? (this tenant has form — $select
@@ -200,7 +206,7 @@ function isoAddDays(iso, days) {
         },
         data: { locs, items, customers, invoices, iles, creditMemos, shipments, returnReceipts,
                 quotes, quoteExtras, blanketOrders, valueEntries, salesOrders, salesOrderOutstanding,
-                glRecon, glReconCols: F.GL_RECON_COLS },
+                glRecon, glAccounts, glReconCols: F.GL_RECON_COLS },
         // Side effects the discovery-style fetchers write into `state`,
         // which handleLoad doesn't receive via return values. Maps are
         // serialised as entry arrays.

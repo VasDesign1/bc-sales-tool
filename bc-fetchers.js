@@ -1058,6 +1058,16 @@ const GL_RECON_ACCOUNTS = GL_RECON_REVENUE.concat(GL_RECON_COGS);
 // Rows travel as compact arrays, not objects: a 12-month snapshot holds
 // several hundred thousand of them and the key names would dwarf the data.
 const GL_RECON_COLS = ["postingDate", "documentNumber", "documentType", "accountNumber", "debitAmount", "creditAmount"];
+// Expected-cost clearing accounts are recognised by their name, so the
+// names have to travel with the entries — every path that supplies ledger
+// rows must supply these too, or the cost row silently stops balancing.
+// This list is only a backstop for when no name is available at all.
+const GL_RECON_INTERIM_FALLBACK = ["5195"];
+async function fetchGLReconAccountNames() {
+    const compId = await bcGetCompanyId();
+    const rows = await bcFetchAll(BC_API_URL + "/companies(" + compId + ")/accounts?$select=number,displayName", "Chart of accounts (names)");
+    return (rows || []).map(a => [String(a.number || ""), a.displayName || ""]);
+}
 function glReconDecode(s) { return (s == null ? "" : String(s)).replace(/_x([0-9a-fA-F]{4})_/g, (m, h) => String.fromCharCode(parseInt(h, 16))).trim(); }
 async function fetchGLReconEntries(fromISO, toISO) {
     const compId = await bcGetCompanyId();
@@ -1092,6 +1102,7 @@ if (typeof module !== "undefined" && module.exports) {
         fetchSalesOrderOutstandingLines, fetchSalesShipments, fetchSalesReturnReceipts,
         fetchSalesQuotes, fetchBlanketSalesOrders, fetchResidentialDocLookup,
         fetchSalesQuoteArchive, fetchSalesQuoteExtras,
-        fetchGLReconEntries, GL_RECON_REVENUE, GL_RECON_COGS, GL_RECON_ACCOUNTS, GL_RECON_COLS,
+        fetchGLReconEntries, fetchGLReconAccountNames,
+        GL_RECON_REVENUE, GL_RECON_COGS, GL_RECON_ACCOUNTS, GL_RECON_COLS, GL_RECON_INTERIM_FALLBACK,
     };
 }

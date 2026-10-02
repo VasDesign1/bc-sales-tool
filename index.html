@@ -15429,7 +15429,11 @@ state.srgl = { entries: [], windows: [], loadedAt: null };
 // Pour a fetched or snapshotted ledger slice into state.srgl. Rows arrive
 // as compact arrays (see GL_RECON_COLS); null means it was not fetched,
 // which leaves whatever is already held alone.
-function hydrateGlRecon(rows, from, to) {
+function hydrateGlRecon(rows, from, to, accounts) {
+    if (accounts && accounts.length) {
+        state.srglAccounts = new Map(accounts.map(a => [String(a[0]), a[1] || ""]));
+        sreconNameWarned = false;
+    }
     if (!rows || !from || !to) return;
     state.srgl.entries = rows.map(r => ({
         postingDate: r[0], documentNumber: r[1], documentType: r[2],
@@ -15438,7 +15442,8 @@ function hydrateGlRecon(rows, from, to) {
     state.srgl.windows = [{ from, to }];
     state.srgl.loadedAt = new Date();
     sreconTried = ""; sreconError = "";
-    console.log("[srecon] ledger slice ready: " + state.srgl.entries.length.toLocaleString("en-AU") + " entries " + from + " → " + to);
+    console.log("[srecon] ledger slice ready: " + state.srgl.entries.length.toLocaleString("en-AU") + " entries " + from + " → " + to
+                + " · " + state.srglAccounts.size + " account names");
 }
 let sreconOpen = null;            // null | { row: "sales"|"cogs", side: "yellow"|"red" }
 let sreconExpanded = new Set();   // "row|side|account|docType" groups expanded in a Yellow panel
@@ -15446,6 +15451,8 @@ let sreconLast = null;            // last computed result, for the panel
 let sreconLoading = false;        // a silent ledger fetch is in flight
 let sreconTried = "";             // range already attempted, so a failure doesn't loop
 let sreconError = "";             // last fetch error, surfaced with a retry button
+let sreconNameWarned = false;     // only warn once about missing account names
+state.srglAccounts = new Map();   // account number -> display name, travels with the ledger slice
 
 function sreconIsViewer() { return SRECON_VIEWERS.has(currentSignInName()); }
 function sreconTodayIso() { return new Date().toISOString().slice(0, 10); }
@@ -15465,8 +15472,8 @@ function sreconLineIsCogs(ln) {
     return (ln.lineType || "") === "Account" && SRECON_COGS_ACCTS.has(String(ln.lineObjectNumber || ""));
 }
 function sreconAcctLabel(no) {
-    const a = state.gl && state.gl.accountsByNo ? state.gl.accountsByNo.get(String(no)) : null;
-    return a && a.displayName ? no + " " + a.displayName : String(no || "(no account)");
+    const n = sreconAcctDisplayName(no);
+    return n ? no + " " + n : String(no || "(no account)");
 }
 // Expected-cost clearing accounts. When goods ship, Wiise posts their
 // expected cost here and reverses it at invoicing. The sales tool's cost
@@ -15474,9 +15481,23 @@ function sreconAcctLabel(no) {
 // postings belong on the ledger side of the bridge even though a sales
 // shipment created them. Detected by name so a new one is picked up on
 // its own; the residual check below shouts if one is ever missed.
+function sreconAcctDisplayName(no) {
+    const k = String(no);
+    if (state.srglAccounts && state.srglAccounts.has(k)) return state.srglAccounts.get(k) || "";
+    const a = state.gl && state.gl.accountsByNo ? state.gl.accountsByNo.get(k) : null;
+    return (a && a.displayName) || "";
+}
 function sreconIsInterimAccount(no) {
-    const a = state.gl && state.gl.accountsByNo ? state.gl.accountsByNo.get(String(no)) : null;
-    return /interim|expected/i.test((a && a.displayName) || "");
+    const name = sreconAcctDisplayName(no);
+    // No name at hand means some path supplied ledger rows without the
+    // chart of accounts. Fall back to the known list and say so, rather
+    // than quietly deciding this is not a clearing account and leaving the
+    // cost row short by the whole expected-cost balance.
+    if (!name) {
+        if (!sreconNameWarned) { sreconNameWarned = true; console.warn("[srecon] no account names loaded — falling back to " + GL_RECON_INTERIM_FALLBACK.join(", ") + " for expected-cost accounts"); }
+        return GL_RECON_INTERIM_FALLBACK.indexOf(String(no)) >= 0;
+    }
+    return /interim|expected/i.test(name);
 }
 function sreconYellowWhy(docType, row) {
     const where = row === "cogs" ? "a cost-of-goods-sold account" : "a revenue account";
@@ -15551,7 +15572,8 @@ async function sreconFetchLedger() {
             state.gl.accounts = accts;
             state.gl.accountsByNo = new Map(accts.map(a => [String(a.number), a]));
         }
-        hydrateGlRecon(await fetchGLReconEntries(from, to), from, to);
+        const [slice, names] = await Promise.all([fetchGLReconEntries(from, to), fetchGLReconAccountNames().catch(() => null)]);
+        hydrateGlRecon(slice, from, to, names);
     } finally {
         hideBCProgress();
     }
@@ -16128,8 +16150,8 @@ function hydrateSnapshot(payload) {
 function applyLoadedData(d) {
     const { locs, items, customers, invoices, iles, creditMemos, shipments, returnReceipts,
             quotes, quoteExtras, blanketOrders, valueEntries, salesOrders, salesOrderOutstanding,
-            glRecon, from, to } = d;
-        hydrateGlRecon(glRecon, from, to);
+            glRecon, glAccounts, from, to } = d;
+        hydrateGlRecon(glRecon, from, to, glAccounts);
         state.deferredDocsPending = false;
         state.salesOrders = salesOrders || [];
         state.salesOrderOutstandingLines = salesOrderOutstanding || [];
@@ -16358,7 +16380,7 @@ async function handleLoad() {
     btn.disabled = true;
     btn.textContent = "Loading…";
     try {
-        const [locs, items, customers, invoices, iles, creditMemos, shipments, returnReceipts, quotes, quoteExtras, blanketOrders, valueEntries, salesOrders, salesOrderOutstanding, _residentialLookup, _quoteArchive, glRecon] = await Promise.all([
+        const [locs, items, customers, invoices, iles, creditMemos, shipments, returnReceipts, quotes, quoteExtras, blanketOrders, valueEntries, salesOrders, salesOrderOutstanding, _residentialLookup, _quoteArchive, glRecon, glAccounts] = await Promise.all([
             fetchLocations(),
             fetchItems(),
             fetchCustomers(),
@@ -16382,10 +16404,15 @@ async function handleLoad() {
             sreconIsViewer()
                 ? fetchGLReconEntries(from, to).catch(e => { console.warn("[Ledger] slice failed:", e.message); return null; })
                 : Promise.resolve(null),
+            // Account names ride with the slice: the cost row recognises an
+            // expected-cost clearing account by its name.
+            sreconIsViewer()
+                ? fetchGLReconAccountNames().catch(e => { console.warn("[Ledger] account names failed:", e.message); return null; })
+                : Promise.resolve(null),
         ]);
         applyLoadedData({ locs, items, customers, invoices, iles, creditMemos, shipments, returnReceipts,
                          quotes, quoteExtras, blanketOrders, valueEntries, salesOrders, salesOrderOutstanding,
-                         glRecon, from, to });
+                         glRecon, glAccounts, from, to });
     } catch (err) {
         alert("Load failed: " + (err.message || err));
     } finally {
