@@ -85,6 +85,11 @@
             display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-end;
         }
         .toolbar .field { display: flex; flex-direction: column; gap: 4px; }
+        .period-frame { display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-end; min-width: 0; margin: 0;
+                        border: 1.5px solid rgba(127,127,127,0.45); border-radius: 12px; padding: 0 12px 10px; }
+        .period-frame > legend { padding: 0 6px; }
+        .period-frame > legend label { font-size: 11px; letter-spacing: 0.08em; }
+        .period-frame .field label { font-size: 9.5px; font-weight: 600; text-transform: none; letter-spacing: 0.2px; }
         .toolbar label { font-size: 10px; font-weight: 700; color: #6e72a6; text-transform: uppercase; letter-spacing: 0.5px; }
         /* Every toolbar control is pinned to the same width / padding so
            the Item text input lines up exactly with the date pickers and
@@ -287,7 +292,7 @@
         }
 
         .table-scroll { overflow-x: auto; max-height: 70vh; overflow-y: auto; }
-        .srecon-frame { border: 1.5px solid rgba(127,127,127,0.65); border-radius: 14px; background: rgba(127,127,127,0.16);
+        .srecon-frame { border: 2px solid rgba(127,127,127,0.8); border-radius: 14px; background: rgba(127,127,127,0.28);
                         padding: 8px 14px 0; margin: 0 0 18px 0; min-width: 0; }
         .srecon-frame > legend { padding: 0 10px; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
         .srecon-frame > legend span { margin-left: 10px; font-weight: 400; letter-spacing: 0; text-transform: none; opacity: 0.65; }
@@ -1682,6 +1687,9 @@
         <div class="container">
 
             <div class="toolbar">
+                <!-- The four period controls share one frame titled "Period"; same look as the reconciliation frame. -->
+                <fieldset class="period-frame">
+                <legend><label>Period</label></legend>
                 <div class="field">
                     <label for="fromDate">From</label>
                     <input type="date" id="fromDate">
@@ -1706,6 +1714,7 @@
                     <label for="monthPicker">Month</label>
                     <select id="monthPicker"><option value="" hidden>—</option></select>
                 </div>
+                </fieldset>
                 <div class="field">
                     <label for="locationFilter">Branch</label>
                     <select id="locationFilter"><option value="">All branches</option></select>
