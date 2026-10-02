@@ -2037,8 +2037,8 @@
                     </div>
                     <div class="kpi-row" style="grid-template-columns: repeat(4, 1fr);" title="How the Adjusted Cost figure above becomes the P&amp;L's Cost of Goods Sold. Direct Labour is outside both definitions and is not included. Click either middle tile to see the accounts and documents behind it.">
                         <div class="kpi k-inv" title="The item cost of what was sold, from value entries with returns netted — exactly as the Adjusted Cost tile above."><div class="label">Adjusted Cost</div><div class="value" id="srcAdj">—</div><div class="sub" id="srcAdjSub">sales tool</div></div>
-                        <div class="kpi k-avg" id="srcYellowTile" style="cursor:pointer;" title="Click to see the accounts and documents. General ledger entries on cost-of-goods-sold accounts 5010 to 5196 whose document is NOT a posted sales invoice or credit memo: purchase invoices, freight, item journals, cost adjustments."><div class="label">+ in the ledger, not in the cost figure</div><div class="value" id="srcYellow">—</div><div class="sub" id="srcYellowSub">click to drill down</div></div>
-                        <div class="kpi k-cust" id="srcRedTile" style="cursor:pointer;" title="Click to see what it is made of. Cost the sales tool counts that does not post to the cost-of-goods-sold accounts, chiefly the non-inventoriable part of the value entries such as item charges."><div class="label">− in the cost figure, not in the ledger's cost accounts</div><div class="value" id="srcRed">—</div><div class="sub" id="srcRedSub">click to drill down</div></div>
+                        <div class="kpi k-avg" id="srcYellowTile" style="cursor:pointer;" title="Click to see the accounts and documents. Ledger entries on the mapping's cost-of-goods-sold accounts that were not created by the cost the sales tool counts: purchases, freight, journals, stock-on-hand revaluations, expected cost on goods shipped but not yet invoiced."><div class="label">+ in the ledger, not in the cost figure</div><div class="value" id="srcYellow">—</div><div class="sub" id="srcYellowSub">click to drill down</div></div>
+                        <div class="kpi k-cust" id="srcRedTile" style="cursor:pointer;" title="Click to see what it is made of. Cost the sales tool counts that has no posting on the mapping's cost-of-goods-sold accounts in the period."><div class="label">− in the cost figure, not in the ledger's cost accounts</div><div class="value" id="srcRed">—</div><div class="sub" id="srcRedSub">click to drill down</div></div>
                         <div class="kpi k-rev" title="Adjusted Cost, plus the ledger-only postings, less the documents the ledger treats differently. This is what the P&amp;L reports as Cost of Goods Sold."><div class="label">= Result</div><div class="value" id="srcResult">—</div><div class="sub" id="srcResultSub">P&amp;L cost of goods sold</div></div>
                     </div>
                     <div class="panel" id="srPanel" style="display:none; margin-bottom:16px;">
@@ -14722,47 +14722,8 @@ function pnlSaveChartPrefs() { try { localStorage.setItem(PNL_CHART_PREFS_KEY, J
 function pnlPrefs() { if (!state.gl.chartPrefs) state.gl.chartPrefs = pnlLoadChartPrefs(); return state.gl.chartPrefs; }
 const PNL_SERIES_COLORS = { income: "#3949ab", cogs: "#6d4c41", expense: "#e91e63", netPos: "#43a047", netNeg: "#c62828" };
 
-// ---- The mapping file (VAS_Account_Mapping_Table, 2026-09-24) ----
-// P&L Bucket per G/L code, and BS Grouping for balance-sheet codes.
-// Synthetic FS-/NEW-/SID- rows in the file do not exist in Wiise and are
-// left out. Update here when accounts are added in Wiise.
-const PNL_MAP_BUCKETS = {
-    "Total Revenue (net)": ["4010", "4015", "4020", "4030", "4050", "4055", "4060", "4065"],
-    "Cost of Goods Sold": ["5010", "5020", "5030", "5125", "5126", "5130", "5131", "5135", "5140", "5145", "5150", "5155", "5160", "5165", "5170", "5175", "5180", "5195", "5196"],
-    "Direct Labour": ["5205", "5206", "5210", "5220", "5230", "5235", "5240", "5245", "5250", "5255", "5256", "5260"],
-    "Marketing & Promotion": ["6010", "6015", "6020", "6025"],
-    "ICT": ["6055", "6060", "6065", "6070"],
-    "Vehicle Expenses": ["6105", "6110", "6115", "6120", "6125"],
-    "Staff - Other Expenses": ["6155", "6160", "6165", "6170", "6175"],
-    "Amortisation & Depreciation": ["6210"],
-    "Insurance Expenses": ["6260"],
-    "Financing & Leasing": ["6285", "6315", "6319"],
-    "Bank & Merchant Fees": ["6305", "6309", "6310"],
-    "Property Expenses": ["6335", "6340", "6345", "6350", "6355", "6360", "6365", "6370", "6375", "6380"],
-    "Other Expenses": ["6405", "6410", "6415", "6420", "6425", "6430", "6435", "6440", "6445", "6450", "6460", "6465", "6470", "6475", "6477", "6480", "6488"],
-    "Other Income": ["7005", "7010", "7025", "7030", "9999"],
-    "Non-Operating Costs": ["8005", "8015", "8020", "8026"]
-};
-const PNL_MAP_BS = {
-    "Cash and Cash Equivalents": ["1111", "1116", "1155", "1160"],
-    "Trade and Other Receivables": ["1115", "1205", "1220", "1474", "2190"],
-    "Trade and Other Payables": ["1140", "1150", "2110", "2120", "2146", "2147", "2160", "2165", "2166", "2170", "2175", "2180", "2195", "2212", "2215", "2220", "2225", "2226", "2255", "2280", "2285", "23999"],
-    "Inventory": ["1300", "1310", "1320", "1330", "1340", "1350", "1360", "1475"],
-    "Prepayments": ["1450"],
-    "Intangibles": ["1460"],
-    "Low Value Pool": ["1560"],
-    "Less Accumulated Depreciation on Low Value Pool": ["1565"],
-    "In-house Software Pool": ["1567", "1680", "1685"],
-    "Plant and Equipment at Cost": ["1570", "1580", "1590", "1670"],
-    "Accumulated Depreciation of Plant and Equipment": ["1575", "1585", "1595", "1650"],
-    "Vehicles at Cost": ["1600"],
-    "Accumulated Depreciation of Vehicles": ["1605"],
-    "Buildings at Cost": ["1610", "1613"],
-    "Accumulated Depreciation of Buildings": ["1615"],
-    "Other Assets": ["1720", "2430", "2435"],
-    "Financial Liabilities": ["2140", "2145", "2230", "2231", "2236", "2410", "2420", "2422", "3160"],
-    "Equity": ["3100", "3200"]
-};
+// The mapping table (PNL_MAP_BUCKETS / PNL_MAP_BS) lives in bc-fetchers.js so the
+// snapshot robot reads the very same list. Edit it there.
 const PNL_MAP_CODE = {}; for (const [b, codes] of Object.entries(PNL_MAP_BUCKETS)) for (const c of codes) PNL_MAP_CODE[c] = b;
 const PNL_MAP_BS_CODE = {}; for (const [g, codes] of Object.entries(PNL_MAP_BS)) for (const c of codes) PNL_MAP_BS_CODE[c] = g;
 const PNL_OPEX_BUCKETS = ["Marketing & Promotion", "ICT", "Vehicle Expenses", "Staff - Other Expenses", "Amortisation & Depreciation",
@@ -15395,49 +15356,38 @@ function pnlExportCsv() {
 //   Adjusted Sales + Yellow − Red = P&L Total Revenue (net)
 //   Adjusted Cost  + Yellow − Red = P&L Cost of Goods Sold
 //
-// One definition drives both rows:
-//   Yellow = general ledger entries on that row's accounts whose document
-//            is NOT a posted sales invoice / credit memo — purchase
-//            invoices, vendor payments, customer receipts, journals.
-//   Red    = (what the sales tool makes of a sales-document line)
-//            − (what the ledger makes of the same line).
-//            On the sales row that is a credit-memo line coded to a cost
-//            account: the tool treats it as a return against sales, the
-//            ledger does not treat it as revenue at all. On the cost row
-//            the same line is the mirror image: the ledger adds it to
-//            cost of goods sold, the tool never sees it as cost.
+// Both rows follow the formula on their tiles, for any ledger code:
+//   Sales: + ledger entries on the revenue accounts that are not a posted
+//            sales invoice / credit memo (purchase invoices, payments,
+//            receipts, journals);
+//          − sales invoice / credit memo lines that do not post to a
+//            revenue account (cost accounts, labour, prepayments, rent...).
+//   Cost:  built on Business Central's own record of which value entry
+//          created each ledger entry (page 5823, G/L - Item Ledger
+//          Relation), so nothing is inferred from account lists or
+//          document numbers.
+//          + cost-account entries not created by the cost the sales tool
+//            counts: purchases, freight, journals, stock-on-hand
+//            revaluations, expected cost on goods shipped but not yet
+//            invoiced, and cost posted this period for a sale dated in
+//            another period;
+//          − cost the sales tool counts that has no posting on the cost
+//            accounts in the period.
+//   Revenue and cost accounts are the mapping table's buckets
+//   (PNL_MAP_BUCKETS in bc-fetchers.js), the same ones the P&L uses.
+//
+// The tick is a genuine check, not an identity: the middle tiles come from
+// the documents / value entries and the P&L figure from the ledger.
 //
 // Clicking any Yellow or Red tile opens a panel with the accounts,
 // document types and documents behind the figure, each linked through to
-// Wiise, and silently fetches the ledger if it is not already held.
-// Read-only and additive: no existing tile, chart, table or tab changes.
+// Wiise. Read-only: no existing tile, chart, table or tab changes.
 const SRECON_REV_ACCTS  = new Set(PNL_MAP_BUCKETS["Total Revenue (net)"]);
 const SRECON_COGS_ACCTS = new Set(PNL_MAP_BUCKETS["Cost of Goods Sold"]);
-// The accounts the sales tool's own cost figure actually lands on. Every
-// other cost account in the mapping is a purchase, freight, clearing or
-// adjustment account whose postings that figure never sees.
-//
-// This is deliberately a whitelist. The first two attempts tried to name
-// the exceptions instead — first shipments, then expected-cost clearing
-// accounts — and each time a posting type nobody had thought of (a stock
-// revaluation reusing a sale's document number, through 5180) was quietly
-// treated as already counted and the row went short. A whitelist fails the
-// safe way round: anything new lands in the ledger column, where it is
-// visible, rather than silently disappearing from the bridge.
-const SRECON_ITEM_COST_ACCTS = new Set(["5010", "5020", "5030"]);
 // Ledger entries for just these accounts, fetched on demand and kept apart
 // from state.gl so the P&L tab's own statement is never built from a
 // partial pull.
-state.srgl = { entries: [], windows: [], loadedAt: null };
-// The fetch layer carries its own copy of the account list because the
-// snapshot robot runs without index.html. Shout if the two ever drift.
-(function checkGlReconAccounts() {
-    try {
-        const mine = [...SRECON_REV_ACCTS, ...SRECON_COGS_ACCTS].sort().join(",");
-        const theirs = GL_RECON_ACCOUNTS.slice().sort().join(",");
-        if (mine !== theirs) console.warn("[srecon] account lists have drifted between index.html and bc-fetchers.js, so the reconciliation rows will not tie. mapping table: " + mine + " | fetch layer: " + theirs);
-    } catch (e) {}
-})();
+state.srgl = { entries: [], windows: [], loadedAt: null, hasLinks: false };
 // Pour a fetched or snapshotted ledger slice into state.srgl. Rows arrive
 // as compact arrays (see GL_RECON_COLS); null means it was not fetched,
 // which leaves whatever is already held alone.
@@ -15450,7 +15400,12 @@ function hydrateGlRecon(rows, from, to, accounts) {
     state.srgl.entries = rows.map(r => ({
         postingDate: r[0], documentNumber: r[1], documentType: r[2],
         accountNumber: r[3], debitAmount: num(r[4]), creditAmount: num(r[5]),
+        entryNumber: r[6] || 0, valueEntries: Array.isArray(r[7]) ? r[7] : null,
     }));
+    // A slice from before the link existed (an older snapshot) has six
+    // columns. The sales row still works on it; the cost row asks for a
+    // fresh load instead of guessing.
+    state.srgl.hasLinks = rows.length > 0 && rows[0].length >= 8;
     state.srgl.windows = [{ from, to }];
     state.srgl.loadedAt = new Date();
     sreconTried = ""; sreconError = "";
@@ -15466,6 +15421,16 @@ let sreconError = "";             // last fetch error, surfaced with a retry but
 state.srglAccounts = new Map();   // account number -> display name, travels with the ledger slice
 
 function sreconIsViewer() { return SRECON_VIEWERS.has(currentSignInName()); }
+// Value entries by entry number, rebuilt only when a new load replaces them.
+let sreconVeIdxSrc = null, sreconVeIdxMap = null;
+function sreconVeIndex() {
+    if (sreconVeIdxSrc !== state.valueEntries) {
+        sreconVeIdxMap = new Map();
+        for (const v of (state.valueEntries || [])) if (v.entryNo != null) sreconVeIdxMap.set(Number(v.entryNo), v);
+        sreconVeIdxSrc = state.valueEntries;
+    }
+    return sreconVeIdxMap;
+}
 function sreconTodayIso() { return new Date().toISOString().slice(0, 10); }
 // A document line posts to a revenue account unless it is an explicit
 // G/L-account line pointing somewhere else. Item / Resource / Charge lines
@@ -15483,12 +15448,7 @@ function sreconAcctLabel(no) {
     const n = sreconAcctDisplayName(no);
     return n ? no + " " + n : String(no || "(no account)");
 }
-// Expected-cost clearing accounts. When goods ship, Wiise posts their
-// expected cost here and reverses it at invoicing. The sales tool's cost
-// comes from value entries, which only carry ACTUAL cost, so these
-// postings belong on the ledger side of the bridge even though a sales
-// shipment created them. Detected by name so a new one is picked up on
-// its own; the residual check below shouts if one is ever missed.
+// Account names travel with the slice; fall back to the P&L tab's chart.
 function sreconAcctDisplayName(no) {
     const k = String(no);
     if (state.srglAccounts && state.srglAccounts.has(k)) return state.srglAccounts.get(k) || "";
@@ -15497,8 +15457,6 @@ function sreconAcctDisplayName(no) {
 }
 function sreconYellowWhy(docType, row) {
     const where = row === "cogs" ? "a cost-of-goods-sold account" : "a revenue account";
-    if (row === "cogs" && docType === "__salesdoc__")
-        return "Posted by a sales document, but to an account the sales tool's cost figure never reads: expected cost on goods shipped but not yet invoiced, a stock revaluation, or a cost adjustment.";
     switch ((docType || "").trim()) {
         case "Invoice":     return "Purchase invoice posted to " + where + ".";
         case "Credit Memo": return "Purchase credit memo posted to " + where + ".";
@@ -15539,20 +15497,23 @@ function sreconWindowsCover(windows, from, to) {
     }
     return false;
 }
+// The rows' own slice comes first because it carries the ledger-entry ↔
+// value-entry link the cost row needs. The P&L tab's full pull has no link,
+// so it can stand in for the sales row only.
 function sreconLedgerSource() {
     const { from, to } = pnlToolbarRange();
-    if (!from || !to) return { entries: [], ok: false };
+    if (!from || !to) return { entries: [], ok: false, hasLinks: false };
     const today = sreconTodayIso();
     const cap = to < today ? to : today;
     const skipOpening = pnlPrefs().excludeOpening;
-    if (state.gl && state.gl.loadedAt && sreconWindowsCover(state.gl.windows, from, cap)) {
-        return { entries: pnlEntriesForView(), ok: true };
-    }
     if (state.srgl.loadedAt && sreconWindowsCover(state.srgl.windows, from, cap)) {
         const held = skipOpening ? state.srgl.entries.filter(e => !pnlIsOpening(e)) : state.srgl.entries;
-        return { entries: held.filter(e => e.postingDate >= from && e.postingDate <= to), ok: true };
+        return { entries: held.filter(e => e.postingDate >= from && e.postingDate <= to), ok: true, hasLinks: !!state.srgl.hasLinks };
     }
-    return { entries: [], ok: false };
+    if (state.gl && state.gl.loadedAt && sreconWindowsCover(state.gl.windows, from, cap)) {
+        return { entries: pnlEntriesForView(), ok: true, hasLinks: false };
+    }
+    return { entries: [], ok: false, hasLinks: false };
 }
 // On-demand fetch, used when a range outside the loaded window is picked.
 // Silent: no confirmation and no alert whatever the range, because it asks
@@ -15568,18 +15529,33 @@ async function sreconFetchLedger() {
             state.gl.accounts = accts;
             state.gl.accountsByNo = new Map(accts.map(a => [String(a.number), a]));
         }
-        const [slice, names] = await Promise.all([fetchGLReconEntries(from, to), fetchGLReconAccountNames().catch(() => null)]);
+        const [slice, names] = await Promise.all([fetchGLReconSlice(from, to), fetchGLReconAccountNames().catch(() => null)]);
         hydrateGlRecon(slice, from, to, names);
     } finally {
         hideBCProgress();
     }
+}
+// Load sales paints first, then this fetches the slice and its links in
+// the background (about a minute per month on this tenant) and repaints.
+function sreconBackgroundLoad(from, to) {
+    if (sreconLoading || !from || !to) return;
+    sreconLoading = true; sreconError = "";
+    if (state.tab === "overview") renderOverview();
+    Promise.all([fetchGLReconSlice(from, to), fetchGLReconAccountNames().catch(() => null)])
+        .then(([slice, names]) => hydrateGlRecon(slice, from, to, names))
+        .catch(e => { sreconError = e && e.message ? e.message : String(e); console.warn("[srecon] background ledger load failed", e); })
+        .finally(() => {
+            sreconLoading = false; hideBCProgress();
+            if (state.tab === "overview") renderOverview(); else sreconRenderPanel();
+        });
 }
 async function sreconEnsureLedger(force) {
     if (sreconLoading) return;
     if (!state.invoices || !state.invoices.length) return;   // nothing to reconcile against yet
     const { from, to } = pnlToolbarRange();
     const key = from + "_" + to;
-    if (sreconLedgerSource().ok) { sreconError = ""; return; }
+    const have = sreconLedgerSource();
+    if (have.ok && have.hasLinks) { sreconError = ""; return; }
     if (!force && sreconTried === key) return;   // already tried and failed for this range
     sreconTried = key;
     sreconError = "";
@@ -15626,22 +15602,6 @@ function sreconCompute(grossSales, grossGp) {
             if (!sreconLineIsRevenue(ln)) addRed("sales", docNo, isCredit, sreconLineAccount(ln), isCredit ? -a : a);
         }
     };
-    // Cost row: the only thing the sales tool's cost figure holds that the
-    // ledger's cost accounts do not is the non-inventoriable part of the
-    // value entries — item charges and the like, which post outside them.
-    // Document lines coded to a cost account are NOT here: the whitelist
-    // already leaves those on the ledger side, so counting them again would
-    // remove them twice.
-    if (state.valueEntries && state.valueEntries.length && veUsableForCurrentFilters()) {
-        const ve = getValueEntryTotals();
-        const nonInv = ve.cost - ve.costActual;
-        if (Math.abs(nonInv) >= 0.005) {
-            red.cogs += nonInv;
-            redRows.cogs.set("__noninv__", { doc: "Value entries", type: "Non-inventoriable cost",
-                acct: "", amount: nonInv,
-                why: "Item charges and other non-inventoriable cost on the goods sold. The sales tool's cost figure includes it; it posts outside the cost-of-goods-sold accounts, so the ledger's figure does not." });
-        }
-    }
     for (const inv of (state.filtered || [])) walk(inv.salesInvoiceLines, false, inv.number);
     for (const cm of (state.creditMemos || [])) {
         if (!inRange(cm.postingDate)) continue;
@@ -15671,33 +15631,19 @@ function sreconCompute(grossSales, grossGp) {
         // the authority here, being the very rows Adjusted Cost is summed
         // from, with shipments and return receipts as a fallback for when
         // they are not loaded.
-        const docNos = { sales: new Set(), cogs: new Set() };
-        for (const inv of (state.invoices || []))    if (inRange(inv.postingDate) && inv.number) { docNos.sales.add(inv.number); docNos.cogs.add(inv.number); }
-        for (const cm  of (state.creditMemos || [])) if (inRange(cm.postingDate)  && cm.number)  { docNos.sales.add(cm.number);  docNos.cogs.add(cm.number); }
-        const veDateField = state.veDateField || "postingDate";
-        for (const v of (state.valueEntries || [])) {
-            if (!isSalesValueEntry(v) || !v.documentNumber) continue;
-            if (!inRange(v[veDateField] || v.postingDate)) continue;
-            docNos.cogs.add(v.documentNumber);
-        }
-        for (const sh of (state.shipments || []))      if (sh.number && inRange(sh.postingDate)) docNos.cogs.add(sh.number);
-        for (const rr of (state.returnReceipts || [])) if (rr.number && inRange(rr.postingDate)) docNos.cogs.add(rr.number);
+        // Sales row: Finance's rule — is the entry's document a posted
+        // sales invoice or credit memo? The cost row is handled below on
+        // the ledger-entry ↔ value-entry link instead.
+        const docNos = { sales: new Set() };
+        for (const inv of (state.invoices || []))    if (inRange(inv.postingDate) && inv.number) docNos.sales.add(inv.number);
+        for (const cm  of (state.creditMemos || [])) if (inRange(cm.postingDate)  && cm.number)  docNos.sales.add(cm.number);
         for (const e of src.entries) {
-            const isRev  = SRECON_REV_ACCTS.has(e.accountNumber);
-            const isCogs = !isRev && SRECON_COGS_ACCTS.has(e.accountNumber);
-            if (!isRev && !isCogs) continue;
-            const row = isRev ? "sales" : "cogs";
-            const net = isRev ? e.creditAmount - e.debitAmount : e.debitAmount - e.creditAmount;
+            if (!SRECON_REV_ACCTS.has(e.accountNumber)) continue;
+            const row = "sales";
+            const net = e.creditAmount - e.debitAmount;
             pTotal[row] += net;
-            // Entries the sales tool's own figure already carries are not
-            // part of the bridge. On the cost row that means a sales
-            // document AND one of the accounts the cost figure reads;
-            // a sales document posting anywhere else on the cost accounts
-            // (expected cost, revaluation, adjustment) stays on the
-            // ledger side where it belongs.
             const fromSalesDoc = docNos[row].has(e.documentNumber);
-            const itemCost = row !== "cogs" || SRECON_ITEM_COST_ACCTS.has(e.accountNumber);
-            if (fromSalesDoc && itemCost) {
+            if (fromSalesDoc) {
                 counted[row] += net;
                 countedByAcct[row].set(e.accountNumber, (countedByAcct[row].get(e.accountNumber) || 0) + net);
                 continue;
@@ -15707,16 +15653,104 @@ function sreconCompute(grossSales, grossGp) {
             const m = yellowRows[row];
             const r = m.get(k) || { acct: e.accountNumber, type: e.documentType || "", entries: 0,
                                     amount: 0, docs: new Map(),
-                                    why: sreconYellowWhy(fromSalesDoc && row === "cogs" ? "__salesdoc__" : e.documentType, row) };
+                                    why: sreconYellowWhy(e.documentType, row) };
             r.entries++; r.amount += net;
             r.docs.set(e.documentNumber, (r.docs.get(e.documentNumber) || 0) + net);
             m.set(k, r);
         }
     }
+    // ---- COST ROW, from Business Central's ledger-entry ↔ value-entry link ----
+    const veDateField = state.veDateField || "postingDate";
+    const veHeld = !!(state.valueEntries && state.valueEntries.length);
+    const costLinkOk = src.ok && src.hasLinks && veHeld;
+    const cost = { ledgerFromSales: 0, veSide: 0, unknownLinks: 0 };
+    if (src.ok) for (const e of src.entries) if (SRECON_COGS_ACCTS.has(e.accountNumber)) pTotal.cogs += e.debitAmount - e.creditAmount;
+    if (costLinkOk) {
+        const veIdx = sreconVeIndex();
+        const actual   = v => -(num(v.costAmount) + num(v.costAmountNonInv));
+        const expected = v => -num(v.costAmountExpected);
+        const addY = (acct, cat, docNo, amt, why) => {
+            if (Math.abs(amt) < 0.000001) return;
+            yellow.cogs += amt; yEntries.cogs++;
+            const k = acct + "|" + cat;
+            const r = yellowRows.cogs.get(k) || { acct, type: cat, entries: 0, amount: 0, docs: new Map(), why };
+            r.entries++; r.amount += amt;
+            r.docs.set(docNo, (r.docs.get(docNo) || 0) + amt);
+            yellowRows.cogs.set(k, r);
+        };
+        // 1. Split every cost-account entry into the part the sales tool's
+        //    value entries created and everything else. A ledger entry shared
+        //    by several value entries is split in proportion to what each
+        //    posted.
+        const linkedSale = new Map();   // value entry no -> the cost entries it created [{ acct, doc, net }]
+        for (const e of src.entries) {
+            if (!SRECON_COGS_ACCTS.has(e.accountNumber)) continue;
+            const net = e.debitAmount - e.creditAmount;
+            const vs = e.valueEntries;
+            if (!vs || !vs.length) {
+                addY(e.accountNumber, e.documentType || "", e.documentNumber, net, sreconYellowWhy(e.documentType, "cogs"));
+                continue;
+            }
+            let saleAmt = 0, allAmt = 0, anySale = false, anyOther = false, otherType = "";
+            for (const n of vs) {
+                const v = veIdx.get(Number(n));
+                if (!v) { cost.unknownLinks++; anyOther = true; continue; }
+                const a = actual(v) + expected(v); allAmt += a;
+                if (isSalesValueEntry(v)) {
+                    saleAmt += a; anySale = true;
+                    const list = linkedSale.get(Number(n)) || [];
+                    list.push({ acct: e.accountNumber, doc: e.documentNumber, net });
+                    linkedSale.set(Number(n), list);
+                } else { anyOther = true; if (!otherType) otherType = v.valueType || ""; }
+            }
+            const share = !anySale ? 0 : !anyOther ? 1 : (Math.abs(allAmt) > 0.005 ? saleAmt / allAmt : 0);
+            cost.ledgerFromSales += net * share;
+            addY(e.accountNumber, "Inventory, not a sale" + (otherType ? " · " + otherType : ""), e.documentNumber, net * (1 - share),
+                 "Posted by an inventory transaction that is not a sale: a purchase receipt, a stock adjustment, or a revaluation of stock still on hand.");
+        }
+        // 2. The value-entry side of those same postings.
+        // For the drill-down only: show each amount against the cost entry
+        // it actually posted to (an invoiced sale posts its actual cost to
+        // one account and reverses its expected cost on another).
+        const nearest = (list, amt) => list.reduce((b, x) => Math.abs(x.net - amt) < Math.abs(b.net - amt) ? x : b, list[0]);
+        for (const [n, list] of linkedSale) {
+            const v = veIdx.get(n);
+            const exp = expected(v), act = actual(v);
+            cost.veSide += act + exp;
+            if (Math.abs(exp) >= 0.000001) {
+                const w = nearest(list, exp);
+                addY(w.acct, "Expected cost · goods shipped, not invoiced", v.documentNumber || w.doc, exp,
+                     "Expected cost posted when goods ship, and reversed when they are invoiced. The sales tool counts cost only once a sale is invoiced.");
+            }
+            if (!inRange(v[veDateField] || v.postingDate)) {
+                const w = nearest(list, act);
+                addY(w.acct, "Sale dated in another period", v.documentNumber || w.doc, act,
+                     "Cost posted to the ledger in this period for a sale the sales tool dates in another period.");
+            }
+        }
+        // 3. Cost the sales tool counts with no posting on the cost accounts.
+        for (const v of state.valueEntries) {
+            if (!isSalesValueEntry(v)) continue;
+            if (!inRange(v[veDateField] || v.postingDate)) continue;
+            if (linkedSale.has(Number(v.entryNo))) continue;
+            const a = actual(v);
+            if (Math.abs(a) < 0.000001) continue;
+            red.cogs += a;
+            const k = (v.documentNumber || "") + "|" + (v.valueType || "");
+            const r = redRows.cogs.get(k) || { doc: v.documentNumber || "", type: v.valueType ? "Value entry · " + v.valueType : "Value entry",
+                acct: "", amount: 0,
+                why: "In the sales tool's cost, but with no posting on the ledger's cost accounts in this period: posted to another account, or not yet posted to the ledger." };
+            r.amount += a;
+            redRows.cogs.set(k, r);
+        }
+    }
     const usable = src.ok && !entityFilter;
+    const costUsable = usable && costLinkOk;
     const mk = (row, base) => {
-        const result = base + (usable ? yellow[row] : 0) - red[row];
+        const rowUsable = row === "cogs" ? costUsable : usable;
+        const result = base + (rowUsable ? yellow[row] : 0) - red[row];
         return {
+            usable: rowUsable,
             base, yellow: yellow[row], red: red[row], result, pTotal: pTotal[row],
             delta: result - pTotal[row], yEntries: yEntries[row],
             // What the ledger shows for the documents the sales tool has
@@ -15728,10 +15762,16 @@ function sreconCompute(grossSales, grossGp) {
             redRows:    [...redRows[row].values()].sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount)),
         };
     };
-    return {
-        entityFilter, usable, ledgerOk: src.ok, rangeLabel: pnlToolbarRange().label,
+    const out = {
+        entityFilter, usable, ledgerOk: src.ok, costLinkOk, rangeLabel: pnlToolbarRange().label,
         sales: mk("sales", salesBase), cogs: mk("cogs", cogsBase),
     };
+    // The cost row's own independent check: what the ledger booked for the
+    // sales tool's value entries vs what those value entries say they posted.
+    out.cogs.ledgerFromSales = cost.ledgerFromSales;
+    out.cogs.veSide = cost.veSide;
+    out.cogs.unknownLinks = cost.unknownLinks;
+    return out;
 }
 
 // ---- the tiles -----------------------------------------------------
@@ -15751,17 +15791,20 @@ function sreconPaint(grossSales, grossGp) {
         set(id.base, fmtMoneyFull(d.base));
         set(id.baseSub, row === "sales" ? "invoices less returns" : "value entries, returns netted");
 
+        const needLink = row === "cogs" && m.ledgerOk && !m.costLinkOk;
         if (sreconLoading)       { set(id.yellow, "…");   set(id.yellowSub, "loading the ledger"); }
         else if (!m.ledgerOk)    { set(id.yellow, "—");   set(id.yellowSub, "click to load the ledger"); }
+        else if (needLink)       { set(id.yellow, "—");   set(id.yellowSub, "needs the ledger link · click to load"); }
         else if (m.entityFilter) { set(id.yellow, "n/a"); set(id.yellowSub, "carries no branch or customer · clear filters"); }
-        else                     { set(id.yellow, fmtMoneyFull(d.yellow)); set(id.yellowSub, d.yEntries.toLocaleString("en-AU") + " ledger entries · click to drill down"); }
+        else                     { set(id.yellow, fmtMoneyFull(d.yellow)); set(id.yellowSub, d.yEntries.toLocaleString("en-AU") + " ledger postings · click to drill down"); }
 
         set(id.red, fmtMoneyFull(d.red));
-        set(id.redSub, d.redRows.length ? d.redRows.length + " document lines · click to drill down" : "none in this range");
+        if (needLink && !sreconLoading) { set(id.red, "—"); set(id.redSub, "needs the ledger link"); }
+        else set(id.redSub, d.redRows.length ? d.redRows.length + (row === "cogs" ? " documents" : " document lines") + " · click to drill down" : "none in this range");
 
-        if (!m.usable) {
+        if (!d.usable) {
             set(id.result, "—");
-            set(id.resultSub, sreconLoading ? "loading the ledger" : !m.ledgerOk ? "needs the ledger" : "needs all filters cleared");
+            set(id.resultSub, sreconLoading ? "loading the ledger" : !m.ledgerOk ? "needs the ledger" : needLink ? "needs the ledger link" : "needs all filters cleared");
         } else {
             set(id.result, fmtMoneyFull(d.result));
             const ok = Math.abs(d.delta) < 0.005;
@@ -15776,8 +15819,8 @@ function sreconPaint(grossSales, grossGp) {
 const SRECON_TITLES = {
     "sales|yellow": "In the ledger's revenue accounts, not a sales document",
     "sales|red":    "A sales document, not in the ledger's revenue accounts",
-    "cogs|yellow":  "In the ledger's cost-of-goods-sold accounts, not in the sales tool's cost",
-    "cogs|red":     "In the sales tool's cost figure, but not in the ledger's cost accounts",
+    "cogs|yellow":  "In the ledger's cost accounts, not created by the cost the sales tool counts",
+    "cogs|red":     "In the sales tool's cost, with no posting on the ledger's cost accounts",
 };
 function sreconRenderPanel() {
     const panel  = document.getElementById("srPanel");
@@ -15825,15 +15868,22 @@ function sreconRenderPanel() {
             showNotice("The ledger could not be loaded: " + sreconError, true);
             tbody.innerHTML = ""; return;
         }
-        if (!m.ledgerOk) {
-            showNotice("The general ledger is not held for " + m.rangeLabel + ". It loads with Load sales and with Fast lookup; use the button for a range outside that.", true);
+        if (!m.ledgerOk || (row === "cogs" && !m.costLinkOk)) {
+            showNotice(!m.ledgerOk
+                ? "The general ledger is not held for " + m.rangeLabel + ". It loads with Load sales and with Fast lookup; use the button for a range outside that."
+                : "The cost row needs the link between ledger entries and value entries, which this data does not carry (an older snapshot, or the P&L tab's ledger). Load it with the button.", true);
             tbody.innerHTML = ""; return;
         }
         if (m.entityFilter) {
             showNotice("A branch, salesperson, customer, item or status filter is active. These entries carry none of those, so they cannot be shown for a filtered slice. Clear the filters to see them.", false);
             tbody.innerHTML = ""; return;
         }
-        if (Math.abs(d.delta) >= 0.005) {
+        if (row === "cogs" && Math.abs(d.delta) >= 0.005) {
+            showNotice("This row is out by " + fmtMoneyFull(d.delta) + ". For the postings the sales tool's value entries created, the ledger booked "
+                + fmtMoneyFull(d.ledgerFromSales) + " and the value entries say " + fmtMoneyFull(d.veSide) + "."
+                + (d.unknownLinks ? " " + d.unknownLinks + " ledger links point to value entries outside the loaded period; a wider Load sales would include them." : "")
+                + " If the loaded sales data is older than the ledger (a snapshot from earlier today), reload and it should close.", false);
+        } else if (Math.abs(d.delta) >= 0.005) {
             showNotice("This row is out by " + fmtMoneyFull(d.delta) + ". The ledger shows " + fmtMoneyFull(d.counted)
                 + " against the documents the sales tool has already counted, where it should show " + fmtMoneyFull(d.base - d.red)
                 + ". The accounts carrying that, largest first: "
@@ -15857,12 +15907,16 @@ function sreconRenderPanel() {
                  + '<td>' + txt + (docs.length > 6 ? ' <span style="opacity:0.6;">' + (open ? "▴ show fewer" : "▾ show all " + docs.length) + '</span>' : '') + '</td>'
                  + '<td class="num ' + (r.amount >= 0 ? "pos" : "neg") + '">' + fmtMoneyFull(r.amount) + '</td>'
                  + '<td>' + escapeHtml(r.why) + '</td></tr>';
-        }).join("") : '<tr><td colspan="5" class="empty">No non-sales entries on these accounts in this range.</td></tr>')
+        }).join("") : '<tr><td colspan="5" class="empty">Nothing on these accounts in this range.</td></tr>')
         + total("Total in the ledger, not in the " + (row === "cogs" ? "cost figure" : "sales figure"), d.yellow);
     } else {
-        if (meta) meta.textContent = d.redRows.length + " document lines · " + fmtMoneyFull(d.red);
+        if (meta) meta.textContent = d.redRows.length + (row === "cogs" ? " documents · " : " document lines · ") + fmtMoneyFull(d.red);
+        if (row === "cogs" && !m.costLinkOk) {
+            showNotice("The cost row needs the link between ledger entries and value entries, which this data does not carry. Load it with the button.", true);
+            thead.innerHTML = ""; tbody.innerHTML = ""; return;
+        }
         showNotice("", false);
-        thead.innerHTML = '<tr><th>Document</th><th>Document type</th><th>G/L account the line posted to</th><th class="num">$</th><th>What it is</th></tr>';
+        thead.innerHTML = '<tr><th>Document</th><th>' + (row === "cogs" ? "Value entry type" : "Document type") + '</th><th>' + (row === "cogs" ? "G/L account" : "G/L account the line posted to") + '</th><th class="num">$</th><th>What it is</th></tr>';
         tbody.innerHTML = (d.redRows.length ? d.redRows.map(r =>
             '<tr><td style="white-space:nowrap;">' + escapeHtml(r.doc || "")
           + (r.doc ? pnlWiiseLink("Document No.", r.doc, "Open document " + r.doc + " entries in Wiise") : "") + '</td>'
@@ -15871,8 +15925,8 @@ function sreconRenderPanel() {
           + (r.acct ? pnlWiiseLink("G/L Account No.", r.acct, "Open account " + r.acct + " entries in Wiise") : "") + '</td>'
           + '<td class="num ' + (r.amount >= 0 ? "pos" : "neg") + '">' + fmtMoneyFull(r.amount) + '</td>'
           + '<td>' + escapeHtml(r.why) + '</td></tr>').join("")
-          : '<tr><td colspan="5" class="empty">No sales-document lines are classified differently by the ledger in this range.</td></tr>')
-        + total("Total sales documents the ledger treats differently", d.red);
+          : '<tr><td colspan="5" class="empty">' + (row === "cogs" ? "Everything the sales tool counts as cost is posted to the ledger's cost accounts in this range." : "No sales-document lines are classified differently by the ledger in this range.") + '</td></tr>')
+        + total(row === "cogs" ? "Total in the sales tool's cost, not in the ledger's cost accounts" : "Total sales documents the ledger treats differently", d.red);
     }
 }
 function sreconToggle(row, side) {
@@ -16391,7 +16445,7 @@ async function handleLoad() {
     btn.disabled = true;
     btn.textContent = "Loading…";
     try {
-        const [locs, items, customers, invoices, iles, creditMemos, shipments, returnReceipts, quotes, quoteExtras, blanketOrders, valueEntries, salesOrders, salesOrderOutstanding, _residentialLookup, _quoteArchive, glRecon, glAccounts] = await Promise.all([
+        const [locs, items, customers, invoices, iles, creditMemos, shipments, returnReceipts, quotes, quoteExtras, blanketOrders, valueEntries, salesOrders, salesOrderOutstanding, _residentialLookup, _quoteArchive] = await Promise.all([
             fetchLocations(),
             fetchItems(),
             fetchCustomers(),
@@ -16408,22 +16462,14 @@ async function handleLoad() {
             fetchSalesOrderOutstandingLines(),
             fetchResidentialDocLookup(),
             fetchSalesQuoteArchive(from, to),
-            // The reconciliation rows' ledger slice, pulled alongside the
-            // sales data so the figures are there without a second wait.
-            // Only for the accounts that need it, and a failure (no ledger
-            // permission, a throttle) must never take the sales load down.
-            sreconIsViewer()
-                ? fetchGLReconEntries(from, to).catch(e => { console.warn("[Ledger] slice failed:", e.message); return null; })
-                : Promise.resolve(null),
-            // Account names ride with the slice: the cost row recognises an
-            // expected-cost clearing account by its name.
-            sreconIsViewer()
-                ? fetchGLReconAccountNames().catch(e => { console.warn("[Ledger] account names failed:", e.message); return null; })
-                : Promise.resolve(null),
         ]);
         applyLoadedData({ locs, items, customers, invoices, iles, creditMemos, shipments, returnReceipts,
                          quotes, quoteExtras, blanketOrders, valueEntries, salesOrders, salesOrderOutstanding,
-                         glRecon, glAccounts, from, to });
+                         from, to });
+        // The reconciliation rows' ledger slice and its links come in the
+        // background once the sales figures are on screen — only for the
+        // people who can see those rows.
+        if (sreconIsViewer()) sreconBackgroundLoad(from, to);
     } catch (err) {
         alert("Load failed: " + (err.message || err));
     } finally {

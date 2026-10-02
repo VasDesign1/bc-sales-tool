@@ -200,7 +200,11 @@ async function bcDiscoverValueEntryEntity() {
     const DOC_DATE   = [/^documentDate$/i, /^Document_Date$/i, /^document_date$/i];
     const QTY_INVD   = [/^invoicedQuantity$/i, /^Invoiced_Quantity$/i, /^invoiced_quantity$/i];
     const ENTRY_TYPE = [/^itemLedgerEntryType$/i, /^Item_Ledger_Entry_Type$/i];
-    const candidates = named.length ? named : allSets;
+    // Prefer a service that also carries the value-entry type (Direct Cost,
+    // Revaluation, Rounding...): same rows, but the drill-down can say what
+    // each one is in Wiise's own words.
+    const hasType = n => (md.entityTypes[md.entitySets[n]] || []).includes("Entry_Type");
+    const candidates = (named.length ? named : allSets).slice().sort((a, b) => hasType(b) - hasType(a));
     for (const candidate of candidates) {
         const typeName = md.entitySets[candidate];
         const fields = md.entityTypes[typeName] || [];
@@ -224,6 +228,8 @@ async function bcDiscoverValueEntryEntity() {
             fQtyInvd:   bcFindField(fields, QTY_INVD),
             fEntryType: bcFindField(fields, ENTRY_TYPE),
             fEntryNo:   bcFindField(fields, [/^entryNumber$/i, /^Entry_No_?$/i]),
+            fCostExp:   bcFindField(fields, [/^costAmountExpected$/i, /^Cost_Amount_Expected_?$/i]),
+            fValueType: bcFindField(fields, [/^Entry_Type$/]),
         };
     }
     return null;
@@ -277,6 +283,8 @@ async function fetchValueEntries(fromISO, toISO) {
             invoicedQty:      info.fQtyInvd   ? num(r[info.fQtyInvd]) : 0,
             entryType:        info.fEntryType ? r[info.fEntryType] : "",
             entryNo:          info.fEntryNo   ? r[info.fEntryNo]   : null,
+            costAmountExpected: info.fCostExp ? num(r[info.fCostExp]) : 0,
+            valueType:        info.fValueType ? r[info.fValueType] : "",
         }));
         state.veFieldMap = info;
         state.veDiagnostic = "Source: OData " + info.entity + " · " + rows.length + " rows.";
@@ -1042,27 +1050,68 @@ async function fetchSalesQuoteExtras(fromISO, toISO) {
 
 
 // ============================================================
+// P&L MAPPING TABLE — the single source of truth
+// ============================================================
+// Shared by the browser tool (P&L tab, Overview reconciliation rows) and
+// the snapshot robot. Add or move an account here and every consumer picks
+// it up; there is no second copy to keep in step.
+// ---- The mapping file (VAS_Account_Mapping_Table, 2026-09-24) ----
+// P&L Bucket per G/L code, and BS Grouping for balance-sheet codes.
+// Synthetic FS-/NEW-/SID- rows in the file do not exist in Wiise and are
+// left out. Update here when accounts are added in Wiise.
+const PNL_MAP_BUCKETS = {
+    "Total Revenue (net)": ["4010", "4015", "4020", "4030", "4050", "4055", "4060", "4065"],
+    "Cost of Goods Sold": ["5010", "5020", "5030", "5125", "5126", "5130", "5131", "5135", "5140", "5145", "5150", "5155", "5160", "5165", "5170", "5175", "5180", "5195", "5196"],
+    "Direct Labour": ["5205", "5206", "5210", "5220", "5230", "5235", "5240", "5245", "5250", "5255", "5256", "5260"],
+    "Marketing & Promotion": ["6010", "6015", "6020", "6025"],
+    "ICT": ["6055", "6060", "6065", "6070"],
+    "Vehicle Expenses": ["6105", "6110", "6115", "6120", "6125"],
+    "Staff - Other Expenses": ["6155", "6160", "6165", "6170", "6175"],
+    "Amortisation & Depreciation": ["6210"],
+    "Insurance Expenses": ["6260"],
+    "Financing & Leasing": ["6285", "6315", "6319"],
+    "Bank & Merchant Fees": ["6305", "6309", "6310"],
+    "Property Expenses": ["6335", "6340", "6345", "6350", "6355", "6360", "6365", "6370", "6375", "6380"],
+    "Other Expenses": ["6405", "6410", "6415", "6420", "6425", "6430", "6435", "6440", "6445", "6450", "6460", "6465", "6470", "6475", "6477", "6480", "6488"],
+    "Other Income": ["7005", "7010", "7025", "7030", "9999"],
+    "Non-Operating Costs": ["8005", "8015", "8020", "8026"]
+};
+const PNL_MAP_BS = {
+    "Cash and Cash Equivalents": ["1111", "1116", "1155", "1160"],
+    "Trade and Other Receivables": ["1115", "1205", "1220", "1474", "2190"],
+    "Trade and Other Payables": ["1140", "1150", "2110", "2120", "2146", "2147", "2160", "2165", "2166", "2170", "2175", "2180", "2195", "2212", "2215", "2220", "2225", "2226", "2255", "2280", "2285", "23999"],
+    "Inventory": ["1300", "1310", "1320", "1330", "1340", "1350", "1360", "1475"],
+    "Prepayments": ["1450"],
+    "Intangibles": ["1460"],
+    "Low Value Pool": ["1560"],
+    "Less Accumulated Depreciation on Low Value Pool": ["1565"],
+    "In-house Software Pool": ["1567", "1680", "1685"],
+    "Plant and Equipment at Cost": ["1570", "1580", "1590", "1670"],
+    "Accumulated Depreciation of Plant and Equipment": ["1575", "1585", "1595", "1650"],
+    "Vehicles at Cost": ["1600"],
+    "Accumulated Depreciation of Vehicles": ["1605"],
+    "Buildings at Cost": ["1610", "1613"],
+    "Accumulated Depreciation of Buildings": ["1615"],
+    "Other Assets": ["1720", "2430", "2435"],
+    "Financial Liabilities": ["2140", "2145", "2230", "2231", "2236", "2410", "2420", "2422", "3160"],
+    "Equity": ["3100", "3200"]
+};
+
+// ============================================================
 // GENERAL LEDGER — reconciliation slice
 // ============================================================
-// The Overview's two reconciliation rows bridge the sales tool's figures
-// to the P&L. They only ever look at the revenue and cost-of-goods-sold
-// accounts, so this pulls those and nothing else: on this tenant that is
-// roughly half a month's ledger instead of all of it, which is what makes
-// it cheap enough to ride along with a sales load and a snapshot.
-// KEEP IN SYNC with PNL_MAP_BUCKETS in index.html ("Total Revenue (net)"
-// and "Cost of Goods Sold"); index.html logs a warning if they drift.
-const GL_RECON_REVENUE = ["4010", "4015", "4020", "4030", "4050", "4055", "4060", "4065"];
-const GL_RECON_COGS    = ["5010", "5020", "5030", "5125", "5126", "5130", "5131", "5135", "5140",
-                          "5145", "5150", "5155", "5160", "5165", "5170", "5175", "5180", "5195", "5196"];
+// The Overview's two reconciliation rows bridge the sales tool's figures to
+// the P&L. They look at the mapping's revenue and cost-of-goods-sold
+// accounts, whatever accounts those are, so the slice is defined by the
+// mapping table above and nothing else.
+const GL_RECON_REVENUE  = PNL_MAP_BUCKETS["Total Revenue (net)"];
+const GL_RECON_COGS     = PNL_MAP_BUCKETS["Cost of Goods Sold"];
 const GL_RECON_ACCOUNTS = GL_RECON_REVENUE.concat(GL_RECON_COGS);
-// Rows travel as compact arrays, not objects: a 12-month snapshot holds
-// several hundred thousand of them and the key names would dwarf the data.
-const GL_RECON_COLS = ["postingDate", "documentNumber", "documentType", "accountNumber", "debitAmount", "creditAmount"];
-// Expected-cost clearing accounts are recognised by their name, so the
-// names have to travel with the entries — every path that supplies ledger
-// rows must supply these too, or the cost row silently stops balancing.
-// This list is only a backstop for when no name is available at all.
-const GL_RECON_INTERIM_FALLBACK = ["5195"];
+// Rows travel as compact arrays: a 12-month snapshot holds hundreds of
+// thousands of them and key names would dwarf the data. valueEntries is the
+// list of value-entry numbers that created a cost entry (0 when none, and
+// always 0 on revenue rows).
+const GL_RECON_COLS = ["postingDate", "documentNumber", "documentType", "accountNumber", "debitAmount", "creditAmount", "entryNumber", "valueEntries"];
 async function fetchGLReconAccountNames() {
     const compId = await bcGetCompanyId();
     const rows = await bcFetchAll(BC_API_URL + "/companies(" + compId + ")/accounts?$select=number,displayName", "Chart of accounts (names)");
@@ -1074,7 +1123,7 @@ async function fetchGLReconEntries(fromISO, toISO) {
     const dateFilter = "postingDate ge " + fromISO + " and postingDate le " + toISO;
     const acctFilter = "(" + GL_RECON_ACCOUNTS.map(a => "accountNumber eq '" + a + "'").join(" or ") + ")";
     const base = BC_API_URL + "/companies(" + compId + ")/generalLedgerEntries"
-               + "?$select=postingDate,documentNumber,documentType,accountNumber,debitAmount,creditAmount"
+               + "?$select=entryNumber,postingDate,documentNumber,documentType,accountNumber,debitAmount,creditAmount"
                + "&$orderby=entryNumber&$filter=";
     // No $top anywhere in this file — BC treats it as a total cap.
     const rows = await bcFetchAll(base + encodeURIComponent(dateFilter + " and " + acctFilter), "Ledger (reconciliation accounts)");
@@ -1085,9 +1134,75 @@ async function fetchGLReconEntries(fromISO, toISO) {
         String(e.accountNumber || ""),
         num(e.debitAmount),
         num(e.creditAmount),
+        Number(e.entryNumber) || 0,
+        0,
     ]);
 }
 
+// ---- the ledger-entry <-> value-entry link (page 5823 "G/L - Item Ledger Relation")
+// Business Central records which value entry created each ledger entry. The
+// cost row is built on that record, so it needs no account lists and no
+// guessing from document numbers. Published in Wiise as a web service and
+// found by its fields, whatever it is named.
+async function bcDiscoverGLItemRelation() {
+    const md = await bcGetODataMetadata();
+    for (const set of Object.keys(md.entitySets)) {
+        const fields = md.entityTypes[md.entitySets[set]] || [];
+        if (fields.includes("G_L_Entry_No") && fields.includes("Value_Entry_No")) return { entity: set, fields };
+    }
+    return null;
+}
+// $select has been seen to drop $filter on some of this tenant's OData
+// objects, which would turn a range request into a whole-table download.
+// Probe once with a tiny range and use $select only if it behaves.
+let glRelationSelectOk = null;
+async function glRelationProbeSelect(url, lo) {
+    if (glRelationSelectOk !== null) return glRelationSelectOk;
+    const filter = "G_L_Entry_No ge " + lo + " and G_L_Entry_No le " + (lo + 50);
+    try {
+        const withSel = await bcFetchAll(url + "?$filter=" + encodeURIComponent(filter) + "&$select=G_L_Entry_No,Value_Entry_No", "Ledger links (probe)");
+        const plain   = await bcFetchAll(url + "?$filter=" + encodeURIComponent(filter), "Ledger links (probe)");
+        const inRange = (withSel || []).every(r => Number(r.G_L_Entry_No) >= lo && Number(r.G_L_Entry_No) <= lo + 50);
+        glRelationSelectOk = inRange && (withSel || []).length === (plain || []).length;
+    } catch (e) { glRelationSelectOk = false; }
+    return glRelationSelectOk;
+}
+// For every cost entry in the rows, attach the value-entry numbers that
+// created it (row[7]). Fetched in entry-number windows so memory stays flat
+// on a 12-month pull, skipping stretches that hold no cost entries.
+async function attachGLReconLinks(rows) {
+    const cogs = new Set(GL_RECON_COGS);
+    const nos = rows.filter(r => cogs.has(r[3])).map(r => r[6]).filter(n => n > 0).sort((a, b) => a - b);
+    if (!nos.length) return rows;
+    const rel = await bcDiscoverGLItemRelation();
+    if (!rel) throw new Error("The ledger-entry link (page 5823 G/L - Item Ledger Relation) is not published as a web service");
+    const coName = encodeURIComponent(await bcGetCompanyInternalName());
+    const url = BC_ODATA_URL + "/Company('" + coName + "')/" + rel.entity;
+    const sel = (await glRelationProbeSelect(url, nos[0])) ? "&$select=G_L_Entry_No,Value_Entry_No" : "";
+    const want = new Set(nos);
+    const links = new Map();
+    const WINDOW = 50000;
+    let i = 0;
+    while (i < nos.length) {
+        const lo = nos[i], hi = lo + WINDOW - 1;
+        const filter = "G_L_Entry_No ge " + lo + " and G_L_Entry_No le " + hi;
+        const got = await bcFetchAll(url + "?$filter=" + encodeURIComponent(filter) + sel, "Ledger links");
+        for (const r of (got || [])) {
+            const g = Number(r.G_L_Entry_No);
+            if (!want.has(g)) continue;
+            const arr = links.get(g) || [];
+            arr.push(Number(r.Value_Entry_No));
+            links.set(g, arr);
+        }
+        while (i < nos.length && nos[i] <= hi) i++;
+    }
+    for (const r of rows) if (cogs.has(r[3])) r[7] = links.get(r[6]) || 0;
+    return rows;
+}
+// The whole slice the reconciliation rows need: entries plus their links.
+async function fetchGLReconSlice(fromISO, toISO) {
+    return attachGLReconLinks(await fetchGLReconEntries(fromISO, toISO));
+}
 
 // Node (snapshot Action) entry point. Classic-script browsers skip this.
 if (typeof module !== "undefined" && module.exports) {
@@ -1102,7 +1217,8 @@ if (typeof module !== "undefined" && module.exports) {
         fetchSalesOrderOutstandingLines, fetchSalesShipments, fetchSalesReturnReceipts,
         fetchSalesQuotes, fetchBlanketSalesOrders, fetchResidentialDocLookup,
         fetchSalesQuoteArchive, fetchSalesQuoteExtras,
-        fetchGLReconEntries, fetchGLReconAccountNames,
-        GL_RECON_REVENUE, GL_RECON_COGS, GL_RECON_ACCOUNTS, GL_RECON_COLS, GL_RECON_INTERIM_FALLBACK,
+        fetchGLReconEntries, fetchGLReconAccountNames, fetchGLReconSlice, attachGLReconLinks, bcDiscoverGLItemRelation,
+        PNL_MAP_BUCKETS, PNL_MAP_BS,
+        GL_RECON_REVENUE, GL_RECON_COGS, GL_RECON_ACCOUNTS, GL_RECON_COLS,
     };
 }

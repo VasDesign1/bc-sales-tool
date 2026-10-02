@@ -144,7 +144,7 @@ function isoAddDays(iso, days) {
         F.fetchSalesOrderOutstandingLines(),
         F.fetchResidentialDocLookup(),
         F.fetchSalesQuoteArchive(from, to),
-        F.fetchGLReconEntries(from, to).catch(e => {
+        F.fetchGLReconSlice(from, to).catch(e => {
             // Never fail a whole snapshot over the ledger slice: the rows
             // that use it fall back to fetching on demand.
             console.warn("  [Ledger] reconciliation slice failed: " + e.message);
@@ -160,7 +160,8 @@ function isoAddDays(iso, days) {
     console.log("Fetched in " + ((Date.now() - t0) / 1000).toFixed(1) + "s: "
         + invoices.length + " invoices · " + (valueEntries || []).length + " VE · "
         + (iles || []).length + " ILE · " + (quotes || []).length + " quotes · "
-        + (glRecon || []).length + " ledger rows · " + (glAccounts || []).length + " accounts");
+        + (glRecon || []).length + " ledger rows (" + (glRecon || []).filter(r => Array.isArray(r[7])).length + " cost rows linked) · "
+        + (glAccounts || []).length + " accounts");
 
     // ---- Integrity checks (fail loudly rather than snapshot bad data) ----
     // 1. VE date filter actually applied? (this tenant has form — $select
