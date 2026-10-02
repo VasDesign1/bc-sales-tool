@@ -2040,6 +2040,12 @@
                         <div class="kpi k-cust" id="srRedTile" style="cursor:pointer;" title="Click to see the documents and accounts. Sales invoice and credit memo lines counted in Adjusted Sales that do NOT post to revenue accounts 4010 to 4065."><div class="label">− Red <span style="font-weight:400; opacity:0.6;">· a sales document, not in ledger revenue</span></div><div class="value" id="srRed">—</div><div class="sub" id="srRedSub">click to drill down</div></div>
                         <div class="kpi k-rev" title="Adjusted Sales + Yellow − Red. This is what the P&amp;L reports as Total Revenue (net)."><div class="label">= Result</div><div class="value" id="srResult">—</div><div class="sub" id="srResultSub">P&amp;L total revenue (net)</div></div>
                     </div>
+                    <div class="kpi-row" style="grid-template-columns: repeat(4, 1fr);" title="How the Adjusted Cost figure above becomes the P&amp;L's Cost of Goods Sold. Direct Labour is outside both definitions and is not included. Click Yellow or Red to see the accounts and documents behind them.">
+                        <div class="kpi k-inv" title="The item cost of what was sold, from value entries with returns netted — exactly as the Adjusted Cost tile above."><div class="label">Adjusted Cost</div><div class="value" id="srcAdj">—</div><div class="sub" id="srcAdjSub">sales tool</div></div>
+                        <div class="kpi k-avg" id="srcYellowTile" style="cursor:pointer;" title="Click to see the accounts and documents. General ledger entries on cost-of-goods-sold accounts 5010 to 5196 whose document is NOT a posted sales invoice or credit memo: purchase invoices, freight, item journals, cost adjustments."><div class="label">+ Yellow <span style="font-weight:400; opacity:0.6;">· in the ledger, not a sales document</span></div><div class="value" id="srcYellow">—</div><div class="sub" id="srcYellowSub">click to drill down</div></div>
+                        <div class="kpi k-cust" id="srcRedTile" style="cursor:pointer;" title="Click to see the documents and accounts. Sales invoice and credit memo lines that the ledger puts into cost of goods sold but the sales tool's cost figure never sees."><div class="label">− Red <span style="font-weight:400; opacity:0.6;">· a sales document the ledger costs differently</span></div><div class="value" id="srcRed">—</div><div class="sub" id="srcRedSub">click to drill down</div></div>
+                        <div class="kpi k-rev" title="Adjusted Cost + Yellow − Red. This is what the P&amp;L reports as Cost of Goods Sold."><div class="label">= Result</div><div class="value" id="srcResult">—</div><div class="sub" id="srcResultSub">P&amp;L cost of goods sold</div></div>
+                    </div>
                     <div class="panel" id="srPanel" style="display:none; margin-bottom:16px;">
                         <div class="panel-header">
                             <h2 id="srPanelTitle">—</h2>
@@ -8909,7 +8915,7 @@ function renderOverview() {
     document.getElementById("kpiQty").textContent      = fmtInt(totalQty);
     paintAdjustedKpis("kpi", totalRev, totalGp);
     paintPipelineKpis();
-    sreconPaint(totalRev);   // Overview sales-reconciliation row (SRECON_VIEWERS only; no-op otherwise)
+    sreconPaint(totalRev, totalGp);   // Overview reconciliation rows (SRECON_VIEWERS only; no-op otherwise)
 
     renderFilterChips();
     renderTrendChart();
@@ -15407,38 +15413,49 @@ function pnlExportCsv() {
 }
 
 // ============================================================
-// OVERVIEW — SALES RECONCILIATION TO THE P&L  (SRECON_VIEWERS only)
+// OVERVIEW — RECONCILIATION ROWS TO THE P&L  (SRECON_VIEWERS only)
 // ============================================================
-// A fourth KPI row under the Overview pipeline tiles that bridges the
-// Adjusted Sales figure to the P&L's Total Revenue (net), using the
-// layout Finance asked for (reconciled to the cent for August 2026):
+// Two KPI rows under the Overview pipeline tiles that bridge the sales
+// tool's figures to the P&L, in the layout Finance asked for (reconciled
+// to the cent for August 2026):
 //
-//   Adjusted Sales  +  Yellow  −  Red  =  P&L Total Revenue (net)
+//   Adjusted Sales + Yellow − Red = P&L Total Revenue (net)
+//   Adjusted Cost  + Yellow − Red = P&L Cost of Goods Sold
 //
-//   Yellow = general ledger entries on the revenue accounts (4010–4065)
-//            whose document is NOT a posted sales invoice / credit memo:
-//            purchase invoices, vendor payments, customer receipts and
-//            journals. Needs the ledger loaded.
-//   Red    = sales invoice / credit memo line amounts that ARE inside
-//            Adjusted Sales but do NOT post to a revenue account —
-//            e.g. a credit-memo line coded straight to a cost account,
-//            or a line on 7005 rent. Read from the documents, so it
-//            works without the ledger.
+// One definition drives both rows:
+//   Yellow = general ledger entries on that row's accounts whose document
+//            is NOT a posted sales invoice / credit memo — purchase
+//            invoices, vendor payments, customer receipts, journals.
+//   Red    = (what the sales tool makes of a sales-document line)
+//            − (what the ledger makes of the same line).
+//            On the sales row that is a credit-memo line coded to a cost
+//            account: the tool treats it as a return against sales, the
+//            ledger does not treat it as revenue at all. On the cost row
+//            the same line is the mirror image: the ledger adds it to
+//            cost of goods sold, the tool never sees it as cost.
 //
-// Clicking Yellow or Red opens a panel with the accounts, document types
-// and documents behind the figure. Read-only: no existing tile, chart,
-// table or tab is affected by any of this.
+// Clicking any Yellow or Red tile opens a panel with the accounts,
+// document types and documents behind the figure, each linked through to
+// Wiise, and silently fetches the ledger if it is not already held.
+// Read-only and additive: no existing tile, chart, table or tab changes.
 const SRECON_REV_ACCTS  = new Set(PNL_MAP_BUCKETS["Total Revenue (net)"]);
 const SRECON_COGS_ACCTS = new Set(PNL_MAP_BUCKETS["Cost of Goods Sold"]);
-let sreconOpen = null;                  // null | "yellow" | "red"
-let sreconExpanded = new Set();         // group keys expanded in the yellow panel
-let sreconLast = null;                  // last computed result, for the panel
-let sreconLoading = false;              // a ledger fetch kicked off by opening Yellow is in flight
-let sreconTriedRange = "";              // range we already auto-loaded for, so a refusal doesn't loop
+// Ledger entries for just these accounts, fetched on demand and kept apart
+// from state.gl so the P&L tab's own statement is never built from a
+// partial pull.
+state.srgl = { entries: [], windows: [], loadedAt: null };
+let sreconOpen = null;            // null | { row: "sales"|"cogs", side: "yellow"|"red" }
+let sreconExpanded = new Set();   // "row|side|account|docType" groups expanded in a Yellow panel
+let sreconLast = null;            // last computed result, for the panel
+let sreconLoading = false;        // a silent ledger fetch is in flight
+let sreconTried = "";             // range already attempted, so a failure doesn't loop
+let sreconError = "";             // last fetch error, surfaced with a retry button
+
 function sreconIsViewer() { return SRECON_VIEWERS.has(currentSignInName()); }
+function sreconTodayIso() { return new Date().toISOString().slice(0, 10); }
 // A document line posts to a revenue account unless it is an explicit
-// G/L-account line pointing somewhere else. Item / Resource / Charge
-// lines all land on the sales accounts.
+// G/L-account line pointing somewhere else. Item / Resource / Charge lines
+// all land on the sales accounts.
 function sreconLineAccount(ln) {
     return (ln.lineType || "") === "Account" ? String(ln.lineObjectNumber || "") : "";
 }
@@ -15448,66 +15465,166 @@ function sreconLineIsRevenue(ln) {
     if (t !== "Account") return true;
     return SRECON_REV_ACCTS.has(String(ln.lineObjectNumber || ""));
 }
-function sreconAcctName(no) {
-    const a = state.gl && state.gl.accountsByNo ? state.gl.accountsByNo.get(String(no)) : null;
-    return a && a.displayName ? a.displayName : "";
+function sreconLineIsCogs(ln) {
+    return (ln.lineType || "") === "Account" && SRECON_COGS_ACCTS.has(String(ln.lineObjectNumber || ""));
 }
 function sreconAcctLabel(no) {
-    const n = sreconAcctName(no);
-    return n ? no + " " + n : String(no || "(no account)");
+    const a = state.gl && state.gl.accountsByNo ? state.gl.accountsByNo.get(String(no)) : null;
+    return a && a.displayName ? no + " " + a.displayName : String(no || "(no account)");
 }
-// Plain-English reason, derived from the document type rather than
-// hand-written per month.
-function sreconYellowWhy(docType) {
+function sreconYellowWhy(docType, row) {
+    const where = row === "cogs" ? "a cost-of-goods-sold account" : "a revenue account";
     switch ((docType || "").trim()) {
-        case "Invoice":     return "Purchase invoice posted to a revenue account.";
-        case "Credit Memo": return "Purchase credit memo posted to a revenue account.";
+        case "Invoice":     return "Purchase invoice posted to " + where + ".";
+        case "Credit Memo": return "Purchase credit memo posted to " + where + ".";
         case "Payment":     return "Posted when a payment was applied, not on an invoice, so no sales report carries it.";
         case "Refund":      return "Posted on a refund.";
         case "Reminder":    return "Posted on a reminder.";
         case "Finance Charge Memo": return "Posted on a finance charge memo.";
-        case "":            return "General journal entry.";
+        case "":            return "General journal entry, item journal or cost adjustment.";
         default:            return "Posted on a " + docType + " document.";
     }
 }
-function sreconRedWhy(isCredit, acctNo) {
+function sreconRedWhy(isCredit, acctNo, row) {
     const cost = SRECON_COGS_ACCTS.has(String(acctNo));
+    if (row === "cogs") {
+        return isCredit
+            ? "Credit memo line coded to a cost account. The ledger adds it to cost of goods sold; the sales tool holds it under returns against sales instead, so its cost figure is short by this much."
+            : "Invoice line coded to a cost account. The ledger takes it off cost of goods sold; the sales tool never sees it as cost.";
+    }
     if (cost) return isCredit
-        ? "Credit memo line coded to a cost account. The sales tool counts it as a return against sales; the ledger holds it as cost."
-        : "Invoice line coded to a cost account. The sales tool counts it as sales; the ledger holds it as cost.";
+        ? "Credit memo line coded to a cost account. The sales tool counts it as a return against sales; the ledger counts it as cost, not as revenue."
+        : "Invoice line coded to a cost account. The sales tool counts it as sales; the ledger counts it as cost, not as revenue.";
     return isCredit
         ? "Credit memo line posted outside the gross-profit accounts, so the ledger does not treat it as revenue."
         : "Invoice line posted outside the gross-profit accounts (for example rent or other income), so the ledger does not treat it as revenue.";
 }
-// grossSales is the Overview's own Sales (excl. tax) figure, so the
-// Adjusted Sales shown here is identical to the tile above by construction.
-function sreconCompute(grossSales) {
+
+// ---- ledger source -------------------------------------------------
+// Prefer the P&L tab's full pull when it covers the range; otherwise use
+// the accounts-only pull this row fetches for itself.
+function sreconWindowsCover(windows, from, to) {
+    const ws = (windows || []).slice().sort((a, b) => a.from.localeCompare(b.from));
+    let cursor = from;
+    for (const w of ws) {
+        if (w.to < cursor) continue;
+        if (w.from > cursor) return false;
+        if (w.to >= to) return true;
+        cursor = new Date(new Date(w.to + "T00:00:00").getTime() + 86400000).toISOString().slice(0, 10);
+    }
+    return false;
+}
+function sreconLedgerSource() {
+    const { from, to } = pnlToolbarRange();
+    if (!from || !to) return { entries: [], ok: false };
+    const today = sreconTodayIso();
+    const cap = to < today ? to : today;
+    const skipOpening = pnlPrefs().excludeOpening;
+    if (state.gl && state.gl.loadedAt && sreconWindowsCover(state.gl.windows, from, cap)) {
+        return { entries: pnlEntriesForView(), ok: true };
+    }
+    if (state.srgl.loadedAt && sreconWindowsCover(state.srgl.windows, from, cap)) {
+        const held = skipOpening ? state.srgl.entries.filter(e => !pnlIsOpening(e)) : state.srgl.entries;
+        return { entries: held.filter(e => e.postingDate >= from && e.postingDate <= to), ok: true };
+    }
+    return { entries: [], ok: false };
+}
+// Silent, on-demand fetch of just the 27 accounts these rows need. No
+// confirmation and no alert whatever the range: the panel shows that it is
+// loading and fills in when it lands.
+async function sreconFetchLedger() {
+    const { from, to } = pnlToolbarRange();
+    if (!from || !to || from > to) return;
+    const compId = await bcGetCompanyId();
+    if (!state.gl.accounts.length) {
+        const accts = await bcFetchAll(BC_API_URL + "/companies(" + compId + ")/accounts", "Chart of accounts");
+        state.gl.accounts = accts;
+        state.gl.accountsByNo = new Map(accts.map(a => [String(a.number), a]));
+    }
+    const wanted = [...SRECON_REV_ACCTS, ...SRECON_COGS_ACCTS];
+    const dateFilter = "postingDate ge " + from + " and postingDate le " + to;
+    const acctFilter = "(" + wanted.map(a => "accountNumber eq '" + a + "'").join(" or ") + ")";
+    const base = BC_API_URL + "/companies(" + compId + ")/generalLedgerEntries"
+               + "?$select=entryNumber,postingDate,documentNumber,documentType,accountNumber,description,debitAmount,creditAmount"
+               + "&$orderby=entryNumber&$filter=";
+    let rows;
+    try {
+        rows = await bcFetchAll(base + encodeURIComponent(dateFilter + " and " + acctFilter), "Ledger (reconciliation accounts)");
+    } catch (e) {
+        console.warn("[srecon] account-filtered fetch failed, falling back to the full range", e);
+        rows = await bcFetchAll(base + encodeURIComponent(dateFilter), "Ledger (full range)");
+    }
+    for (const e of rows) {
+        e.postingDate   = (e.postingDate || "").toString().slice(0, 10);
+        e.debitAmount   = num(e.debitAmount);
+        e.creditAmount  = num(e.creditAmount);
+        e.accountNumber = String(e.accountNumber || "");
+        e.documentType  = pnlDecode(e.documentType);
+    }
+    const kept = state.srgl.entries.filter(e => e.postingDate < from || e.postingDate > to);
+    state.srgl.entries = kept.concat(rows);
+    state.srgl.windows = (state.srgl.windows || []).filter(w => w.to < from || w.from > to)
+                            .concat([{ from, to }]).sort((a, b) => a.from.localeCompare(b.from));
+    state.srgl.loadedAt = new Date();
+    console.log("[srecon] loaded", rows.length, "ledger entries", from, "→", to, "| held:", state.srgl.entries.length);
+}
+async function sreconEnsureLedger(force) {
+    if (sreconLoading) return;
+    if (!state.invoices || !state.invoices.length) return;   // nothing to reconcile against yet
+    const { from, to } = pnlToolbarRange();
+    const key = from + "_" + to;
+    if (sreconLedgerSource().ok) return;
+    if (!force && sreconTried === key) return;   // already tried and failed for this range
+    sreconTried = key;
+    sreconError = "";
+    sreconLoading = true;
+    sreconRenderPanel();
+    try { await sreconFetchLedger(); }
+    catch (e) { sreconError = e && e.message ? e.message : String(e); console.warn("[srecon] ledger load failed", e); }
+    finally { sreconLoading = false; }
+    if (state.tab === "overview") renderOverview(); else sreconRenderPanel();
+}
+
+// ---- the figures ---------------------------------------------------
+// grossSales / grossGp are the Overview's own document figures, so the
+// Adjusted Sales and Adjusted Cost shown here are identical to the tiles
+// above by construction.
+function sreconCompute(grossSales, grossGp) {
     const inRange = getDateRangePredicate();
     const entityFilter = !!(state.filters.customer || state.filters.salesperson ||
                             state.filters.location || state.filters.item || state.filters.status);
-    const adjSales = grossSales - getAdjustments().credit;
+    const adj = getAdjustments();
+    const salesBase = grossSales - adj.credit;
+    const cogsBase  = (grossSales - grossGp) - adj.cost;
 
-    // ---- RED: amounts inside Adjusted Sales that are not ledger revenue ----
-    // Mirrors invoiceSalesAmount / getAdjustments line-for-line so the
-    // arithmetic closes exactly.
-    const redRows = new Map();   // "doc|acct" → row
-    let red = 0;
-    const addRed = (docNo, docDate, isCredit, acctNo, amount) => {
+    // ---- RED, both rows, from the documents (no ledger needed) ----
+    const redRows = { sales: new Map(), cogs: new Map() };
+    const red = { sales: 0, cogs: 0 };
+    const addRed = (row, docNo, isCredit, acctNo, amount) => {
         if (!amount) return;
-        red += amount;
+        red[row] += amount;
         const k = docNo + "|" + acctNo;
-        const r = redRows.get(k) || { doc: docNo, date: docDate, type: isCredit ? "Credit memo (SCR)" : "Invoice (SINV)",
-                                      acct: acctNo, amount: 0, why: sreconRedWhy(isCredit, acctNo) };
+        const m = redRows[row];
+        const r = m.get(k) || { doc: docNo, type: isCredit ? "Credit memo (SCR)" : "Invoice (SINV)",
+                                acct: acctNo, amount: 0, why: sreconRedWhy(isCredit, acctNo, row) };
         r.amount += amount;
-        redRows.set(k, r);
+        m.set(k, r);
     };
-    for (const inv of (state.filtered || [])) {
-        for (const ln of (inv.salesInvoiceLines || [])) {
+    const walk = (lines, isCredit, docNo) => {
+        for (const ln of (lines || [])) {
             if (!lineMatchesFilters(ln)) continue;
-            if (sreconLineIsRevenue(ln)) continue;
-            addRed(inv.number, inv.postingDate, false, sreconLineAccount(ln), lineNetAmount(ln));
+            const a = lineNetAmount(ln);
+            // Sales row: the tool puts this line into Adjusted Sales
+            // (+ on an invoice, − on a credit memo); the ledger puts
+            // nothing into revenue unless it posts to a revenue account.
+            if (!sreconLineIsRevenue(ln)) addRed("sales", docNo, isCredit, sreconLineAccount(ln), isCredit ? -a : a);
+            // Cost row: the tool puts nothing into its cost figure; the
+            // ledger debits cost on a credit memo and credits it on an
+            // invoice. Red is the tool's view minus the ledger's.
+            if (sreconLineIsCogs(ln)) addRed("cogs", docNo, isCredit, sreconLineAccount(ln), isCredit ? -a : a);
         }
-    }
+    };
+    for (const inv of (state.filtered || [])) walk(inv.salesInvoiceLines, false, inv.number);
     for (const cm of (state.creditMemos || [])) {
         if (!inRange(cm.postingDate)) continue;
         if (state.filters.salesperson && (cm.salesperson || "(unassigned)") !== state.filters.salesperson) continue;
@@ -15516,75 +15633,96 @@ function sreconCompute(grossSales) {
             const hit = (cm.salesCreditMemoLines || []).some(ln => locationCode(ln.locationId) === state.filters.location);
             if (!hit) continue;
         }
-        for (const ln of (cm.salesCreditMemoLines || [])) {
-            if (!lineMatchesFilters(ln)) continue;
-            if (sreconLineIsRevenue(ln)) continue;
-            addRed(cm.number, cm.postingDate, true, sreconLineAccount(ln), -lineNetAmount(ln));
-        }
+        walk(cm.salesCreditMemoLines, true, cm.number);
     }
 
-    // ---- YELLOW: ledger entries on revenue accounts that are not sales documents ----
-    const vr = pnlToolbarRange();
-    const todayIso = new Date().toISOString().slice(0, 10);
-    const ledgerLoaded = !!(state.gl && state.gl.loadedAt);
-    const covered = ledgerLoaded && !!vr.from && !!vr.to &&
-                    pnlRangeCovered(vr.from, vr.to < todayIso ? vr.to : todayIso);
-    let yellow = 0, pRev = 0, yEntries = 0;
-    const yellowRows = new Map();   // "acct|docType" → row
-    if (ledgerLoaded) {
+    // ---- YELLOW, both rows, from the ledger ----
+    const src = sreconLedgerSource();
+    const yellow = { sales: 0, cogs: 0 }, pTotal = { sales: 0, cogs: 0 }, yEntries = { sales: 0, cogs: 0 };
+    const yellowRows = { sales: new Map(), cogs: new Map() };
+    if (src.ok) {
         const docNos = new Set();
         for (const inv of (state.invoices || []))    if (inRange(inv.postingDate) && inv.number) docNos.add(inv.number);
         for (const cm  of (state.creditMemos || [])) if (inRange(cm.postingDate)  && cm.number)  docNos.add(cm.number);
-        for (const e of pnlEntriesForView()) {
-            if (!SRECON_REV_ACCTS.has(e.accountNumber)) continue;
-            const net = e.creditAmount - e.debitAmount;
-            pRev += net;
+        for (const e of src.entries) {
+            const isRev  = SRECON_REV_ACCTS.has(e.accountNumber);
+            const isCogs = !isRev && SRECON_COGS_ACCTS.has(e.accountNumber);
+            if (!isRev && !isCogs) continue;
+            const row = isRev ? "sales" : "cogs";
+            const net = isRev ? e.creditAmount - e.debitAmount : e.debitAmount - e.creditAmount;
+            pTotal[row] += net;
             if (docNos.has(e.documentNumber)) continue;
-            yellow += net; yEntries++;
+            yellow[row] += net; yEntries[row]++;
             const k = e.accountNumber + "|" + (e.documentType || "");
-            const r = yellowRows.get(k) || { acct: e.accountNumber, type: e.documentType || "",
-                                             entries: 0, amount: 0, docs: new Map(), why: sreconYellowWhy(e.documentType) };
+            const m = yellowRows[row];
+            const r = m.get(k) || { acct: e.accountNumber, type: e.documentType || "", entries: 0,
+                                    amount: 0, docs: new Map(), why: sreconYellowWhy(e.documentType, row) };
             r.entries++; r.amount += net;
             r.docs.set(e.documentNumber, (r.docs.get(e.documentNumber) || 0) + net);
-            yellowRows.set(k, r);
+            m.set(k, r);
         }
     }
-    const usable = ledgerLoaded && !entityFilter;
-    const result = adjSales + (usable ? yellow : 0) - red;
+    const usable = src.ok && !entityFilter;
+    const mk = (row, base) => {
+        const result = base + (usable ? yellow[row] : 0) - red[row];
+        return {
+            base, yellow: yellow[row], red: red[row], result, pTotal: pTotal[row],
+            delta: result - pTotal[row], yEntries: yEntries[row],
+            yellowRows: [...yellowRows[row].values()].sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount)),
+            redRows:    [...redRows[row].values()].sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount)),
+        };
+    };
     return {
-        adjSales, red, yellow, result, pRev, yEntries, entityFilter, ledgerLoaded, covered, usable,
-        delta: result - pRev, rangeLabel: vr.label,
-        redRows:    [...redRows.values()].sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount)),
-        yellowRows: [...yellowRows.values()].sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount)),
+        entityFilter, usable, ledgerOk: src.ok, rangeLabel: pnlToolbarRange().label,
+        sales: mk("sales", salesBase), cogs: mk("cogs", cogsBase),
     };
 }
-function sreconPaint(grossSales) {
+
+// ---- the tiles -----------------------------------------------------
+const SRECON_ROW_IDS = {
+    sales: { base: "srAdj", baseSub: "srAdjSub", yellow: "srYellow", yellowSub: "srYellowSub",
+             red: "srRed", redSub: "srRedSub", result: "srResult", resultSub: "srResultSub" },
+    cogs:  { base: "srcAdj", baseSub: "srcAdjSub", yellow: "srcYellow", yellowSub: "srcYellowSub",
+             red: "srcRed", redSub: "srcRedSub", result: "srcResult", resultSub: "srcResultSub" },
+};
+function sreconPaint(grossSales, grossGp) {
     if (!sreconIsViewer()) return;
     const set = (id, v) => { const n = document.getElementById(id); if (n) n.textContent = v; };
-    const m = sreconCompute(grossSales);
+    const m = sreconCompute(grossSales, grossGp);
     sreconLast = m;
+    for (const row of ["sales", "cogs"]) {
+        const d = m[row], id = SRECON_ROW_IDS[row];
+        set(id.base, fmtMoneyFull(d.base));
+        set(id.baseSub, row === "sales" ? "invoices less returns" : "value entries, returns netted");
 
-    set("srAdj", fmtMoneyFull(m.adjSales));
-    set("srAdjSub", "invoices less returns");
+        if (sreconLoading)       { set(id.yellow, "…");   set(id.yellowSub, "loading the ledger"); }
+        else if (!m.ledgerOk)    { set(id.yellow, "—");   set(id.yellowSub, "click to load the ledger"); }
+        else if (m.entityFilter) { set(id.yellow, "n/a"); set(id.yellowSub, "carries no branch or customer · clear filters"); }
+        else                     { set(id.yellow, fmtMoneyFull(d.yellow)); set(id.yellowSub, d.yEntries.toLocaleString("en-AU") + " ledger entries · click to drill down"); }
 
-    if (!m.ledgerLoaded)      { set("srYellow", "—"); set("srYellowSub", "click to load the ledger"); }
-    else if (m.entityFilter)  { set("srYellow", "n/a"); set("srYellowSub", "carries no branch or customer · clear filters"); }
-    else                      { set("srYellow", fmtMoneyFull(m.yellow)); set("srYellowSub", m.yEntries.toLocaleString("en-AU") + " ledger entries · click to drill down"); }
+        set(id.red, fmtMoneyFull(d.red));
+        set(id.redSub, d.redRows.length ? d.redRows.length + " document lines · click to drill down" : "none in this range");
 
-    set("srRed", fmtMoneyFull(m.red));
-    set("srRedSub", m.redRows.length ? m.redRows.length + " document lines · click to drill down" : "none in this range");
-
-    if (!m.usable) {
-        set("srResult", "—");
-        set("srResultSub", !m.ledgerLoaded ? "needs the ledger loaded" : "needs all filters cleared");
-    } else {
-        set("srResult", fmtMoneyFull(m.result));
-        const ok = Math.abs(m.delta) < 0.005;
-        set("srResultSub", !m.covered ? "ledger does not cover " + m.rangeLabel
-            : ok ? "✓ matches the P&L exactly" : "✗ P&L says " + fmtMoneyFull(m.pRev) + " · Δ " + fmtMoneyFull(m.delta));
+        if (!m.usable) {
+            set(id.result, "—");
+            set(id.resultSub, sreconLoading ? "loading the ledger" : !m.ledgerOk ? "needs the ledger" : "needs all filters cleared");
+        } else {
+            set(id.result, fmtMoneyFull(d.result));
+            const ok = Math.abs(d.delta) < 0.005;
+            set(id.resultSub, ok ? "✓ matches the P&L exactly"
+                : "✗ P&L says " + fmtMoneyFull(d.pTotal) + " · Δ " + fmtMoneyFull(d.delta));
+        }
     }
     if (sreconOpen) sreconRenderPanel();
 }
+
+// ---- the drill-down panel ------------------------------------------
+const SRECON_TITLES = {
+    "sales|yellow": "Yellow · in the ledger's revenue accounts, not a sales document",
+    "sales|red":    "Red · a sales document, not in the ledger's revenue accounts",
+    "cogs|yellow":  "Yellow · in the ledger's cost-of-goods-sold accounts, not a sales document",
+    "cogs|red":     "Red · a sales document the ledger counts as cost but the sales tool does not",
+};
 function sreconRenderPanel() {
     const panel  = document.getElementById("srPanel");
     const thead  = document.querySelector("#srPanelTable thead");
@@ -15592,50 +15730,58 @@ function sreconRenderPanel() {
     const notice = document.getElementById("srPanelNotice");
     if (!panel || !thead || !tbody) return;
     if (!sreconOpen) { panel.style.display = "none"; return; }
-    if (!sreconLast) {   // tiles never painted yet — no sales loaded
-        panel.style.display = "";
-        document.getElementById("srPanelTitle").textContent = sreconOpen === "yellow" ? "Yellow" : "Red";
-        document.getElementById("srPanelMeta").textContent = "";
-        if (notice) notice.style.display = "none";
+    const { row, side } = sreconOpen;
+    panel.style.display = "";
+    panel.style.borderLeft = "4px solid " + (side === "yellow" ? "#ffca28" : "#e53935");
+    document.getElementById("srPanelTitle").textContent = SRECON_TITLES[row + "|" + side]
+        + (row === "cogs" ? " · cost of goods sold" : " · sales");
+    const meta = document.getElementById("srPanelMeta");
+    const noticeText = document.getElementById("srPanelNoticeText");
+    const retry = document.getElementById("srLoadLedgerBtn");
+    const showNotice = (msg, withRetry) => {
+        if (!notice) return;
+        notice.style.display = msg ? "" : "none";
+        if (noticeText) noticeText.textContent = msg || "";
+        if (retry) retry.style.display = withRetry ? "" : "none";
+    };
+    if (!sreconLast) {
+        if (meta) meta.textContent = "";
+        showNotice("", false);
         thead.innerHTML = "";
         tbody.innerHTML = '<tr><td class="empty">Load sales first (Load sales, or Fast lookup), then this breaks down.</td></tr>';
         return;
     }
-    const m = sreconLast;
-    panel.style.display = "";
-    panel.style.borderLeft = "4px solid " + (sreconOpen === "yellow" ? "#ffca28" : "#e53935");
+    const m = sreconLast, d = m[row];
     const total = (label, amount) =>
-        '<tr style="font-weight:700; background:rgba(127,127,127,0.12);"><td>' + escapeHtml(label) + '</td>'
-        + '<td colspan="' + (sreconOpen === "yellow" ? 2 : 2) + '"></td>'
-        + '<td class="num">' + fmtMoneyFull(amount) + '</td><td></td></tr>';
+        '<tr style="font-weight:700; background:rgba(127,127,127,0.12);">'
+      + '<td>' + escapeHtml(label) + '</td><td colspan="2"></td>'
+      + '<td class="num">' + fmtMoneyFull(amount) + '</td><td></td></tr>';
 
-    if (sreconOpen === "yellow") {
-        document.getElementById("srPanelTitle").textContent = "Yellow · in the ledger's revenue accounts, not a sales document";
-        document.getElementById("srPanelMeta").textContent = m.ledgerLoaded && !m.entityFilter
-            ? m.yellowRows.length + " account / document-type groups · " + m.yEntries.toLocaleString("en-AU") + " entries · " + fmtMoneyFull(m.yellow) : "";
+    if (side === "yellow") {
+        if (meta) meta.textContent = m.ledgerOk && !m.entityFilter
+            ? d.yellowRows.length + " account / document-type groups · " + d.yEntries.toLocaleString("en-AU") + " entries · " + fmtMoneyFull(d.yellow) : "";
         thead.innerHTML = '<tr><th>Account</th><th>Document type</th><th>Documents</th><th class="num">$</th><th>What it is</th></tr>';
-        const needLedger = !m.ledgerLoaded || !m.covered;
-        if (notice) {
-            notice.style.display = (needLedger || m.entityFilter) ? "" : "none";
-            const txt = document.getElementById("srPanelNoticeText");
-            const btn = document.getElementById("srLoadLedgerBtn");
-            if (txt) txt.textContent = sreconLoading
-                ? "Loading the general ledger for " + m.rangeLabel + ". This takes about 30 seconds per month — the accounts and documents appear as soon as it lands."
-                : !m.ledgerLoaded
-                ? "This figure comes from the general ledger, which is not loaded for " + m.rangeLabel + ". It merges with anything already loaded."
-                : !m.covered
-                ? "The toolbar range " + m.rangeLabel + " reaches outside the loaded ledger (" + (state.gl.windows || []).map(w => fmtDate(w.from) + " → " + fmtDate(w.to)).join(", ") + "). Load the rest to complete this figure."
-                : "A branch, salesperson, customer, item or status filter is active. These entries carry none of those, so they cannot be shown for a filtered slice. Clear the filters to see them.";
-            if (btn) btn.style.display = (needLedger && !sreconLoading) ? "" : "none";
+        if (sreconLoading) {
+            showNotice("Loading the general ledger for " + m.rangeLabel + ". The accounts and documents appear as soon as it lands.", false);
+            tbody.innerHTML = ""; return;
         }
-        if (needLedger || m.entityFilter) { tbody.innerHTML = ""; return; }
-        tbody.innerHTML = m.yellowRows.map(r => {
+        if (sreconError) {
+            showNotice("The ledger could not be loaded: " + sreconError, true);
+            tbody.innerHTML = ""; return;
+        }
+        if (!m.ledgerOk) { showNotice("Fetching the general ledger for " + m.rangeLabel + "…", false); tbody.innerHTML = ""; return; }
+        if (m.entityFilter) {
+            showNotice("A branch, salesperson, customer, item or status filter is active. These entries carry none of those, so they cannot be shown for a filtered slice. Clear the filters to see them.", false);
+            tbody.innerHTML = ""; return;
+        }
+        showNotice("", false);
+        tbody.innerHTML = (d.yellowRows.length ? d.yellowRows.map(r => {
             const docs = [...r.docs.entries()].sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
-            const key = r.acct + "|" + r.type;
+            const key = row + "|yellow|" + r.acct + "|" + r.type;
             const open = sreconExpanded.has(key);
             const shown = open ? docs : docs.slice(0, 6);
-            const txt = shown.map(d => escapeHtml(d[0] || "(no number)") + " (" + fmtMoneyFull(d[1]) + ")"
-                      + (d[0] ? pnlWiiseLink("Document No.", d[0], "Open document " + d[0] + " entries in Wiise") : "")).join(", ")
+            const txt = shown.map(x => escapeHtml(x[0] || "(no number)") + " (" + fmtMoneyFull(x[1]) + ")"
+                      + (x[0] ? pnlWiiseLink("Document No.", x[0], "Open document " + x[0] + " entries in Wiise") : "")).join(", ")
                       + (!open && docs.length > 6 ? " and " + (docs.length - 6) + " more" : "");
             return '<tr class="clickable" data-srgroup="' + escapeAttr(key) + '">'
                  + '<td style="white-space:nowrap;">' + escapeHtml(sreconAcctLabel(r.acct))
@@ -15644,13 +15790,13 @@ function sreconRenderPanel() {
                  + '<td>' + txt + (docs.length > 6 ? ' <span style="opacity:0.6;">' + (open ? "▴ show fewer" : "▾ show all " + docs.length) + '</span>' : '') + '</td>'
                  + '<td class="num ' + (r.amount >= 0 ? "pos" : "neg") + '">' + fmtMoneyFull(r.amount) + '</td>'
                  + '<td>' + escapeHtml(r.why) + '</td></tr>';
-        }).join("") + total("Total yellow, sales", m.yellow);
+        }).join("") : '<tr><td colspan="5" class="empty">No non-sales entries on these accounts in this range.</td></tr>')
+        + total("Total yellow, " + (row === "cogs" ? "cost of goods sold" : "sales"), d.yellow);
     } else {
-        document.getElementById("srPanelTitle").textContent = "Red · a sales document, but not in the ledger's revenue accounts";
-        document.getElementById("srPanelMeta").textContent = m.redRows.length + " document lines · " + fmtMoneyFull(m.red);
-        thead.innerHTML = '<tr><th>Document</th><th>Document type</th><th>G/L account the line posted to</th><th class="num">$ in the sales tool</th><th>What it is</th></tr>';
-        if (notice) notice.style.display = "none";
-        tbody.innerHTML = (m.redRows.length ? m.redRows.map(r =>
+        if (meta) meta.textContent = d.redRows.length + " document lines · " + fmtMoneyFull(d.red);
+        showNotice("", false);
+        thead.innerHTML = '<tr><th>Document</th><th>Document type</th><th>G/L account the line posted to</th><th class="num">$</th><th>What it is</th></tr>';
+        tbody.innerHTML = (d.redRows.length ? d.redRows.map(r =>
             '<tr><td style="white-space:nowrap;">' + escapeHtml(r.doc || "")
           + (r.doc ? pnlWiiseLink("Document No.", r.doc, "Open document " + r.doc + " entries in Wiise") : "") + '</td>'
           + '<td>' + escapeHtml(r.type) + '</td>'
@@ -15658,47 +15804,28 @@ function sreconRenderPanel() {
           + (r.acct ? pnlWiiseLink("G/L Account No.", r.acct, "Open account " + r.acct + " entries in Wiise") : "") + '</td>'
           + '<td class="num ' + (r.amount >= 0 ? "pos" : "neg") + '">' + fmtMoneyFull(r.amount) + '</td>'
           + '<td>' + escapeHtml(r.why) + '</td></tr>').join("")
-          : '<tr><td colspan="5" class="empty">No sales-document lines post outside the revenue accounts in this range.</td></tr>')
-          + total("Total red, sales", m.red);
+          : '<tr><td colspan="5" class="empty">No sales-document lines are classified differently by the ledger in this range.</td></tr>')
+        + total("Total red, " + (row === "cogs" ? "cost of goods sold" : "sales"), d.red);
     }
 }
-function sreconToggle(which) {
-    sreconOpen = (sreconOpen === which) ? null : which;
+function sreconToggle(row, side) {
+    const same = sreconOpen && sreconOpen.row === row && sreconOpen.side === side;
+    sreconOpen = same ? null : { row, side };
     sreconExpanded = new Set();
     sreconRenderPanel();
-    if (sreconOpen) {
-        const p = document.getElementById("srPanel");
-        if (p && p.scrollIntoView) p.scrollIntoView({ behavior: "smooth", block: "nearest" });
-        if (which === "yellow") sreconAutoLoad();
-    }
-}
-// Opening Yellow fetches the ledger for the toolbar range by itself, so
-// there is nothing to click first. loadPnl still asks before pulling more
-// than about two months. Once a range has been attempted we don't retry it
-// automatically — the button in the panel is the manual retry.
-async function sreconAutoLoad() {
-    const m = sreconLast;
-    if (!m || sreconLoading || m.entityFilter) return;
-    if (m.ledgerLoaded && m.covered) return;
-    if (sreconTriedRange === m.rangeLabel) return;
-    sreconTriedRange = m.rangeLabel;
-    await sreconLoadLedger();
-}
-async function sreconLoadLedger() {
-    if (sreconLoading) return;
-    sreconLoading = true;
-    sreconRenderPanel();
-    try { await loadPnl(); }
-    catch (e) { console.warn("[srecon] ledger load failed", e); }
-    finally { sreconLoading = false; }
-    if (state.tab === "overview") renderOverview(); else sreconRenderPanel();
+    if (!sreconOpen) return;
+    const p = document.getElementById("srPanel");
+    if (p && p.scrollIntoView) p.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    sreconEnsureLedger(false);   // silent: no confirmation, no alert, any range
 }
 (function wireSrecon() {
     const on = (id, ev, fn) => { const el = document.getElementById(id); if (el) el.addEventListener(ev, fn); };
-    on("srYellowTile", "click", () => sreconToggle("yellow"));
-    on("srRedTile",    "click", () => sreconToggle("red"));
-    on("srPanelClose", "click", () => { sreconOpen = null; sreconRenderPanel(); });
-    on("srLoadLedgerBtn", "click", sreconLoadLedger);
+    on("srYellowTile",  "click", () => sreconToggle("sales", "yellow"));
+    on("srRedTile",     "click", () => sreconToggle("sales", "red"));
+    on("srcYellowTile", "click", () => sreconToggle("cogs", "yellow"));
+    on("srcRedTile",    "click", () => sreconToggle("cogs", "red"));
+    on("srPanelClose",  "click", () => { sreconOpen = null; sreconRenderPanel(); });
+    on("srLoadLedgerBtn", "click", () => sreconEnsureLedger(true));
     const tbl = document.getElementById("srPanelTable");
     if (tbl) tbl.addEventListener("click", e => {
         const tr = e.target.closest("tr[data-srgroup]"); if (!tr) return;
