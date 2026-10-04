@@ -12,7 +12,9 @@
         (function () {
             try {
                 var t = localStorage.getItem('bcSalesTheme');
-                if (t && /^(classic|onyx|linen|aurora|atelier|concierge)$/.test(t)) {
+                // Keep in step with NAMED_THEMES further down: a theme missing here
+                // is saved but not restored, so the picker reopens on every refresh.
+                if (t && /^(classic|onyx|linen|aurora|atelier|concierge|marble|velvet|glacier|bibliotheque|pavilion)$/.test(t)) {
                     if (t !== 'classic') document.documentElement.classList.add('theme-' + t);
                     document.documentElement.dataset.themePicked = '1';
                 }
@@ -516,6 +518,8 @@
             min-height: 280px; display: flex; flex-direction: column;
         }
         .theme-picker .opt:hover { transform: translateY(-4px); box-shadow: 0 16px 40px rgba(0,0,0,0.4); }
+        /* The theme in use, outlined in gold — same as the forecast tool. */
+        .theme-picker .opt.cur { outline: 2px solid #ffd54f; outline-offset: 3px; }
         .theme-picker .opt .tag {
             font-family: 'Inter', sans-serif; font-size: 10px; font-weight: 700;
             text-transform: uppercase; letter-spacing: 1.5px; opacity: 0.6;
@@ -17486,6 +17490,8 @@ function applyTheme(theme) {
 function showThemePicker(closeable) {
     const el = document.getElementById("themePicker");
     if (!el) return;
+    const cur = currentTheme();
+    el.querySelectorAll(".opt[data-theme]").forEach(o => o.classList.toggle("cur", o.dataset.theme === cur));
     el.style.display = "flex";
     const closeBtn = document.getElementById("themePickerClose");
     if (closeBtn) closeBtn.style.display = closeable ? "block" : "none";
