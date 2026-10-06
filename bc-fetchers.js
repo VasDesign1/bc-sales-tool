@@ -41,17 +41,36 @@ const GRAPH_SCOPES = ["https://graph.microsoft.com/Files.Read.All"];
 
 let bcCompanyId = null, bcCompanyInternalName = null, bcODataMetadata = null;
 
-// A dropped connection makes fetch throw rather than return a status; retry
-// those a few times before giving up, so one network blip doesn't sink a
-// whole load or snapshot.
+// A dropped connection makes fetch throw rather than return a status, and
+// Business Central answers a transient wobble with 429 / 5xx or a 400 whose
+// body says "intermittent database connectivity … try again later". Retry
+// all of those a few times (5 s, 15 s, 45 s) before giving up, so one blip
+// doesn't sink a whole load or snapshot.
+const BC_RETRY_WAITS_MS = [5000, 15000, 45000];
+async function bcLooksTransient(resp) {
+    if (resp.status === 429 || resp.status >= 500) return true;
+    if (resp.status !== 400) return false;
+    try { const t = await resp.clone().text(); return /Internal_ServerError|try again later|intermittent/i.test(t); }
+    catch (e) { return false; }
+}
 async function bcFetchRetrying(url, opts) {
     for (let attempt = 0; ; attempt++) {
-        try { return await fetch(url, opts); }
+        let resp;
+        try { resp = await fetch(url, opts); }
         catch (e) {
-            if (attempt >= 3) throw e;
-            console.warn("[BC] connection dropped (" + e.message + ") — retrying in " + (2 * (attempt + 1)) + " s");
-            await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
+            if (attempt >= BC_RETRY_WAITS_MS.length) throw e;
+            console.warn("[BC] connection dropped (" + e.message + ") — retrying in " + (BC_RETRY_WAITS_MS[attempt] / 1000) + " s");
+            await new Promise(r => setTimeout(r, BC_RETRY_WAITS_MS[attempt]));
+            continue;
         }
+        if (attempt < BC_RETRY_WAITS_MS.length && await bcLooksTransient(resp)) {
+            const retryAfter = parseInt(resp.headers.get("Retry-After") || "0", 10) * 1000;
+            const wait = retryAfter || BC_RETRY_WAITS_MS[attempt];
+            console.warn("[BC] HTTP " + resp.status + " (transient) — retrying in " + (wait / 1000) + " s");
+            await new Promise(r => setTimeout(r, wait));
+            continue;
+        }
+        return resp;
     }
 }
 async function bcFetch(url) {

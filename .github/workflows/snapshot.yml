@@ -2,21 +2,18 @@ name: sales-snapshot
 
 on:
   schedule:
-    # Melbourne 7:00 / 12:00 / 16:30, both AEST (UTC+10) and AEDT (UTC+11)
-    # firings. Scheduled ~13 min BEFORE each slot at odd minutes — GitHub
-    # crons at the top of the hour routinely run 1-2h late or get dropped.
-    # snapshot.js maps the Melbourne wall clock to the nearest slot within
-    # a 2h window and skips anything further off.
-    - cron: "43 20 * * *"   # 07:00 AEST (fires 06:43 local)
-    - cron: "43 19 * * *"   # 07:00 AEDT
-    - cron: "43 1 * * *"    # 12:00 AEST (fires 11:43 local)
-    - cron: "43 0 * * *"    # 12:00 AEDT
-    - cron: "13 6 * * *"    # 16:30 AEST (fires 16:13 local)
-    - cron: "13 5 * * *"    # 16:30 AEDT
+    # Every 30 minutes, Melbourne 04:00-23:59 all year (UTC hours cover both
+    # AEST and AEDT). Odd minutes: crons on the hour routinely run late or
+    # get dropped. The robot decides what to do with each firing — it fills
+    # whichever due slot (Morning 05:00 / Midday 11:00 / Evening 17:00) is
+    # still missing today's capture, or exits in seconds. Firings at
+    # 13,43 past the hour; the sibling tool uses other minutes so the
+    # two robots do not hit Wiise together.
+    - cron: "13,43 0-13,17-23 * * *"
   workflow_dispatch:
     inputs:
       slot:
-        description: "Force slot (0700 / 1200 / 1630); empty = auto-detect"
+        description: "Force slot (0500 / 1100 / 1700); empty = refresh the most recent slot"
         required: false
         default: ""
       selftest:

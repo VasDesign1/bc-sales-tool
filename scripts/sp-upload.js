@@ -88,10 +88,14 @@ function encPath(p) {
 }
 
 // The site's default document library ("Documents" / SHARED DOCUMENTS).
+// Resolved once per process: the slot check and the publish share it.
+let _driveId = null;
 async function resolveDrive(host) {
+    if (_driveId) return _driveId;
     const site = await graphJson(GRAPH + "/sites/" + host + ":/?$select=id,webUrl");
     const drive = await graphJson(GRAPH + "/sites/" + site.id + "/drive?$select=id,name,webUrl");
     console.log("  [graph] site " + site.webUrl + " · drive '" + drive.name + "' " + drive.id.slice(0, 12) + "…");
+    _driveId = drive.id;
     return drive.id;
 }
 
@@ -172,6 +176,20 @@ async function deleteFile(driveId, itemPath) {
     if (!resp.ok && resp.status !== 404) throw new Error("Delete " + itemPath + " → HTTP " + resp.status);
 }
 
+// Slot state for the robot's "which slot is missing today?" check:
+// { "0500": meta | null, ... } — null when the slot has never been published.
+async function readSnapshotMetas(slots) {
+    const driveId = await resolveDrive(SP_CONFIG.host);
+    const out = {};
+    for (const slot of slots) {
+        const resp = await graphFetch(itemUrl(driveId, SP_CONFIG.folder + "/snapshots/" + slot + ".meta.json") + ":/content");
+        if (resp.status === 404) { out[slot] = null; continue; }
+        if (!resp.ok) throw new Error("Read " + slot + ".meta.json → HTTP " + resp.status);
+        out[slot] = JSON.parse(await resp.text());
+    }
+    return out;
+}
+
 // Publish a finished snapshot: .bin first, .meta.json last so the menu
 // never advertises a slot whose bytes are still uploading.
 async function publishSnapshot(slot, bin, metaJson, glBin) {
@@ -196,7 +214,7 @@ async function selftest() {
     console.log("SELF-TEST PASSED");
 }
 
-module.exports = { resolveDrive, uploadFile, downloadFile, deleteFile, publishSnapshot, selftest };
+module.exports = { resolveDrive, uploadFile, downloadFile, deleteFile, readSnapshotMetas, publishSnapshot, selftest };
 
 if (require.main === module && process.argv.includes("--selftest")) {
     selftest().catch(e => { console.error("SELF-TEST FAILED:", e.message); process.exit(1); });
