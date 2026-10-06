@@ -16244,7 +16244,7 @@ async function populateLookupMenu() {
                   + (i ? " border-top:1px solid #eef;" : "");
         if (!r.meta) return '<div style="' + css + ' opacity:0.45;">As of ' + r.label + ' — no snapshot yet</div>';
         const capDate = (r.meta.fetchedAtMelbourne || "").slice(0, 10);
-        const capTime = (r.meta.fetchedAtMelbourne || "").slice(11);
+        const capTime = (r.meta.fetchedAtMelbourne || "").slice(11).replace(/^24:/, "00:");
         const day = capDate === today ? "today" : "on " + fmtDate(capDate);
         return '<button type="button" class="lookup-slot-opt" data-slot="' + r.slot + '" style="' + css
              + ' cursor:pointer;">As of ' + capTime + " " + day + "</button>";
