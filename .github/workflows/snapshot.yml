@@ -2,14 +2,15 @@ name: sales-snapshot
 
 on:
   schedule:
-    # Every 30 minutes, Melbourne 04:00-23:59 all year (UTC hours cover both
-    # AEST and AEDT). Odd minutes: crons on the hour routinely run late or
-    # get dropped. The robot decides what to do with each firing — it fills
-    # whichever due slot (Morning 05:00 / Midday 11:00 / Evening 17:00) is
-    # still missing today's capture, or exits in seconds. Firings at
-    # 13,43 past the hour; the sibling tool uses other minutes so the
-    # two robots do not hit Wiise together.
-    - cron: "13,43 0-13,17-23 * * *"
+    # Every 30 minutes, around the clock, at 13,43 past the hour (odd
+    # minutes: crons on the hour routinely run late or get dropped; the
+    # sibling tool uses other minutes so the two robots never hit Wiise
+    # together). The robot decides what each firing does — it fills
+    # whichever due slot (Morning 05:00 / Midday 11:00 / Evening 17:00
+    # Melbourne) is still missing today's capture, or exits in seconds.
+    # No hour filter here on purpose: a plain expression is the one GitHub
+    # registers most reliably, and DST needs no special casing.
+    - cron: "13,43 * * * *"
   workflow_dispatch:
     inputs:
       slot:
