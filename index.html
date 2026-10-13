@@ -313,6 +313,11 @@
         }
         th:hover { background: #dde0f4; }
         th.sorted-asc::after  { content: ' ▲'; font-size: 10px; }
+        /* % achieved bar on the salesperson run-rate tabs: 0% empty → 100% full */
+        .rr-bar { position: relative; display: inline-block; width: 130px; height: 18px; border-radius: 9px; background: rgba(128,128,128,0.18); overflow: hidden; vertical-align: middle; }
+        .rr-bar .rr-fill { position: absolute; left: 0; top: 0; bottom: 0; background: #fb8c00; border-radius: 9px; }
+        .rr-bar.full .rr-fill { background: #43a047; }
+        .rr-bar .rr-lbl { position: absolute; inset: 0; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; color: inherit; }
         th.sorted-desc::after { content: ' ▼'; font-size: 10px; }
         /* Reconciliation drill-down: every sortable header shows a faint ⇅
            until it is the sorted column, so it is obvious the columns sort. */
@@ -3597,7 +3602,7 @@
 
             <!-- TAB: Salesperson Sales Run Rate -->
             <section data-tab-content="salespersonSalesRate" style="display:none;">
-                <div class="hint">Sales run-rate for <strong id="spsrMonth">—</strong>. Selling days = Mon–Fri minus Vic public holidays. Sales Targets come from the FY2026-27 budget (Budgets FY2627) by salesperson code — nothing to type here.</div>
+                <div class="hint">Sales run-rate for <strong id="spsrMonth">—</strong>. Selling days = Mon–Fri minus Vic public holidays. Sales Targets come from the FY2026-27 budget by salesperson code.</div>
                 <div class="hint" id="spsrNote" style="display:none;"></div>
                 <div class="kpi-row">
                     <div class="kpi k-rev"><div class="label">Total Selling Days</div><div class="value" id="spsrSdTotal">—</div></div>
@@ -3610,26 +3615,41 @@
                     <div class="table-scroll">
                         <table id="spsrTable">
                             <thead><tr>
-                                <th>Salesperson</th>
-                                <th class="num">Sales For Month PY</th>
-                                <th class="num">Sales Target</th>
-                                <th class="num">Sales For Month</th>
-                                <th class="num">Target Run Rate</th>
-                                <th class="num">Actual Run Rate</th>
-                                <th class="num">Balance</th>
-                                <th class="num">Required Daily</th>
-                                <th>Status</th>
-                                <th class="num">% Achieved</th>
+                                <th data-sort="entity">Salesperson</th>
+                                <th class="num" data-sort="pyVal">Sales For Month PY</th>
+                                <th class="num" data-sort="target">Sales Target</th>
+                                <th class="num" data-sort="cyVal">Sales For Month</th>
+                                <th class="num" data-sort="targetDaily">Target Run Rate</th>
+                                <th class="num" data-sort="actualDaily">Actual Run Rate</th>
+                                <th class="num" data-sort="balance">Balance</th>
+                                <th class="num" data-sort="requiredDaily">Required Daily</th>
+                                <th data-sort="status">Status</th>
+                                <th class="num" data-sort="pctAchieved">% Achieved</th>
                             </tr></thead>
                             <tbody></tbody>
                         </table>
                     </div>
                 </div>
+                <div class="panel" style="margin-top:16px;">
+                    <div class="panel-header"><h2>Comparisons · Sales vs budget</h2>
+                        <select id="spsrCmpView" class="mini-select" title="Comparison">
+                            <option value="monthTvA" selected>Target vs actual — selected month, by salesperson</option>
+                            <option value="monthPct">% of target achieved — selected month</option>
+                            <option value="monthBal">Ahead / behind target — selected month</option>
+                            <option value="fyTargets">Monthly targets — whole FY, by salesperson</option>
+                            <option value="fyOne">One salesperson — monthly actual vs target, whole FY</option>
+                            <option value="fyCum">FY to date — cumulative actual vs target, by salesperson</option>
+                            <option value="share">Share of total — target vs actual, selected month</option>
+                        </select>
+                        <select id="spsrCmpRep" class="mini-select" title="Salesperson" style="display:none;"></select>
+                    </div>
+                    <div class="chart-wrap" style="position:relative; min-height:340px; height:340px;"><canvas id="spsrCmpChart"></canvas></div>
+                </div>
             </section>
 
             <!-- TAB: Salesperson Margin Run Rate -->
             <section data-tab-content="salespersonMarginRate" style="display:none;">
-                <div class="hint">Margin (GP$) run-rate for <strong id="spmrMonth">—</strong>. Selling days = Mon–Fri minus Vic public holidays. GM $ Targets come from the FY2026-27 budget (Budgets FY2627) by salesperson code — nothing to type here.</div>
+                <div class="hint">Margin (GP$) run-rate for <strong id="spmrMonth">—</strong>. Selling days = Mon–Fri minus Vic public holidays. GM $ Targets come from the FY2026-27 budget by salesperson code.</div>
                 <div class="hint" id="spmrNote" style="display:none;"></div>
                 <div class="kpi-row">
                     <div class="kpi k-rev"><div class="label">Total Selling Days</div><div class="value" id="spmrSdTotal">—</div></div>
@@ -3642,20 +3662,35 @@
                     <div class="table-scroll">
                         <table id="spmrTable">
                             <thead><tr>
-                                <th>Salesperson</th>
-                                <th class="num">GM $ For Month PY</th>
-                                <th class="num">GM $ Target</th>
-                                <th class="num">GM $ For Month</th>
-                                <th class="num">Target Run Rate</th>
-                                <th class="num">Actual Run Rate</th>
-                                <th class="num">Balance</th>
-                                <th class="num">Required Daily</th>
-                                <th>Status</th>
-                                <th class="num">% Achieved</th>
+                                <th data-sort="entity">Salesperson</th>
+                                <th class="num" data-sort="pyVal">GM $ For Month PY</th>
+                                <th class="num" data-sort="target">GM $ Target</th>
+                                <th class="num" data-sort="cyVal">GM $ For Month</th>
+                                <th class="num" data-sort="targetDaily">Target Run Rate</th>
+                                <th class="num" data-sort="actualDaily">Actual Run Rate</th>
+                                <th class="num" data-sort="balance">Balance</th>
+                                <th class="num" data-sort="requiredDaily">Required Daily</th>
+                                <th data-sort="status">Status</th>
+                                <th class="num" data-sort="pctAchieved">% Achieved</th>
                             </tr></thead>
                             <tbody></tbody>
                         </table>
                     </div>
+                </div>
+                <div class="panel" style="margin-top:16px;">
+                    <div class="panel-header"><h2>Comparisons · Margin (GP$) vs budget</h2>
+                        <select id="spmrCmpView" class="mini-select" title="Comparison">
+                            <option value="monthTvA" selected>Target vs actual — selected month, by salesperson</option>
+                            <option value="monthPct">% of target achieved — selected month</option>
+                            <option value="monthBal">Ahead / behind target — selected month</option>
+                            <option value="fyTargets">Monthly targets — whole FY, by salesperson</option>
+                            <option value="fyOne">One salesperson — monthly actual vs target, whole FY</option>
+                            <option value="fyCum">FY to date — cumulative actual vs target, by salesperson</option>
+                            <option value="share">Share of total — target vs actual, selected month</option>
+                        </select>
+                        <select id="spmrCmpRep" class="mini-select" title="Salesperson" style="display:none;"></select>
+                    </div>
+                    <div class="chart-wrap" style="position:relative; min-height:340px; height:340px;"><canvas id="spmrCmpChart"></canvas></div>
                 </div>
             </section>
 
@@ -4122,6 +4157,8 @@ const state = {
     locationChartType: "barH",     salespersonChartType: "barH",
     statusChartType: "pie",
     runRateMonth: {},               // prefix -> "YYYY-MM" chosen in the month selector (salesperson run-rate tabs)
+    sortRunRate: { spsr: { key: "cyVal", dir: "desc" }, spmr: { key: "cyVal", dir: "desc" } },
+    runRateCmp: { spsr: { view: "monthTvA", rep: "" }, spmr: { view: "monthTvA", rep: "" } },
     currentItemDetail: null,
     sort: { key: "revenue", dir: "desc" },
     sortBranch: { key: "salesAmount", dir: "desc" },
@@ -12474,8 +12511,17 @@ function renderRunRateTab(opts) {
         const rr = computeRunRate(cyVal, target, sd.total, sd.passed, sd.remaining);
         if (opts.budget && sd.isPast)   rr.status = closedStatus(cyVal, target);
         if (opts.budget && sd.isFuture) rr.status = target > 0 ? "NOT STARTED" : "NO PLAN";
+        // Budget tabs read balance as actual − target: + when ahead of
+        // (or over) target, − when behind. Branch tabs keep target − actual.
+        if (opts.budget) rr.balance = cyVal - target;
         return { entity: ent, cyVal, pyVal, target, metricKey, ...rr };
     }).sort((a, b) => b.cyVal - a.cyVal);
+    if (opts.budget) {
+        const tbl = document.getElementById(opts.prefix + "Table");
+        if (tbl && !tbl.dataset.sortWired) { attachSortHandlers("#" + opts.prefix + "Table", state.sortRunRate[opts.prefix], renderCurrentTab, new Set(["entity", "status"])); tbl.dataset.sortWired = "1"; }
+        sortRowsBy(rows, state.sortRunRate[opts.prefix]);
+        paintSortHeaders("#" + opts.prefix + "Table", state.sortRunRate[opts.prefix]);
+    }
 
     const tbody = document.querySelector("#" + opts.prefix + "Table tbody");
     let tCy = 0, tPy = 0, tTarget = 0;
@@ -12483,6 +12529,12 @@ function renderRunRateTab(opts) {
         ? `<td class="num">${r.target ? fmtMoneyFull(r.target) : "—"}</td>`
         : `<td class="num"><input type="number" data-target-metric="${escapeAttr(r.metricKey)}" data-target-fy="${fy}" data-target-mk="${escapeAttr(mk)}" data-target-ent="${escapeAttr(r.entity)}" value="${r.target || ""}" placeholder="—" style="width:110px; text-align:right; border:1px solid #d6d8eb; border-radius:6px; padding:4px;"></td>`;
     const requiredCell = r => (opts.budget && (sd.isPast || !sd.remaining)) ? "n/a" : (r.target ? fmtMoneyFull(r.requiredDaily) : "—");
+    const balanceCell = r => !r.target ? '<td class="num">—</td>'
+        : opts.budget ? `<td class="num ${r.balance >= 0 ? "pos" : "neg"}">${r.balance >= 0 ? "+" : "−"}${fmtMoneyFull(Math.abs(r.balance))}</td>`
+        : `<td class="num">${fmtMoneyFull(r.balance)}</td>`;
+    const pctCell = r => r.pctAchieved == null ? '<td class="num">—</td>'
+        : opts.budget ? `<td class="num"><span class="rr-bar${r.pctAchieved >= 1 ? " full" : ""}" title="${fmtPct(r.pctAchieved)} of target"><span class="rr-fill" style="width:${Math.max(0, Math.min(100, r.pctAchieved * 100)).toFixed(1)}%;"></span><span class="rr-lbl">${fmtPct(r.pctAchieved)}</span></span></td>`
+        : `<td class="num">${fmtPct(r.pctAchieved)}</td>`;
     const bodyHtml = rows.map(r => {
         tCy += r.cyVal; tPy += r.pyVal; tTarget += r.target;
         const name = opts.budget && SALESPERSON_BUDGET_NAMES[r.entity] ? ` <span class="muted" style="opacity:.7;">${escapeHtml(SALESPERSON_BUDGET_NAMES[r.entity])}</span>` : "";
@@ -12493,10 +12545,10 @@ function renderRunRateTab(opts) {
             <td class="num">${r.cyVal ? fmtMoneyFull(r.cyVal) : "—"}</td>
             <td class="num">${r.target ? fmtMoneyFull(r.targetDaily) : "—"}</td>
             <td class="num">${r.actualDaily ? fmtMoneyFull(r.actualDaily) : "—"}</td>
-            <td class="num">${r.target ? fmtMoneyFull(r.balance) : "—"}</td>
+            ${balanceCell(r)}
             <td class="num">${requiredCell(r)}</td>
             <td>${statusBadgeRunRate(r.status)}</td>
-            <td class="num">${r.pctAchieved == null ? "—" : fmtPct(r.pctAchieved)}</td>
+            ${pctCell(r)}
         </tr>`;
     }).join("");
     let totalHtml;
@@ -12504,6 +12556,7 @@ function renderRunRateTab(opts) {
         const t = computeRunRate(tCy, tTarget, sd.total, sd.passed, sd.remaining);
         if (sd.isPast) t.status = closedStatus(tCy, tTarget);
         if (sd.isFuture) t.status = tTarget > 0 ? "NOT STARTED" : "NO PLAN";
+        t.balance = tCy - tTarget; t.target = tTarget;
         totalHtml = `<tr style="font-weight:700; background:#eef0fb;">
             <td>Total</td>
             <td class="num">${tPy ? fmtMoneyFull(tPy) : "—"}</td>
@@ -12511,10 +12564,10 @@ function renderRunRateTab(opts) {
             <td class="num">${fmtMoneyFull(tCy)}</td>
             <td class="num">${tTarget ? fmtMoneyFull(t.targetDaily) : "—"}</td>
             <td class="num">${t.actualDaily ? fmtMoneyFull(t.actualDaily) : "—"}</td>
-            <td class="num">${tTarget ? fmtMoneyFull(t.balance) : "—"}</td>
+            ${balanceCell(t)}
             <td class="num">${requiredCell({ target: tTarget, requiredDaily: t.requiredDaily })}</td>
             <td>${statusBadgeRunRate(t.status)}</td>
-            <td class="num">${t.pctAchieved == null ? "—" : fmtPct(t.pctAchieved)}</td>
+            ${pctCell(t)}
         </tr>`;
     } else {
         totalHtml = `<tr style="font-weight:700; background:#eef0fb;">
@@ -12541,6 +12594,7 @@ function renderRunRateTab(opts) {
         if (notSeen.length) msgs.push("Budgeted codes with no invoices in the loaded data: " + notSeen.map(c => c + " (" + SALESPERSON_BUDGET_NAMES[c] + ")").join(", ") + ".");
         if (noBudget.length) msgs.push("Salesperson codes in the data with no FY2026-27 budget: " + noBudget.join(", ") + ".");
         if (note) { note.textContent = msgs.join(" "); note.style.display = msgs.length ? "" : "none"; }
+        renderRunRateComparison(opts, mk, rows, today);
     }
 
     tbody.querySelectorAll("input[data-target-metric]").forEach(inp => {
@@ -12559,6 +12613,113 @@ function renderBranchSalesRunRate()       { renderRunRateTab({ metric: "sales", 
 function renderBranchMarginRunRate()      { renderRunRateTab({ metric: "margin", entity: "branch",      prefix: "brmr" }); }
 function renderSalespersonSalesRunRate()  { renderRunRateTab({ metric: "sales",  entity: "salesperson", prefix: "spsr", budget: true }); }
 function renderSalespersonMarginRunRate() { renderRunRateTab({ metric: "margin", entity: "salesperson", prefix: "spmr", budget: true }); }
+// ============================================================
+// SALESPERSON RUN-RATE COMPARISONS (charts under the run-rate table;
+// budget tabs only). All actuals use the same per-invoice maths as the
+// table above (invoiceSalesAmount / invoiceCost), honouring the
+// salesperson and branch filters.
+// ============================================================
+// code -> { "YYYY-MM" -> value } for every budget month, metric = sales|margin
+function salespersonFyActuals(metric) {
+    const byCode = new Map();
+    const months = new Set(SALESPERSON_BUDGET_MONTHS);
+    for (const inv of state.invoices) {
+        const mk = monthKey(inv.postingDate);
+        if (!months.has(mk)) continue;
+        const ent = inv.salesperson || "(unassigned)";
+        if (state.filters.salesperson && ent !== state.filters.salesperson) continue;
+        if (state.filters.location && !(inv.salesInvoiceLines || []).some(ln => locationCode(ln.locationId) === state.filters.location)) continue;
+        const sales = invoiceSalesAmount(inv);
+        const totalSales = num(inv.totalAmountExcludingTax);
+        const cost = invoiceCost(inv) * (totalSales ? (sales / totalSales) : 1);
+        const v = metric === "sales" ? sales : (sales - cost);
+        if (!byCode.has(ent)) byCode.set(ent, {});
+        const m = byCode.get(ent);
+        m[mk] = (m[mk] || 0) + v;
+    }
+    return byCode;
+}
+function renderRunRateComparison(opts, mk, rows, today) {
+    const prefix = opts.prefix, metric = opts.metric;
+    const prefs = state.runRateCmp[prefix];
+    const viewSel = document.getElementById(prefix + "CmpView");
+    const repSel  = document.getElementById(prefix + "CmpRep");
+    const canvas  = document.getElementById(prefix + "CmpChart");
+    if (!viewSel || !repSel || !canvas) return;
+    const codes = Object.keys(SALESPERSON_BUDGET_FY2027[metric]);
+    const label = c => c + (SALESPERSON_BUDGET_NAMES[c] ? " · " + SALESPERSON_BUDGET_NAMES[c] : "");
+    const colour = c => ENTITY_PALETTE[Math.max(0, codes.indexOf(c)) % ENTITY_PALETTE.length];
+    if (!viewSel.dataset.wired) {
+        viewSel.addEventListener("change", () => { prefs.view = viewSel.value; renderCurrentTab(); });
+        repSel.innerHTML = codes.map(c => '<option value="' + c + '">' + escapeHtml(label(c)) + '</option>').join("");
+        repSel.addEventListener("change", () => { prefs.rep = repSel.value; renderCurrentTab(); });
+        viewSel.dataset.wired = "1";
+    }
+    viewSel.value = prefs.view;
+    if (!prefs.rep || !codes.includes(prefs.rep)) prefs.rep = codes[0];
+    repSel.value = prefs.rep;
+    repSel.style.display = prefs.view === "fyOne" ? "" : "none";
+
+    const metricLbl = metric === "sales" ? "Sales" : "GP $";
+    const monthLbl = monthLabelFromKey(mk);
+    const todayMk = localISO(today).slice(0, 7);
+    const fyMonths = SALESPERSON_BUDGET_MONTHS;
+    const elapsed = fyMonths.filter(m => m <= todayMk);           // months with any actuals possible
+    const tgt = (c, m) => salespersonBudgetTarget(metric, m, c) || 0;
+    const rowFor = c => rows.find(r => r.entity === c) || { cyVal: 0, target: tgt(c, mk), pctAchieved: null, balance: 0 - tgt(c, mk) };
+    const money = v => fmtMoneyFull(v);
+    const moneyTicks = { ticks: { callback: v => fmtMoney(v) } };
+    let cfg;
+
+    if (prefs.view === "monthTvA") {
+        cfg = { type: "bar",
+            data: { labels: codes.map(label), datasets: [
+                { label: metricLbl + " target · " + monthLbl, data: codes.map(c => rowFor(c).target), backgroundColor: "rgba(120,120,120,0.35)", borderRadius: 4 },
+                { label: metricLbl + " actual · " + monthLbl, data: codes.map(c => rowFor(c).cyVal), backgroundColor: codes.map(colour), borderRadius: 4 } ] },
+            options: chartBase({ plugins: { tooltip: { callbacks: { label: c => c.dataset.label + ": " + money(c.parsed.y) } } }, scales: { y: moneyTicks } }) };
+    } else if (prefs.view === "monthPct") {
+        const pct = codes.map(c => { const r = rowFor(c); return r.target ? r.cyVal / r.target * 100 : 0; });
+        cfg = { type: "bar",
+            data: { labels: codes.map(label), datasets: [
+                { type: "bar", label: "% of target achieved · " + monthLbl, data: pct, backgroundColor: pct.map(p => p >= 100 ? "#43a047" : "#fb8c00"), borderRadius: 4 },
+                { type: "line", label: "100% (target)", data: codes.map(() => 100), borderColor: "#e53935", borderDash: [6, 4], pointRadius: 0, borderWidth: 2 } ] },
+            options: chartBase({ plugins: { tooltip: { callbacks: { label: c => c.dataset.label + ": " + c.parsed.y.toFixed(1) + "%" } } }, scales: { y: { beginAtZero: true, ticks: { callback: v => v + "%" } } } }) };
+    } else if (prefs.view === "monthBal") {
+        const bal = codes.map(c => rowFor(c).balance);
+        cfg = { type: "bar",
+            data: { labels: codes.map(label), datasets: [ { label: "Actual − target · " + monthLbl, data: bal, backgroundColor: bal.map(b => b >= 0 ? "#43a047" : "#e53935"), borderRadius: 4 } ] },
+            options: chartBase({ plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => (c.parsed.y >= 0 ? "Ahead by " : "Behind by ") + money(Math.abs(c.parsed.y)) } } }, scales: { y: moneyTicks } }) };
+    } else if (prefs.view === "fyTargets") {
+        cfg = { type: "line",
+            data: { labels: fyMonths.map(monthLabelFromKey), datasets: codes.map(c => ({ label: label(c), data: fyMonths.map(m => tgt(c, m)), borderColor: colour(c), backgroundColor: colour(c), tension: 0.25, pointRadius: 3 })) },
+            options: chartBase({ plugins: { tooltip: { callbacks: { label: c => c.dataset.label + ": " + money(c.parsed.y) } } }, scales: { y: moneyTicks } }) };
+    } else if (prefs.view === "fyOne") {
+        const act = salespersonFyActuals(metric).get(prefs.rep) || {};
+        cfg = { type: "bar",
+            data: { labels: fyMonths.map(monthLabelFromKey), datasets: [
+                { type: "bar", label: metricLbl + " actual", data: fyMonths.map(m => elapsed.includes(m) ? (act[m] || 0) : null), backgroundColor: colour(prefs.rep), borderRadius: 4 },
+                { type: "line", label: metricLbl + " target", data: fyMonths.map(m => tgt(prefs.rep, m)), borderColor: "#e53935", backgroundColor: "#e53935", tension: 0.25, pointRadius: 3 } ] },
+            options: chartBase({ plugins: { tooltip: { callbacks: { label: c => c.dataset.label + ": " + (c.parsed.y == null ? "—" : money(c.parsed.y)) } } }, scales: { y: moneyTicks } }) };
+    } else if (prefs.view === "fyCum") {
+        const act = salespersonFyActuals(metric);
+        const cumA = codes.map(c => elapsed.reduce((s, m) => s + ((act.get(c) || {})[m] || 0), 0));
+        const cumT = codes.map(c => elapsed.reduce((s, m) => s + tgt(c, m), 0));
+        cfg = { type: "bar",
+            data: { labels: codes.map(label), datasets: [
+                { label: "Target FY to date (" + monthLabelFromKey(fyMonths[0]) + " – " + monthLabelFromKey(elapsed[elapsed.length - 1] || fyMonths[0]) + ")", data: cumT, backgroundColor: "rgba(120,120,120,0.35)", borderRadius: 4 },
+                { label: "Actual FY to date", data: cumA, backgroundColor: codes.map(colour), borderRadius: 4 } ] },
+            options: chartBase({ plugins: { tooltip: { callbacks: { label: c => c.dataset.label + ": " + money(c.parsed.y) } } }, scales: { y: moneyTicks } }) };
+    } else { // share
+        const tT = codes.reduce((s, c) => s + rowFor(c).target, 0) || 1;
+        const tA = codes.reduce((s, c) => s + Math.max(0, rowFor(c).cyVal), 0) || 1;
+        cfg = { type: "bar",
+            data: { labels: ["Target · " + monthLbl, "Actual · " + monthLbl], datasets: codes.map(c => ({ label: label(c), data: [rowFor(c).target / tT * 100, Math.max(0, rowFor(c).cyVal) / tA * 100], backgroundColor: colour(c), borderRadius: 2 })) },
+            options: chartBase({ indexAxis: "y", plugins: { tooltip: { callbacks: { label: c => c.dataset.label + ": " + c.parsed.x.toFixed(1) + "%" } } }, scales: { x: { stacked: true, max: 100, ticks: { callback: v => v + "%" } }, y: { stacked: true } } }) };
+    }
+    destroyChart(prefix + "Cmp");
+    state.charts[prefix + "Cmp"] = new Chart(canvas.getContext("2d"), cfg);
+}
+
 
 // ============================================================
 // BRANCH SALES & TARGETS (multi-month with editable targets)
