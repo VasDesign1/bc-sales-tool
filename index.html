@@ -320,16 +320,14 @@
         .rr-bar { position: relative; display: inline-block; width: 130px; height: 18px; border-radius: 9px; background: rgba(128,128,128,0.18); overflow: hidden; vertical-align: middle; }
         .rr-bar .rr-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 9px; }
         .rr-bar.b0 .rr-fill { background: #e53935; }   /* under 50% */
-        .rr-bar.b1 .rr-fill { background: #fb8c00; }   /* 50–79% */
-        .rr-bar.b2 .rr-fill { background: #fdd835; }   /* 80–99% */
-        .rr-bar.b3 .rr-fill { background: #43a047; }   /* 100% and over */
+        .rr-bar.b1 .rr-fill { background: #fb8c00; }   /* 50–99% */
+        .rr-bar.b2 .rr-fill { background: #43a047; }   /* 100% and over */
         /* Legend for the bands, shown in the run-rate panel header */
         .rr-legend { display: inline-flex; align-items: center; gap: 12px; margin-left: auto; margin-right: 6px; font-size: 11px; font-weight: 600; opacity: .85; white-space: nowrap; }
         .rr-legend span::before { content: ""; display: inline-block; width: 12px; height: 12px; border-radius: 6px; margin-right: 5px; vertical-align: -2px; }
         .rr-legend .b0::before { background: #e53935; }
         .rr-legend .b1::before { background: #fb8c00; }
-        .rr-legend .b2::before { background: #fdd835; }
-        .rr-legend .b3::before { background: #43a047; }
+        .rr-legend .b2::before { background: #43a047; }
         .rr-bar .rr-lbl { position: absolute; inset: 0; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; color: inherit; }
         th.sorted-desc::after { content: ' ▼'; font-size: 10px; }
         /* Reconciliation drill-down: every sortable header shows a faint ⇅
@@ -3624,7 +3622,7 @@
                     <div class="kpi k-gpp"><div class="label">% Month Passed</div><div class="value" id="spsrSdPct">—</div></div>
                 </div>
                 <div class="panel">
-                    <div class="panel-header"><h2>Sales Run Rate · by Salesperson</h2><span class="rr-legend" title="% Achieved = actual ÷ target"><span class="b0">&lt; 50%</span><span class="b1">50–79%</span><span class="b2">80–99%</span><span class="b3">100%+</span></span><select id="spsrMonthSel" class="mini-select" title="Month"></select></div>
+                    <div class="panel-header"><h2>Sales Run Rate · by Salesperson</h2><span class="rr-legend" title="% Achieved = actual ÷ target"><span class="b0">&lt; 50%</span><span class="b1">50–99%</span><span class="b2">100%+</span></span><select id="spsrMonthSel" class="mini-select" title="Month"></select></div>
                     <div class="table-scroll">
                         <table id="spsrTable">
                             <thead><tr>
@@ -3671,7 +3669,7 @@
                     <div class="kpi k-gpp"><div class="label">% Month Passed</div><div class="value" id="spmrSdPct">—</div></div>
                 </div>
                 <div class="panel">
-                    <div class="panel-header"><h2>Margin Run Rate · by Salesperson</h2><span class="rr-legend" title="% Achieved = actual ÷ target"><span class="b0">&lt; 50%</span><span class="b1">50–79%</span><span class="b2">80–99%</span><span class="b3">100%+</span></span><select id="spmrMonthSel" class="mini-select" title="Month"></select></div>
+                    <div class="panel-header"><h2>Margin Run Rate · by Salesperson</h2><span class="rr-legend" title="% Achieved = actual ÷ target"><span class="b0">&lt; 50%</span><span class="b1">50–99%</span><span class="b2">100%+</span></span><select id="spmrMonthSel" class="mini-select" title="Month"></select></div>
                     <div class="table-scroll">
                         <table id="spmrTable">
                             <thead><tr>
@@ -14041,8 +14039,8 @@ function computeRunRate(actual, target, sdTotal, sdPassed, sdRemain) {
 }
 // % of target → colour band shared by the % Achieved bar and the
 // "% of target achieved" comparison chart (p is a ratio, 1 = 100%).
-function rrPctBand(p) { return p >= 1 ? 3 : p >= 0.8 ? 2 : p >= 0.5 ? 1 : 0; }
-const RR_PCT_COLOURS = ["#e53935", "#fb8c00", "#fdd835", "#43a047"];
+function rrPctBand(p) { return p >= 1 ? 2 : p >= 0.5 ? 1 : 0; }
+const RR_PCT_COLOURS = ["#e53935", "#fb8c00", "#43a047"];
 function statusBadgeRunRate(status) {
     if (status === "ON TRACK")    return '<span class="badge badge-paid">ON TRACK</span>';
     if (status === "TARGET MET")  return '<span class="badge badge-paid">TARGET MET</span>';
