@@ -3617,7 +3617,7 @@
 
             <!-- TAB: Salesperson Sales Run Rate -->
             <section data-tab-content="salespersonSalesRate" style="display:none;">
-                <div class="hint">Sales run-rate for <strong id="spsrMonth">—</strong>. Selling days = Mon–Fri minus Vic public holidays. Sales Targets come from the FY2026-27 budget by salesperson code.</div>
+                <div class="hint">Sales run-rate for <strong id="spsrMonth">—</strong>. Selling days = Mon–Fri minus Vic public holidays. Sales Targets are read from the <strong>Sales Budgets-Targets</strong> folder on SharePoint, newest Excel file, by salesperson code (<span id="spsrTgtStatus">not loaded</span>). <a href="#" id="spsrTgtReload">Reload targets</a></div>
                 <div class="kpi-row">
                     <div class="kpi k-rev"><div class="label">Total Selling Days</div><div class="value" id="spsrSdTotal">—</div></div>
                     <div class="kpi k-inv"><div class="label">Selling Days Passed</div><div class="value" id="spsrSdPassed">—</div></div>
@@ -3663,7 +3663,7 @@
 
             <!-- TAB: Salesperson Margin Run Rate -->
             <section data-tab-content="salespersonMarginRate" style="display:none;">
-                <div class="hint">Margin (GP$) run-rate for <strong id="spmrMonth">—</strong>. Selling days = Mon–Fri minus Vic public holidays. GM $ Targets come from the FY2026-27 budget by salesperson code.</div>
+                <div class="hint">Margin (GP$) run-rate for <strong id="spmrMonth">—</strong>. Selling days = Mon–Fri minus Vic public holidays. GM $ Targets are read from the <strong>Sales Budgets-Targets</strong> folder on SharePoint, newest Excel file, by salesperson code (<span id="spmrTgtStatus">not loaded</span>). <a href="#" id="spmrTgtReload">Reload targets</a></div>
                 <div class="kpi-row">
                     <div class="kpi k-rev"><div class="label">Total Selling Days</div><div class="value" id="spmrSdTotal">—</div></div>
                     <div class="kpi k-inv"><div class="label">Selling Days Passed</div><div class="value" id="spmrSdPassed">—</div></div>
@@ -12441,19 +12441,30 @@ function renderReturns() {
 // ============================================================
 function renderRunRateTab(opts) {
     // opts: { metric: "sales"|"margin", entity: "branch"|"salesperson", prefix, budget }
-    // budget = true → targets come from SALESPERSON_BUDGET_FY2027 (read-only
-    // cells, month selector); otherwise manual localStorage targets for the
-    // current month, exactly as before.
+    // budget = true → targets come from the SharePoint targets workbook
+    // (spTargets; read-only cells, month selector); otherwise manual
+    // localStorage targets for the current month, exactly as before.
     renderFilterChips();
     const today = new Date();
     const todayMk = localISO(today).slice(0, 7);
     let mk = todayMk;
     if (opts.budget) {
+        if (spTargets.status === "idle") loadSalespersonTargets();
+        paintTargetsStatus(opts.prefix);
         const sel = document.getElementById(opts.prefix + "MonthSel");
-        if (!state.runRateMonth[opts.prefix]) state.runRateMonth[opts.prefix] = SALESPERSON_BUDGET_MONTHS.includes(todayMk) ? todayMk : SALESPERSON_BUDGET_MONTHS[0];
+        const months = spBudgetMonths().length ? spBudgetMonths() : [todayMk];
+        const sig = months.join(",");
+        if (!months.includes(state.runRateMonth[opts.prefix] || "")) {
+            // default: today's month if budgeted, else the latest budgeted month not after today, else the first
+            const past = months.filter(m => m <= todayMk);
+            state.runRateMonth[opts.prefix] = months.includes(todayMk) ? todayMk : (past.length ? past[past.length - 1] : months[0]);
+        }
         mk = state.runRateMonth[opts.prefix];
+        if (sel && sel.dataset.sig !== sig) {
+            sel.innerHTML = months.map(m => '<option value="' + m + '">' + escapeHtml(monthLabelFromKey(m)) + (m === todayMk ? " (current)" : "") + '</option>').join("");
+            sel.dataset.sig = sig;
+        }
         if (sel && !sel.dataset.wired) {
-            sel.innerHTML = SALESPERSON_BUDGET_MONTHS.map(m => '<option value="' + m + '">' + escapeHtml(monthLabelFromKey(m)) + (m === todayMk ? " (current)" : "") + '</option>').join("");
             sel.addEventListener("change", () => { state.runRateMonth[opts.prefix] = sel.value; renderCurrentTab(); });
             sel.dataset.wired = "1";
         }
@@ -12507,7 +12518,7 @@ function renderRunRateTab(opts) {
     // Budget mode: every budgeted code gets a row even with no sales yet,
     // and a code is dropped only when the salesperson filter excludes it.
     const budgetCodes = opts.budget
-        ? Object.keys(SALESPERSON_BUDGET_FY2027[opts.metric]).filter(c => !state.filters.salesperson || c === state.filters.salesperson)
+        ? Object.keys(spBudgetTable(opts.metric)).filter(c => !state.filters.salesperson || c === state.filters.salesperson)
         : [];
     const entities = [...new Set([...cyByEntity.keys(), ...pyByEntity.keys(), ...budgetCodes])].sort();
     const metricKey = opts.entity + (opts.metric === "sales" ? "Sales" : "Margin");
@@ -12551,7 +12562,7 @@ function renderRunRateTab(opts) {
         : `<td class="num">${fmtPct(r.pctAchieved)}</td>`;
     const bodyHtml = rows.map(r => {
         tCy += r.cyVal; tPy += r.pyVal; tTarget += r.target;
-        const name = opts.budget && SALESPERSON_BUDGET_NAMES[r.entity] ? `<span class="rr-name">${escapeHtml(SALESPERSON_BUDGET_NAMES[r.entity])}</span>` : "";
+        const name = opts.budget && spBudgetNames()[r.entity] ? `<span class="rr-name">${escapeHtml(spBudgetNames()[r.entity])}</span>` : "";
         return `<tr>
             <td>${escapeHtml(r.entity)}${name}</td>
             <td class="num">${r.pyVal ? fmtMoneyFull(r.pyVal) : "—"}</td>
@@ -12621,7 +12632,7 @@ function renderSalespersonMarginRunRate() { renderRunRateTab({ metric: "margin",
 // code -> { "YYYY-MM" -> value } for every budget month, metric = sales|margin
 function salespersonFyActuals(metric) {
     const byCode = new Map();
-    const months = new Set(SALESPERSON_BUDGET_MONTHS);
+    const months = new Set(spBudgetMonths());
     for (const inv of state.invoices) {
         const mk = monthKey(inv.postingDate);
         if (!months.has(mk)) continue;
@@ -12645,24 +12656,27 @@ function renderRunRateComparison(opts, mk, rows, today) {
     const repSel  = document.getElementById(prefix + "CmpRep");
     const canvas  = document.getElementById(prefix + "CmpChart");
     if (!viewSel || !repSel || !canvas) return;
-    const codes = Object.keys(SALESPERSON_BUDGET_FY2027[metric]);
-    const label = c => c + (SALESPERSON_BUDGET_NAMES[c] ? " · " + SALESPERSON_BUDGET_NAMES[c] : "");
+    const codes = Object.keys(spBudgetTable(metric));
+    const label = c => c + (spBudgetNames()[c] ? " · " + spBudgetNames()[c] : "");
     const colour = c => ENTITY_PALETTE[Math.max(0, codes.indexOf(c)) % ENTITY_PALETTE.length];
     if (!viewSel.dataset.wired) {
         viewSel.addEventListener("change", () => { prefs.view = viewSel.value; renderCurrentTab(); });
-        repSel.innerHTML = codes.map(c => '<option value="' + c + '">' + escapeHtml(label(c)) + '</option>').join("");
         repSel.addEventListener("change", () => { prefs.rep = repSel.value; renderCurrentTab(); });
         viewSel.dataset.wired = "1";
     }
+    if (repSel.dataset.sig !== codes.join(",")) {
+        repSel.innerHTML = codes.map(c => '<option value="' + c + '">' + escapeHtml(label(c)) + '</option>').join("");
+        repSel.dataset.sig = codes.join(",");
+    }
     viewSel.value = prefs.view;
-    if (!prefs.rep || !codes.includes(prefs.rep)) prefs.rep = codes[0];
+    if (!prefs.rep || !codes.includes(prefs.rep)) prefs.rep = codes[0] || "";
     repSel.value = prefs.rep;
     repSel.style.display = prefs.view === "fyOne" ? "" : "none";
 
     const metricLbl = metric === "sales" ? "Sales" : "GP $";
     const monthLbl = monthLabelFromKey(mk);
     const todayMk = localISO(today).slice(0, 7);
-    const fyMonths = SALESPERSON_BUDGET_MONTHS;
+    const fyMonths = spBudgetMonths().length ? spBudgetMonths() : [mk];
     const elapsed = fyMonths.filter(m => m <= todayMk);           // months with any actuals possible
     const tgt = (c, m) => salespersonBudgetTarget(metric, m, c) || 0;
     const rowFor = c => rows.find(r => r.entity === c) || { cyVal: 0, target: tgt(c, mk), pctAchieved: null, balance: 0 - tgt(c, mk) };
@@ -14038,24 +14052,150 @@ function statusBadgeRunRate(status) {
 }
 
 // ============================================================
-// SALESPERSON BUDGET FY2026-27 (from "Budgets FY2627 CURRENT.xlsx",
-// sheet "Salesperson Targets", keyed by Wiise salesperson code)
+// SALESPERSON TARGETS — read from SharePoint, not hard-coded.
 // ------------------------------------------------------------
+// Folder: SP_CONFIG.folder + "/Sales Budgets-Targets". The newest Excel
+// file in that folder is downloaded with the signed-in user's Graph
+// token (same path as the snapshots) and parsed in the browser with
+// SheetJS. Replace the file in SharePoint to change the targets.
+//
+// Workbook layout understood (any sheet, any number of blocks):
+//   a title row mentioning "REVENUE"/"SALES" or "GP"/"MARGIN" a few rows above
+//   a header row holding "Rep Name" with month dates to its right
+//   data rows: salesperson CODE in the column left of "Rep Name" (PB, SM…),
+//   the name under "Rep Name", one target per month column; stops at a
+//   blank name or a "TOTAL" row. A sheet with no code column is read with
+//   the Rep Name cell as the code.
 // Used ONLY by the Salesperson Sales Run Rate and Salesperson Margin
-// Run Rate tabs. Nothing else in the tool reads this table. Branch
-// tabs keep their own (manual) targets until a branch budget arrives.
-// Months run Jul 2026 → Jun 2027 in column order.
+// Run Rate tabs. Nothing else in the tool reads these figures.
 // ============================================================
-const SALESPERSON_BUDGET_MONTHS = ["2026-07","2026-08","2026-09","2026-10","2026-11","2026-12","2027-01","2027-02","2027-03","2027-04","2027-05","2027-06"];
-const SALESPERSON_BUDGET_NAMES = {};
-const SALESPERSON_BUDGET_FY2027 = { sales: {}, margin: {} }; // figures removed from history 2026-10-13
-// Budget target for one salesperson code / month ("YYYY-MM") / metric
-// ("sales" | "margin"). null when the code or month is not budgeted.
+const SP_TARGETS_FOLDER = "Sales Budgets-Targets";
+const spTargets = { status: "idle", error: "", fileName: "", modified: "", months: [], names: {}, sales: {}, margin: {} };
+function spBudgetMonths()      { return spTargets.months; }
+function spBudgetNames()       { return spTargets.names; }
+function spBudgetTable(metric) { return spTargets[metric] || {}; }
+// Target for one salesperson code / month ("YYYY-MM") / metric
+// ("sales" | "margin"); null when the code or month is not budgeted.
 function salespersonBudgetTarget(metric, mk, code) {
-    const i = SALESPERSON_BUDGET_MONTHS.indexOf(mk);
-    if (i < 0) return null;
-    const row = (SALESPERSON_BUDGET_FY2027[metric] || {})[(code || "").toUpperCase()];
-    return row ? row[i] : null;
+    const row = spBudgetTable(metric)[(code || "").toUpperCase()];
+    const v = row ? row[mk] : null;
+    return (v == null || isNaN(v)) ? null : v;
+}
+// Header-row cell → "YYYY-MM" (Excel date serial, Date, or "Jul-26" text); null otherwise.
+function spTargetsMonthKey(v) {
+    if (v instanceof Date && !isNaN(v)) return v.getFullYear() + "-" + String(v.getMonth() + 1).padStart(2, "0");
+    if (typeof v === "number" && v > 20000 && v < 80000) { const d = XLSX.SSF.parse_date_code(v); if (d) return d.y + "-" + String(d.m).padStart(2, "0"); }
+    if (typeof v === "string") {
+        const m = v.trim().match(/^([A-Za-z]{3})[A-Za-z]*[\s\-\/,.']+(\d{2,4})$/);
+        if (m) {
+            const mi = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"].indexOf(m[1].toLowerCase());
+            if (mi >= 0) { let y = parseInt(m[2]); if (y < 100) y += 2000; return y + "-" + String(mi + 1).padStart(2, "0"); }
+        }
+    }
+    return null;
+}
+function parseTargetsWorkbook(wb) {
+    const out = { months: new Set(), names: {}, sales: {}, margin: {}, blocks: 0 };
+    for (const sn of wb.SheetNames) {
+        const ws = wb.Sheets[sn];
+        if (!ws || !ws["!ref"]) continue;
+        const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null });
+        for (let r = 0; r < rows.length; r++) {
+            const row = rows[r] || [];
+            const hdrCol = row.findIndex(v => typeof v === "string" && /rep\s*name/i.test(v));
+            if (hdrCol < 0) continue;
+            const monthCols = [];
+            row.forEach((v, c) => { if (c !== hdrCol) { const mk = spTargetsMonthKey(v); if (mk) monthCols.push({ c, mk }); } });
+            if (!monthCols.length) continue;
+            // Metric from the nearest title above the header (REVENUE/SALES vs GP/MARGIN); sheet name as a fallback.
+            let metric = null;
+            for (let k = r - 1; k >= Math.max(0, r - 5) && !metric; k--) {
+                const t = (rows[k] || []).filter(v => typeof v === "string").join(" ");
+                if (/\bGP\b|gross|margin/i.test(t)) metric = "margin";
+                else if (/revenue|sales/i.test(t)) metric = "sales";
+            }
+            if (!metric) metric = /\bGP\b|gross|margin/i.test(sn) ? "margin" : "sales";
+            const codeCol = hdrCol > 0 ? hdrCol - 1 : -1;
+            for (let d = r + 1; d < rows.length; d++) {
+                const dr = rows[d] || [];
+                const nameRaw = dr[hdrCol];
+                if (nameRaw == null || String(nameRaw).trim() === "") break;
+                const name = String(nameRaw).trim();
+                if (/^total/i.test(name)) break;
+                const codeRaw = codeCol >= 0 ? dr[codeCol] : null;
+                const hasCode = codeRaw != null && String(codeRaw).trim() !== "";
+                const code = (hasCode ? String(codeRaw).trim() : name).toUpperCase();
+                if (hasCode) out.names[code] = name;
+                const tbl = out[metric];
+                if (!tbl[code]) tbl[code] = {};
+                for (const { c, mk } of monthCols) {
+                    const v = dr[c];
+                    if (typeof v === "number" && !isNaN(v)) { tbl[code][mk] = v; out.months.add(mk); }
+                }
+            }
+            out.blocks++;
+        }
+    }
+    out.months = [...out.months].sort();
+    return out;
+}
+async function loadSalespersonTargets(force) {
+    if (spTargets.status === "loading") return;
+    if (spTargets.status === "ready" && !force) return;
+    let signedIn = false;
+    try { initMsal(); signedIn = bcMsalInstance.getAllAccounts().length > 0; } catch (e) { /* no MSAL */ }
+    if (!signedIn) { spTargets.status = "signin"; paintTargetsStatus(); return; }
+    spTargets.status = "loading"; spTargets.error = "";
+    paintTargetsStatus();
+    try {
+        const token = await graphGetToken();
+        const driveId = await spDriveId(token);
+        const h = { Authorization: "Bearer " + token };
+        const folder = SP_CONFIG.folder + "/" + SP_TARGETS_FOLDER;
+        const list = await fetch(GRAPH_API + "/drives/" + driveId + "/root:/" + spEncPath(folder) + ":/children?$select=name,lastModifiedDateTime,file&$top=200", { headers: h, cache: "no-store" });
+        if (list.status === 403 || list.status === 404) throw new Error("your account has no access to the " + SP_TARGETS_FOLDER + " folder on SharePoint (or it does not exist)");
+        if (!list.ok) throw new Error("SharePoint folder listing failed (HTTP " + list.status + ")");
+        const files = ((await list.json()).value || [])
+            .filter(f => f.file && /\.xls[xm]?$/i.test(f.name) && !/^~\$/.test(f.name))
+            .sort((a, b) => (b.lastModifiedDateTime || "").localeCompare(a.lastModifiedDateTime || ""));
+        if (!files.length) throw new Error("no Excel file found in " + SP_TARGETS_FOLDER);
+        const f = files[0];
+        const resp = await fetch(GRAPH_API + "/drives/" + driveId + "/root:/" + spEncPath(folder + "/" + f.name) + ":/content", { headers: h, cache: "no-store" });
+        if (!resp.ok) throw new Error("could not download " + f.name + " (HTTP " + resp.status + ")");
+        const wb = XLSX.read(await resp.arrayBuffer(), { type: "array" });
+        const parsed = parseTargetsWorkbook(wb);
+        if (!parsed.blocks) throw new Error(f.name + " has no \"Rep Name\" header row with month columns");
+        spTargets.months = parsed.months; spTargets.names = parsed.names; spTargets.sales = parsed.sales; spTargets.margin = parsed.margin;
+        spTargets.fileName = f.name; spTargets.modified = f.lastModifiedDateTime || "";
+        spTargets.status = "ready";
+    } catch (e) {
+        spTargets.status = "error"; spTargets.error = e.message || String(e);
+    }
+    paintTargetsStatus();
+    if (state.tab === "salespersonSalesRate" || state.tab === "salespersonMarginRate") renderCurrentTab();
+}
+// Status text in both tabs' hint strips + the Reload link (wired once).
+function paintTargetsStatus(prefix) {
+    for (const px of ["spsr", "spmr"]) {
+        const el = document.getElementById(px + "TgtStatus");
+        if (el) {
+            let t;
+            if (spTargets.status === "ready") {
+                const when = spTargets.modified ? new Date(spTargets.modified) : null;
+                t = spTargets.fileName + (when && !isNaN(when) ? ", updated " + when.toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" }) : "")
+                  + " · " + Object.keys(spTargets.sales).length + " sales / " + Object.keys(spTargets.margin).length + " GP rows";
+            } else if (spTargets.status === "loading") t = "loading…";
+            else if (spTargets.status === "signin") t = "sign in to read the targets";
+            else if (spTargets.status === "error") t = "could not load — " + spTargets.error;
+            else t = "not loaded";
+            el.textContent = t;
+        }
+        const link = document.getElementById(px + "TgtReload");
+        if (link && !link.dataset.wired) {
+            link.addEventListener("click", e => { e.preventDefault(); loadSalespersonTargets(true); });
+            link.dataset.wired = "1";
+        }
+    }
 }
 // Selling-day position for a chosen month relative to today:
 // current month → live (as sellingDaysForMonth), a past month → fully
