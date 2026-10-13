@@ -222,6 +222,8 @@
         .rr-split { display: grid; grid-template-columns: minmax(0, 8fr) minmax(0, 4fr); gap: 14px; align-items: start; }
         .rr-split > .panel { margin-bottom: 18px; }
         @media (max-width: 1300px) { .rr-split { grid-template-columns: minmax(0, 1fr); } }
+        /* Run-rate note in brackets beside the panel title (replaces the two top hints) */
+        .rr-headnote { flex: 1 1 200px; min-width: 0; font-size: 11px; font-weight: 400; line-height: 1.35; opacity: .72; white-space: normal; }
         /* Compact run-rate table: all ten columns fit the left pane without a scrollbar */
         table.rr-compact { font-size: 12px; }
         table.rr-compact th { padding: 8px 7px; font-size: 10px; letter-spacing: 0; }
@@ -3615,8 +3617,6 @@
 
             <!-- TAB: Salesperson Sales Run Rate -->
             <section data-tab-content="salespersonSalesRate" style="display:none;">
-                <div class="hint">Sales run-rate for <strong id="spsrMonth">—</strong>. Selling days = Mon–Fri minus Vic public holidays. Sales Targets come from the FY2026-27 budget by salesperson code.</div>
-                <div class="hint" id="spsrNote" style="display:none;"></div>
                 <div class="kpi-row">
                     <div class="kpi k-rev"><div class="label">Total Selling Days</div><div class="value" id="spsrSdTotal">—</div></div>
                     <div class="kpi k-inv"><div class="label">Selling Days Passed</div><div class="value" id="spsrSdPassed">—</div></div>
@@ -3625,7 +3625,7 @@
                 </div>
                 <div class="rr-split">
                 <div class="panel">
-                    <div class="panel-header"><h2>Sales Run Rate · by Salesperson</h2><select id="spsrMonthSel" class="mini-select" title="Month"></select></div>
+                    <div class="panel-header"><h2>Sales Run Rate · by Salesperson</h2><span class="rr-headnote">(<strong id="spsrMonth">—</strong> · selling days = Mon–Fri minus Vic public holidays · Sales Targets from the FY2026-27 budget by salesperson code<span id="spsrNote"></span>)</span><select id="spsrMonthSel" class="mini-select" title="Month"></select></div>
                     <div class="table-scroll">
                         <table id="spsrTable" class="rr-compact">
                             <thead><tr>
@@ -3664,8 +3664,6 @@
 
             <!-- TAB: Salesperson Margin Run Rate -->
             <section data-tab-content="salespersonMarginRate" style="display:none;">
-                <div class="hint">Margin (GP$) run-rate for <strong id="spmrMonth">—</strong>. Selling days = Mon–Fri minus Vic public holidays. GM $ Targets come from the FY2026-27 budget by salesperson code.</div>
-                <div class="hint" id="spmrNote" style="display:none;"></div>
                 <div class="kpi-row">
                     <div class="kpi k-rev"><div class="label">Total Selling Days</div><div class="value" id="spmrSdTotal">—</div></div>
                     <div class="kpi k-inv"><div class="label">Selling Days Passed</div><div class="value" id="spmrSdPassed">—</div></div>
@@ -3674,7 +3672,7 @@
                 </div>
                 <div class="rr-split">
                 <div class="panel">
-                    <div class="panel-header"><h2>Margin Run Rate · by Salesperson</h2><select id="spmrMonthSel" class="mini-select" title="Month"></select></div>
+                    <div class="panel-header"><h2>Margin Run Rate · by Salesperson</h2><span class="rr-headnote">(<strong id="spmrMonth">—</strong> · selling days = Mon–Fri minus Vic public holidays · GM $ Targets from the FY2026-27 budget by salesperson code<span id="spmrNote"></span>)</span><select id="spmrMonthSel" class="mini-select" title="Month"></select></div>
                     <div class="table-scroll">
                         <table id="spmrTable" class="rr-compact">
                             <thead><tr>
@@ -12608,11 +12606,11 @@ function renderRunRateTab(opts) {
         const seen = new Set(state.invoices.map(i => i.salesperson || "(unassigned)"));
         const notSeen = Object.keys(SALESPERSON_BUDGET_FY2027[opts.metric]).filter(c => !seen.has(c));
         const noBudget = entities.filter(e => !SALESPERSON_BUDGET_FY2027[opts.metric][e]);
-        if (!state.invoices.length) msgs.push("No sales loaded yet — Load sales (or Fast lookup) to see actuals.");
-        else if (!state.invoices.some(i => inMonth(i, 0))) msgs.push("No invoices in the loaded data for " + monthLbl + " — the loaded range does not cover this month.");
-        if (notSeen.length) msgs.push("Budgeted codes with no invoices in the loaded data: " + notSeen.map(c => c + " (" + SALESPERSON_BUDGET_NAMES[c] + ")").join(", ") + ".");
-        if (noBudget.length) msgs.push("Salesperson codes in the data with no FY2026-27 budget: " + noBudget.join(", ") + ".");
-        if (note) { note.textContent = msgs.join(" "); note.style.display = msgs.length ? "" : "none"; }
+        if (!state.invoices.length) msgs.push("no sales loaded yet — Load sales or Fast lookup to see actuals");
+        else if (!state.invoices.some(i => inMonth(i, 0))) msgs.push("no invoices in the loaded data for " + monthLbl + " — the loaded range does not cover this month");
+        if (notSeen.length) msgs.push("budgeted codes with no invoices in the loaded data: " + notSeen.map(c => c + " " + SALESPERSON_BUDGET_NAMES[c]).join(", "));
+        if (noBudget.length) msgs.push("codes in the data with no FY2026-27 budget: " + noBudget.join(", "));
+        if (note) note.textContent = msgs.length ? " · " + msgs.join(" · ") : "";
         renderRunRateComparison(opts, mk, rows, today);
     }
 
