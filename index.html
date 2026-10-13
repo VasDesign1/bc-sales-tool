@@ -733,13 +733,13 @@
         body.tabview .sidebar { display: none; }
         .tab-strip { display: none; flex-direction: column; margin: -4px 0 16px; }
         body.tabview .tab-strip { display: flex; }
-        .tab-strip .ts-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 4px; padding: 0 6px; border-bottom: 2px solid #c9cbe0; }
+        .tab-strip .ts-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 4px; padding: 0; border-bottom: 2px solid #c9cbe0; }
         .tab-strip .ts-row.sub { border-bottom-color: #e1e3ef; padding-top: 8px; }
         .tab-strip button {
             background: white; border: 1px solid #d6d8eb; border-bottom: none; color: #333;
-            padding: 9px 20px; margin-bottom: -2px; border-radius: 10px 10px 0 0;
+            padding: 9px 20px; margin-bottom: 0; border-radius: 10px 10px 0 0;
             font-size: 13px; font-weight: 700; cursor: pointer; box-shadow: 0 -1px 3px rgba(0,0,0,0.04);
-            position: relative; z-index: 1;   /* sits on top of the row's rule, never behind it */
+            white-space: nowrap;   /* tabs rest on the row's rule: the rule is their bottom edge */
         }
         .tab-strip button:hover { background: #f3f4fb; }
         .tab-strip .ts-row.sub button { font-size: 12px; padding: 7px 16px; }
@@ -1817,13 +1817,12 @@
                     <div id="costQualityBadge" style="margin-top:2px;"></div>
                     <div id="snapshotBadge" style="margin-top:2px;"></div>
                 </div>
-                <div style="display:flex; flex-direction:column; gap:6px; align-items:flex-start; margin-left:16px;">
-                    <span style="display:inline-flex; align-items:center; gap:8px;">
-                        <button class="theme-btn" id="themeBtn" title="Change interface theme" style="margin-left:0; width:84px; text-align:center;">Theme</button>
-                        <!-- Owner-only trial (ownerUi) -->
-                        <button type="button" class="help-btn ownerUi" id="helpBtn" style="display:none;" aria-label="Help: hover anything to see what it means" title="Help: hover anything to see what it means">?</button>
-                    </span>
-                    <button class="theme-btn" id="signOutBtn" title="Sign out" style="display:none; margin-left:0; width:84px; text-align:center;">Sign out</button>
+                <!-- Grid: column 1 is as wide as the widest button, so Theme and Sign out match; nothing wraps -->
+                <div style="display:grid; grid-template-columns:max-content auto; column-gap:8px; row-gap:6px; align-items:center; margin-left:16px;">
+                    <button class="theme-btn" id="themeBtn" title="Change interface theme" style="margin-left:0; width:100%; white-space:nowrap; text-align:center;">Theme</button>
+                    <!-- Owner-only trial (ownerUi) -->
+                    <button type="button" class="help-btn ownerUi" id="helpBtn" style="display:none;" aria-label="Help: hover anything to see what it means" title="Help: hover anything to see what it means">?</button>
+                    <button class="theme-btn" id="signOutBtn" title="Sign out" style="display:none; margin-left:0; width:100%; white-space:nowrap; text-align:center; grid-column:1;">Sign out</button>
                 </div>
             </div>
         </div>
