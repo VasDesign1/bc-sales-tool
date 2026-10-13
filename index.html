@@ -4310,7 +4310,9 @@ function escapeHtml(s) {
 }
 function escapeAttr(s) { return escapeHtml(s); }
 function locationCode(locId) {
-    if (!locId) return "(no location)";
+    // Wiise sends an all-zeros GUID on lines with no location (G/L lines such
+    // as freight, prepayments, install, surcharges) — same thing as blank.
+    if (!locId || /^0{8}-0{4}-0{4}-0{4}-0{12}$/.test(locId)) return "(no location)";
     // v2 invoice lines store a GUID → look up code; OData blanket-order lines
     // already store the code → pass through.
     const mapped = state.locations.get(locId);
