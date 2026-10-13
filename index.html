@@ -14060,10 +14060,13 @@ function statusBadgeRunRate(status) {
 // ============================================================
 // SALESPERSON TARGETS — read from SharePoint, not hard-coded.
 // ------------------------------------------------------------
-// Folder: SP_CONFIG.folder + "/Sales Budgets-Targets". The newest Excel
-// file in that folder is downloaded with the signed-in user's Graph
-// token (same path as the snapshots) and parsed in the browser with
-// SheetJS. Replace the file in SharePoint to change the targets.
+// Folder: SP_CONFIG.folder + "/Sales Budgets-Targets". EVERY Excel file
+// in that folder is downloaded with the signed-in user's Graph token
+// (same path as the snapshots), parsed in the browser with SheetJS and
+// merged: one file per financial year is the intended use, the month
+// selector then offers every budgeted month. Where two files budget the
+// same salesperson + month, the most recently modified file wins.
+// Replace or add files in SharePoint to change the targets.
 //
 // Workbook layout understood (any sheet, any number of blocks):
 //   a title row mentioning "REVENUE"/"SALES" or "GP"/"MARGIN" a few rows above
@@ -14077,7 +14080,7 @@ function statusBadgeRunRate(status) {
 // Run Rate tabs. Nothing else in the tool reads these figures.
 // ============================================================
 const SP_TARGETS_FOLDER = "Sales Budgets-Targets";
-const spTargets = { status: "idle", error: "", fileName: "", modified: "", months: [], names: {}, sales: {}, margin: {} };
+const spTargets = { status: "idle", error: "", files: [], months: [], names: {}, sales: {}, margin: {} };
 function spBudgetMonths()      { return spTargets.months; }
 function spBudgetNames()       { return spTargets.names; }
 function spBudgetTable(metric) { return spTargets[metric] || {}; }
@@ -14164,18 +14167,31 @@ async function loadSalespersonTargets(force) {
         const list = await fetch(GRAPH_API + "/drives/" + driveId + "/root:/" + spEncPath(folder) + ":/children?$select=name,lastModifiedDateTime,file&$top=200", { headers: h, cache: "no-store" });
         if (list.status === 403 || list.status === 404) throw new Error("your account has no access to the " + SP_TARGETS_FOLDER + " folder on SharePoint (or it does not exist)");
         if (!list.ok) throw new Error("SharePoint folder listing failed (HTTP " + list.status + ")");
+        // Oldest first, so a newer file overwrites an older one on overlap.
         const files = ((await list.json()).value || [])
             .filter(f => f.file && /\.xls[xm]?$/i.test(f.name) && !/^~\$/.test(f.name))
-            .sort((a, b) => (b.lastModifiedDateTime || "").localeCompare(a.lastModifiedDateTime || ""));
+            .sort((a, b) => (a.lastModifiedDateTime || "").localeCompare(b.lastModifiedDateTime || ""));
         if (!files.length) throw new Error("no Excel file found in " + SP_TARGETS_FOLDER);
-        const f = files[0];
-        const resp = await fetch(GRAPH_API + "/drives/" + driveId + "/root:/" + spEncPath(folder + "/" + f.name) + ":/content", { headers: h, cache: "no-store" });
-        if (!resp.ok) throw new Error("could not download " + f.name + " (HTTP " + resp.status + ")");
-        const wb = XLSX.read(await resp.arrayBuffer(), { type: "array" });
-        const parsed = parseTargetsWorkbook(wb);
-        if (!parsed.blocks) throw new Error(f.name + " has no \"Rep Name\" header row with month columns");
-        spTargets.months = parsed.months; spTargets.names = parsed.names; spTargets.sales = parsed.sales; spTargets.margin = parsed.margin;
-        spTargets.fileName = f.name; spTargets.modified = f.lastModifiedDateTime || "";
+        const merged = { months: new Set(), names: {}, sales: {}, margin: {} }, read = [], skipped = [];
+        for (const f of files) {
+            const resp = await fetch(GRAPH_API + "/drives/" + driveId + "/root:/" + spEncPath(folder + "/" + f.name) + ":/content", { headers: h, cache: "no-store" });
+            if (!resp.ok) { skipped.push(f.name + " (HTTP " + resp.status + ")"); continue; }
+            let parsed;
+            try { parsed = parseTargetsWorkbook(XLSX.read(await resp.arrayBuffer(), { type: "array" })); }
+            catch (e) { skipped.push(f.name + " (not readable)"); continue; }
+            if (!parsed.blocks) { skipped.push(f.name + " (no \"Rep Name\" header with month columns)"); continue; }
+            for (const m of parsed.months) merged.months.add(m);
+            Object.assign(merged.names, parsed.names);
+            for (const metric of ["sales", "margin"]) {
+                for (const [code, row] of Object.entries(parsed[metric])) {
+                    merged[metric][code] = Object.assign(merged[metric][code] || {}, row);
+                }
+            }
+            read.push({ name: f.name, modified: f.lastModifiedDateTime || "", months: parsed.months });
+        }
+        if (!read.length) throw new Error("no readable targets file in " + SP_TARGETS_FOLDER + (skipped.length ? " — " + skipped.join("; ") : ""));
+        spTargets.months = [...merged.months].sort(); spTargets.names = merged.names; spTargets.sales = merged.sales; spTargets.margin = merged.margin;
+        spTargets.files = read.reverse(); spTargets.skipped = skipped;
         spTargets.status = "ready";
     } catch (e) {
         spTargets.status = "error"; spTargets.error = e.message || String(e);
@@ -14190,11 +14206,14 @@ function paintTargetsStatus(prefix) {
         if (el) {
             let t;
             if (spTargets.status === "ready") {
-                const when = spTargets.modified ? new Date(spTargets.modified) : null;
-                t = spTargets.fileName + (when && !isNaN(when) ? " · " + when.toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" }) : "");
-                el.title = "Read from the Sales Budgets-Targets folder on SharePoint, newest Excel file, matched by salesperson code. "
-                         + Object.keys(spTargets.sales).length + " sales rows, " + Object.keys(spTargets.margin).length + " GP rows, months "
-                         + (spTargets.months.length ? monthLabelFromKey(spTargets.months[0]) + " – " + monthLabelFromKey(spTargets.months[spTargets.months.length - 1]) : "none") + ".";
+                const fmtD = iso => { const d = iso ? new Date(iso) : null; return d && !isNaN(d) ? d.toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" }) : ""; };
+                const span = spTargets.months.length ? monthLabelFromKey(spTargets.months[0]) + " – " + monthLabelFromKey(spTargets.months[spTargets.months.length - 1]) : "no months";
+                const fl = spTargets.files;
+                t = fl.length === 1 ? fl[0].name + " · " + fmtD(fl[0].modified) : fl.length + " files · " + span;
+                el.title = "Read from the Sales Budgets-Targets folder on SharePoint (every Excel file, merged; newest file wins where months overlap), matched by salesperson code.\n"
+                         + fl.map(f => "• " + f.name + " — " + fmtD(f.modified) + (f.months.length ? " — " + monthLabelFromKey(f.months[0]) + " – " + monthLabelFromKey(f.months[f.months.length - 1]) : "")).join("\n")
+                         + ((spTargets.skipped || []).length ? "\nSkipped: " + spTargets.skipped.join("; ") : "")
+                         + "\n" + Object.keys(spTargets.sales).length + " sales rows, " + Object.keys(spTargets.margin).length + " GP rows.";
             } else if (spTargets.status === "loading") t = "loading…";
             else if (spTargets.status === "signin") t = "sign in to read the targets";
             else if (spTargets.status === "error") t = "could not load — " + spTargets.error;
