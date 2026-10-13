@@ -323,6 +323,13 @@
         .rr-bar.b1 .rr-fill { background: #fb8c00; }   /* 50–79% */
         .rr-bar.b2 .rr-fill { background: #fdd835; }   /* 80–99% */
         .rr-bar.b3 .rr-fill { background: #43a047; }   /* 100% and over */
+        /* Legend for the bands, shown in the run-rate panel header */
+        .rr-legend { display: inline-flex; align-items: center; gap: 12px; margin-left: auto; margin-right: 6px; font-size: 11px; font-weight: 600; opacity: .85; white-space: nowrap; }
+        .rr-legend span::before { content: ""; display: inline-block; width: 12px; height: 12px; border-radius: 6px; margin-right: 5px; vertical-align: -2px; }
+        .rr-legend .b0::before { background: #e53935; }
+        .rr-legend .b1::before { background: #fb8c00; }
+        .rr-legend .b2::before { background: #fdd835; }
+        .rr-legend .b3::before { background: #43a047; }
         .rr-bar .rr-lbl { position: absolute; inset: 0; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; color: inherit; }
         th.sorted-desc::after { content: ' ▼'; font-size: 10px; }
         /* Reconciliation drill-down: every sortable header shows a faint ⇅
@@ -3617,7 +3624,7 @@
                     <div class="kpi k-gpp"><div class="label">% Month Passed</div><div class="value" id="spsrSdPct">—</div></div>
                 </div>
                 <div class="panel">
-                    <div class="panel-header"><h2>Sales Run Rate · by Salesperson</h2><select id="spsrMonthSel" class="mini-select" title="Month"></select></div>
+                    <div class="panel-header"><h2>Sales Run Rate · by Salesperson</h2><span class="rr-legend" title="% Achieved = actual ÷ target"><span class="b0">&lt; 50%</span><span class="b1">50–79%</span><span class="b2">80–99%</span><span class="b3">100%+</span></span><select id="spsrMonthSel" class="mini-select" title="Month"></select></div>
                     <div class="table-scroll">
                         <table id="spsrTable">
                             <thead><tr>
@@ -3664,7 +3671,7 @@
                     <div class="kpi k-gpp"><div class="label">% Month Passed</div><div class="value" id="spmrSdPct">—</div></div>
                 </div>
                 <div class="panel">
-                    <div class="panel-header"><h2>Margin Run Rate · by Salesperson</h2><select id="spmrMonthSel" class="mini-select" title="Month"></select></div>
+                    <div class="panel-header"><h2>Margin Run Rate · by Salesperson</h2><span class="rr-legend" title="% Achieved = actual ÷ target"><span class="b0">&lt; 50%</span><span class="b1">50–79%</span><span class="b2">80–99%</span><span class="b3">100%+</span></span><select id="spmrMonthSel" class="mini-select" title="Month"></select></div>
                     <div class="table-scroll">
                         <table id="spmrTable">
                             <thead><tr>
