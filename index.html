@@ -703,6 +703,42 @@
         .theme-picker .change-banner:hover { color: #f5f4f1; border-color: #f5f4f1; }
 
         /* ---------- THEME BUTTON in header ---------- */
+        /* ---------- HELP MODE + TAB VIEW (owner-only trial, 2026-10-14) ---------- */
+        .help-btn {
+            width: 24px; height: 24px; padding: 0; border-radius: 50%;
+            border: 1px solid #d6d8eb; background: transparent; color: #555;
+            font-size: 12px; font-weight: 700; line-height: 22px; cursor: pointer;
+        }
+        .help-btn.on { background: #43a047; color: white; border-color: #43a047; }
+        body.help-mode, body.help-mode * { cursor: help !important; }
+        #helpTip {
+            display: none; position: fixed; z-index: 20000; max-width: 360px;
+            background: white; color: #2c2f4a; border: 1px solid #d6d8eb; border-radius: 10px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.18); padding: 10px 13px; font-size: 12.5px; line-height: 1.5;
+            pointer-events: none;
+        }
+        #helpTip strong { display: block; font-size: 12px; color: #1a237e; margin-bottom: 3px; }
+        #helpTip em { display: block; font-style: normal; font-size: 11.5px; opacity: .75; margin-top: 5px; }
+        html.theme-onyx #helpTip, html.theme-aurora #helpTip, html.theme-velvet #helpTip { background: #1f1f22; color: #e8e6e1; border-color: #3a3a40; }
+        html.theme-onyx #helpTip strong, html.theme-aurora #helpTip strong, html.theme-velvet #helpTip strong { color: #d4af7a; }
+        /* iOS-style switch under the page title */
+        .ws-wrap { display: inline-flex; align-items: center; gap: 7px; cursor: pointer; font-size: 10.5px; font-weight: 700; letter-spacing: 0.5px; color: #555; user-select: none; }
+        .ws-switch { position: relative; display: inline-block; width: 34px; height: 18px; border-radius: 10px; background: #c9cbe0; transition: background 0.15s; flex-shrink: 0; }
+        .ws-switch .ws-knob { position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: white; transition: left 0.15s; box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
+        .ws-switch.on { background: #43a047; }
+        .ws-switch.on .ws-knob { left: 18px; }
+        /* Tab view: sidebar hidden, tab strip under the filters */
+        body.tabview .sidebar { display: none; }
+        .tab-strip { display: none; flex-wrap: wrap; gap: 6px 8px; align-items: center; margin: -4px 0 14px; }
+        body.tabview .tab-strip { display: flex; }
+        .tab-strip .ts-group { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; opacity: .6; margin-left: 12px; }
+        .tab-strip .ts-group:first-child { margin-left: 0; }
+        .tab-strip button { background: white; border: 1px solid #d6d8eb; color: #3f51b5; padding: 5px 12px; border-radius: 16px; font-size: 12px; font-weight: 600; cursor: pointer; }
+        .tab-strip button:hover { background: #eef0fb; }
+        .tab-strip button.active { background: #3f51b5; color: white; border-color: #3f51b5; }
+        .tab-strip button.stub::after { content: 'WIP'; font-size: 9px; margin-left: 5px; opacity: .7; }
+        html.theme-onyx .tab-strip button, html.theme-aurora .tab-strip button, html.theme-velvet .tab-strip button { background: #141416; color: #d4af7a; border-color: #2a2820; }
+        html.theme-onyx .tab-strip button.active, html.theme-aurora .tab-strip button.active, html.theme-velvet .tab-strip button.active { background: #d4af7a; color: #141416; }
         .theme-btn {
             margin-left: 16px;
             padding: 5px 12px; border: 1px solid #d6d8eb; background: transparent;
@@ -1706,7 +1742,11 @@
 
         <div class="header">
             <div style="display:flex; align-items:center; gap:18px;">
-                <h2 id="headerTitle">Overview</h2>
+                <div style="display:flex; flex-direction:column; gap:5px;">
+                    <h2 id="headerTitle">Overview</h2>
+                    <!-- Owner-only trial (ownerUi): shown by updateRestrictedNav for the owner account only -->
+                    <span id="tabViewWrap" class="ws-wrap ownerUi" style="display:none;" title="Tab view: sidebar off, tabs across the top"><span class="ws-switch" id="tabViewSwitch"><span class="ws-knob"></span></span>TAB VIEW</span>
+                </div>
                 <button class="btn btn-primary" id="loadBtn" disabled>Load sales</button>
                 <span style="position:relative; display:inline-block;">
                     <button class="btn btn-primary" id="loadLookupBtn"
@@ -1727,8 +1767,12 @@
                     <div id="costQualityBadge" style="margin-top:2px;"></div>
                     <div id="snapshotBadge" style="margin-top:2px;"></div>
                 </div>
-                <div style="display:flex; flex-direction:column; gap:6px;">
-                    <button class="theme-btn" id="themeBtn" title="Change interface theme">Theme</button>
+                <div style="display:flex; flex-direction:column; gap:6px; align-items:flex-end;">
+                    <span style="display:inline-flex; align-items:center; gap:8px;">
+                        <button class="theme-btn" id="themeBtn" title="Change interface theme">Theme</button>
+                        <!-- Owner-only trial (ownerUi) -->
+                        <button type="button" class="help-btn ownerUi" id="helpBtn" style="display:none;" aria-label="Help: hover anything to see what it means" title="Help: hover anything to see what it means">?</button>
+                    </span>
                     <button class="theme-btn" id="signOutBtn" title="Sign out" style="display:none;">Sign out</button>
                 </div>
             </div>
@@ -1801,6 +1845,8 @@
             </div>
 
             <div class="filter-chips" id="filterChips"></div>
+            <!-- Tab view: the sidebar tabs as a strip (built from the sidebar, so access rules carry over) -->
+            <div class="tab-strip" id="tabStrip"></div>
 
             <!-- ====== DRILL-DOWN PANELS ====== -->
 
@@ -5761,6 +5807,9 @@ function setActiveTab(name) {
     }
     document.querySelectorAll(".sidebar a[data-tab]").forEach(a => {
         a.classList.toggle("active", a.dataset.tab === name);
+    });
+    document.querySelectorAll("#tabStrip [data-ts-tab]").forEach(b => {
+        b.classList.toggle("active", b.dataset.tsTab === name);
     });
     document.querySelectorAll("section[data-tab-content]").forEach(s => {
         s.style.display = (s.dataset.tabContent === name) ? "" : "none";
@@ -16769,11 +16818,55 @@ function currentSignInName() {
     } catch (e) { /* MSAL unavailable → not signed in */ }
     return "";
 }
+// ---- Tab view + Help mode: owner-only trial (Faik, 2026-10-14) ----
+// The "?" button and the TAB VIEW switch carry class ownerUi and are shown
+// only for RESTRICTED_NAV_OWNER. Tab view hides the sidebar and lists the
+// same tabs, in the same groups, as a strip under the filters; it is built
+// from the sidebar links so hidden (restricted) tabs stay hidden.
+let tabView = false, tabViewAllowed = false;   // allowed = signed in as the owner
+try { tabView = localStorage.getItem("bcSalesTabView") === "1"; } catch (e) { /* storage blocked */ }
+function renderTabStrip() {
+    const strip = document.getElementById("tabStrip");
+    if (!strip) return;
+    if (!(tabView && tabViewAllowed)) { strip.innerHTML = ""; return; }
+    let html = "";
+    document.querySelectorAll(".sidebar nav > *").forEach(el => {
+        if (el.style.display === "none") return;
+        if (el.classList.contains("group-label")) html += '<span class="ts-group">' + escapeHtml(el.textContent.trim()) + '</span>';
+        else if (el.dataset && el.dataset.tab) html += '<button type="button" data-ts-tab="' + escapeAttr(el.dataset.tab) + '" class="' + (el.dataset.tab === state.tab ? "active" : "") + (el.classList.contains("stub") ? " stub" : "") + '">' + escapeHtml(el.textContent.trim()) + '</button>';
+    });
+    strip.innerHTML = html;
+}
+function applyTabView() {
+    const on = tabView && tabViewAllowed;
+    document.body.classList.toggle("tabview", on);
+    const sw = document.getElementById("tabViewSwitch");
+    if (sw) sw.classList.toggle("on", on);
+    renderTabStrip();
+}
+function toggleTabView() {
+    tabView = !tabView;
+    try { localStorage.setItem("bcSalesTabView", tabView ? "1" : "0"); } catch (e) { /* storage blocked */ }
+    applyTabView();
+}
+(function wireTabView() {
+    const w = document.getElementById("tabViewWrap");
+    if (w) w.addEventListener("click", toggleTabView);
+    const strip = document.getElementById("tabStrip");
+    if (strip) strip.addEventListener("click", e => { const b = e.target.closest("[data-ts-tab]"); if (b) setActiveTab(b.dataset.tsTab); });
+    const hb = document.getElementById("helpBtn");
+    if (hb) hb.addEventListener("click", () => { if (window.toggleHelpMode) window.toggleHelpMode(); });
+})();
 function updateRestrictedNav() {
     const user = currentSignInName();
     const show = user === RESTRICTED_NAV_OWNER;
     document.querySelectorAll(".restrictedNav").forEach(el => { el.style.display = show ? "" : "none"; });
     if (!show && RESTRICTED_TABS.has(state.tab)) setActiveTab("overview");
+    // Owner-only trial UI: Help (?) and Tab View
+    document.querySelectorAll(".ownerUi").forEach(el => { el.style.display = show ? "" : "none"; });
+    tabViewAllowed = show;
+    if (!show && window.isHelpMode && window.isHelpMode()) window.toggleHelpMode(false);
+    applyTabView();
     const showPnl = PNL_VIEWERS.has(user);
     document.querySelectorAll(".financeNav").forEach(el => { el.style.display = showPnl ? "" : "none"; });
     if (!showPnl && state.tab === "pnl") setActiveTab("overview");
@@ -18182,6 +18275,7 @@ else showThemePicker(false);
     } catch (_) {}
 })();
 </script>
+<script src="help.js"></script>
 
 </body>
 </html>
