@@ -14064,8 +14064,9 @@ function statusBadgeRunRate(status) {
 //   a header row holding "Rep Name" with month dates to its right
 //   data rows: salesperson CODE in the column left of "Rep Name" (PB, SM…),
 //   the name under "Rep Name", one target per month column; stops at a
-//   blank name or a "TOTAL" row. A sheet with no code column is read with
-//   the Rep Name cell as the code.
+//   blank name or a "TOTAL" row. When a row has no code cell, the code is
+//   the rep's initials (Faik: Wiise salesperson codes ARE the initials —
+//   Rep Name → PB, Rep Name → CB).
 // Used ONLY by the Salesperson Sales Run Rate and Salesperson Margin
 // Run Rate tabs. Nothing else in the tool reads these figures.
 // ============================================================
@@ -14094,6 +14095,8 @@ function spTargetsMonthKey(v) {
     }
     return null;
 }
+// "Rep Name" → "PB": first letter of each word (Wiise salesperson codes are the initials).
+function spInitials(name) { return (name || "").split(/[\s\-]+/).filter(Boolean).map(w => w[0]).join(""); }
 function parseTargetsWorkbook(wb) {
     const out = { months: new Set(), names: {}, sales: {}, margin: {}, blocks: 0 };
     for (const sn of wb.SheetNames) {
@@ -14124,8 +14127,8 @@ function parseTargetsWorkbook(wb) {
                 if (/^total/i.test(name)) break;
                 const codeRaw = codeCol >= 0 ? dr[codeCol] : null;
                 const hasCode = codeRaw != null && String(codeRaw).trim() !== "";
-                const code = (hasCode ? String(codeRaw).trim() : name).toUpperCase();
-                if (hasCode) out.names[code] = name;
+                const code = (hasCode ? String(codeRaw).trim() : spInitials(name)).toUpperCase();
+                out.names[code] = name;
                 const tbl = out[metric];
                 if (!tbl[code]) tbl[code] = {};
                 for (const { c, mk } of monthCols) {
