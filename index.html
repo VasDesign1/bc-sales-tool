@@ -727,18 +727,28 @@
         .ws-switch .ws-knob { position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: white; transition: left 0.15s; box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
         .ws-switch.on { background: #43a047; }
         .ws-switch.on .ws-knob { left: 18px; }
-        /* Tab view: sidebar hidden, tab strip under the filters */
+        /* Tab view: sidebar hidden; folder-style tabs under the filters —
+           row 1 = the groups (Dashboards, Time Analytics, Targets & Run Rate,
+           Lists, Finance), row 2 = the tabs of the chosen group. */
         body.tabview .sidebar { display: none; }
-        .tab-strip { display: none; flex-wrap: wrap; gap: 6px 8px; align-items: center; margin: -4px 0 14px; }
+        .tab-strip { display: none; flex-direction: column; margin: -4px 0 16px; }
         body.tabview .tab-strip { display: flex; }
-        .tab-strip .ts-group { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; opacity: .6; margin-left: 12px; }
-        .tab-strip .ts-group:first-child { margin-left: 0; }
-        .tab-strip button { background: white; border: 1px solid #d6d8eb; color: #3f51b5; padding: 5px 12px; border-radius: 16px; font-size: 12px; font-weight: 600; cursor: pointer; }
-        .tab-strip button:hover { background: #eef0fb; }
-        .tab-strip button.active { background: #3f51b5; color: white; border-color: #3f51b5; }
-        .tab-strip button.stub::after { content: 'WIP'; font-size: 9px; margin-left: 5px; opacity: .7; }
+        .tab-strip .ts-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 4px; padding: 0 6px; border-bottom: 2px solid #c9cbe0; }
+        .tab-strip .ts-row.sub { border-bottom-color: #e1e3ef; padding-top: 8px; }
+        .tab-strip button {
+            background: white; border: 1px solid #d6d8eb; border-bottom: none; color: #333;
+            padding: 9px 20px; margin-bottom: -2px; border-radius: 10px 10px 0 0;
+            font-size: 13px; font-weight: 700; cursor: pointer; box-shadow: 0 -1px 3px rgba(0,0,0,0.04);
+        }
+        .tab-strip button:hover { background: #f3f4fb; }
+        .tab-strip .ts-row.sub button { font-size: 12px; padding: 7px 16px; }
+        .tab-strip button.active { color: white; border-color: transparent; }
+        .tab-strip .ts-row button.active { background: linear-gradient(135deg, #3f51b5, #5c6bc0); }
+        .tab-strip button.stub { color: #9a9a9a; }
+        .tab-strip button.stub::after { content: 'WIP'; font-size: 9px; margin-left: 6px; opacity: .8; }
         html.theme-onyx .tab-strip button, html.theme-aurora .tab-strip button, html.theme-velvet .tab-strip button { background: #141416; color: #d4af7a; border-color: #2a2820; }
-        html.theme-onyx .tab-strip button.active, html.theme-aurora .tab-strip button.active, html.theme-velvet .tab-strip button.active { background: #d4af7a; color: #141416; }
+        html.theme-onyx .tab-strip .ts-row button.active, html.theme-aurora .tab-strip .ts-row button.active, html.theme-velvet .tab-strip .ts-row button.active { background: #d4af7a; color: #141416; }
+        html.theme-onyx .tab-strip .ts-row, html.theme-aurora .tab-strip .ts-row, html.theme-velvet .tab-strip .ts-row { border-bottom-color: #2a2820; }
         .theme-btn {
             margin-left: 16px;
             padding: 5px 12px; border: 1px solid #d6d8eb; background: transparent;
@@ -1767,13 +1777,13 @@
                     <div id="costQualityBadge" style="margin-top:2px;"></div>
                     <div id="snapshotBadge" style="margin-top:2px;"></div>
                 </div>
-                <div style="display:flex; flex-direction:column; gap:6px; align-items:flex-end;">
+                <div style="display:flex; flex-direction:column; gap:6px; align-items:flex-start; margin-left:16px;">
                     <span style="display:inline-flex; align-items:center; gap:8px;">
-                        <button class="theme-btn" id="themeBtn" title="Change interface theme">Theme</button>
+                        <button class="theme-btn" id="themeBtn" title="Change interface theme" style="margin-left:0;">Theme</button>
                         <!-- Owner-only trial (ownerUi) -->
                         <button type="button" class="help-btn ownerUi" id="helpBtn" style="display:none;" aria-label="Help: hover anything to see what it means" title="Help: hover anything to see what it means">?</button>
                     </span>
-                    <button class="theme-btn" id="signOutBtn" title="Sign out" style="display:none;">Sign out</button>
+                    <button class="theme-btn" id="signOutBtn" title="Sign out" style="display:none; margin-left:0;">Sign out</button>
                 </div>
             </div>
         </div>
@@ -5808,9 +5818,7 @@ function setActiveTab(name) {
     document.querySelectorAll(".sidebar a[data-tab]").forEach(a => {
         a.classList.toggle("active", a.dataset.tab === name);
     });
-    document.querySelectorAll("#tabStrip [data-ts-tab]").forEach(b => {
-        b.classList.toggle("active", b.dataset.tsTab === name);
-    });
+    if (typeof renderTabStrip === "function") renderTabStrip();
     document.querySelectorAll("section[data-tab-content]").forEach(s => {
         s.style.display = (s.dataset.tabContent === name) ? "" : "none";
     });
@@ -16825,17 +16833,26 @@ function currentSignInName() {
 // from the sidebar links so hidden (restricted) tabs stay hidden.
 let tabView = false, tabViewAllowed = false;   // allowed = signed in as the owner
 try { tabView = localStorage.getItem("bcSalesTabView") === "1"; } catch (e) { /* storage blocked */ }
+// Groups and their tabs, read from the sidebar (hidden links are skipped).
+function tabStripGroups() {
+    const groups = [];
+    document.querySelectorAll(".sidebar nav > *").forEach(el => {
+        if (el.style.display === "none") return;
+        if (el.classList.contains("group-label")) groups.push({ label: el.textContent.trim(), tabs: [] });
+        else if (el.dataset && el.dataset.tab && groups.length) groups[groups.length - 1].tabs.push({ tab: el.dataset.tab, label: el.textContent.trim(), stub: el.classList.contains("stub") });
+    });
+    return groups.filter(g => g.tabs.length);
+}
 function renderTabStrip() {
     const strip = document.getElementById("tabStrip");
     if (!strip) return;
     if (!(tabView && tabViewAllowed)) { strip.innerHTML = ""; return; }
-    let html = "";
-    document.querySelectorAll(".sidebar nav > *").forEach(el => {
-        if (el.style.display === "none") return;
-        if (el.classList.contains("group-label")) html += '<span class="ts-group">' + escapeHtml(el.textContent.trim()) + '</span>';
-        else if (el.dataset && el.dataset.tab) html += '<button type="button" data-ts-tab="' + escapeAttr(el.dataset.tab) + '" class="' + (el.dataset.tab === state.tab ? "active" : "") + (el.classList.contains("stub") ? " stub" : "") + '">' + escapeHtml(el.textContent.trim()) + '</button>';
-    });
-    strip.innerHTML = html;
+    const groups = tabStripGroups();
+    const active = groups.find(g => g.tabs.some(t => t.tab === state.tab)) || groups[0];
+    if (!active) { strip.innerHTML = ""; return; }
+    const top = groups.map(g => '<button type="button" data-ts-group="' + escapeAttr(g.label) + '" class="' + (g === active ? "active" : "") + '">' + escapeHtml(g.label) + '</button>').join("");
+    const sub = active.tabs.map(t => '<button type="button" data-ts-tab="' + escapeAttr(t.tab) + '" class="' + (t.tab === state.tab ? "active" : "") + (t.stub ? " stub" : "") + '">' + escapeHtml(t.label) + '</button>').join("");
+    strip.innerHTML = '<div class="ts-row">' + top + '</div><div class="ts-row sub">' + sub + '</div>';
 }
 function applyTabView() {
     const on = tabView && tabViewAllowed;
@@ -16853,7 +16870,12 @@ function toggleTabView() {
     const w = document.getElementById("tabViewWrap");
     if (w) w.addEventListener("click", toggleTabView);
     const strip = document.getElementById("tabStrip");
-    if (strip) strip.addEventListener("click", e => { const b = e.target.closest("[data-ts-tab]"); if (b) setActiveTab(b.dataset.tsTab); });
+    if (strip) strip.addEventListener("click", e => {
+        const t = e.target.closest("[data-ts-tab]");
+        if (t) { setActiveTab(t.dataset.tsTab); return; }
+        const g = e.target.closest("[data-ts-group]");
+        if (g) { const grp = tabStripGroups().find(x => x.label === g.dataset.tsGroup); if (grp && grp.tabs.length) setActiveTab(grp.tabs[0].tab); }
+    });
     const hb = document.getElementById("helpBtn");
     if (hb) hb.addEventListener("click", () => { if (window.toggleHelpMode) window.toggleHelpMode(); });
 })();
