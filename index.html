@@ -219,30 +219,8 @@
         .card.span-6  { grid-column: span 6; }
         .card.span-4  { grid-column: span 4; }
         /* Salesperson run-rate tabs: table and comparison chart side by side */
-        /* Two columns, two rows: [compact tiles | note] over [table | chart].
-           Row 2 stretches so the table panel and the chart panel end on the same line. */
-        .rr-split { display: grid; grid-template-columns: minmax(0, 8fr) minmax(0, 4fr); gap: 14px; align-items: stretch; }
-        .rr-split > .panel { margin-bottom: 18px; display: flex; flex-direction: column; min-height: 0; }
-        .rr-split > .panel > .table-scroll { flex: 1 1 auto; }
-        .rr-split > .panel > .chart-wrap { flex: 1 1 auto; height: auto !important; min-height: 320px !important; }
-        @media (max-width: 1300px) { .rr-split { grid-template-columns: minmax(0, 1fr); } }
-        /* Compact selling-day tiles: one strip the width of the table pane */
-        .rr-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
-        .rr-kpis .kpi { padding: 8px 12px; border-radius: 10px; }
-        .rr-kpis .kpi::after { width: 70px; height: 70px; right: -22px; top: -22px; }
-        .rr-kpis .kpi .label { font-size: 9.5px; letter-spacing: 0.4px; }
-        .rr-kpis .kpi .value { font-size: 18px; margin-top: 2px; }
-        /* Note card beside the tiles, above the chart */
-        .rr-note { font-size: 11px; line-height: 1.4; opacity: .85; padding: 8px 12px; margin: 0; display: flex; align-items: center; }
-        /* Compact run-rate table: all ten columns fit the left pane without a scrollbar */
-        table.rr-compact { font-size: 12px; }
-        table.rr-compact th { padding: 8px 7px; font-size: 10px; letter-spacing: 0; }
-        table.rr-compact td { padding: 6px 7px; }
-        table.rr-compact td:first-child { white-space: normal; min-width: 96px; line-height: 1.15; }
-        table.rr-compact td:first-child .rr-name { display: block; font-size: 10px; opacity: .7; }
-        table.rr-compact .badge { padding: 2px 7px; font-size: 10px; white-space: nowrap; }
-        table.rr-compact .rr-bar { width: 84px; height: 16px; }
-        table.rr-compact .rr-bar .rr-lbl { font-size: 10px; line-height: 16px; }
+        /* Salesperson run-rate tables: rep name beside the code */
+        .rr-name { font-size: 11px; opacity: .7; margin-left: 6px; }
 
         @media (max-width: 1100px) {
             .sidebar { width: 200px; }
@@ -3627,29 +3605,29 @@
 
             <!-- TAB: Salesperson Sales Run Rate -->
             <section data-tab-content="salespersonSalesRate" style="display:none;">
-                <div class="rr-split">
-                <div class="rr-kpis">
+                <div class="hint">Sales run-rate for <strong id="spsrMonth">—</strong>. Selling days = Mon–Fri minus Vic public holidays. Sales Targets come from the FY2026-27 budget by salesperson code.</div>
+                <div class="hint" id="spsrNote" style="display:none;"></div>
+                <div class="kpi-row">
                     <div class="kpi k-rev"><div class="label">Total Selling Days</div><div class="value" id="spsrSdTotal">—</div></div>
                     <div class="kpi k-inv"><div class="label">Selling Days Passed</div><div class="value" id="spsrSdPassed">—</div></div>
                     <div class="kpi k-cust"><div class="label">Remaining Selling Days</div><div class="value" id="spsrSdRemaining">—</div></div>
                     <div class="kpi k-gpp"><div class="label">% Month Passed</div><div class="value" id="spsrSdPct">—</div></div>
                 </div>
-                <div class="hint rr-note"><span>(<strong id="spsrMonth">—</strong> · selling days = Mon–Fri minus Vic public holidays · Sales Targets from the FY2026-27 budget by salesperson code<span id="spsrNote"></span>)</span></div>
                 <div class="panel">
                     <div class="panel-header"><h2>Sales Run Rate · by Salesperson</h2><select id="spsrMonthSel" class="mini-select" title="Month"></select></div>
                     <div class="table-scroll">
-                        <table id="spsrTable" class="rr-compact">
+                        <table id="spsrTable">
                             <thead><tr>
                                 <th data-sort="entity">Salesperson</th>
-                                <th class="num" data-sort="pyVal" title="Sales For Month PY (same month last year)">Sales PY</th>
-                                <th class="num" data-sort="target" title="Sales Target (FY2026-27 budget)">Target</th>
-                                <th class="num" data-sort="cyVal" title="Sales For Month">Actual</th>
-                                <th class="num" data-sort="targetDaily" title="Target Run Rate = target ÷ selling days in month">Target /day</th>
-                                <th class="num" data-sort="actualDaily" title="Actual Run Rate = actual ÷ selling days passed">Actual /day</th>
-                                <th class="num" data-sort="balance" title="Balance = actual − target">Balance</th>
-                                <th class="num" data-sort="requiredDaily" title="Required Daily = shortfall ÷ remaining selling days">Req. /day</th>
-                                <th data-sort="status" title="Status">Status</th>
-                                <th class="num" data-sort="pctAchieved" title="% Achieved = actual ÷ target">% Achieved</th>
+                                <th class="num" data-sort="pyVal" title="Same month last year">Sales For Month PY</th>
+                                <th class="num" data-sort="target" title="FY2026-27 budget">Sales Target</th>
+                                <th class="num" data-sort="cyVal">Sales For Month</th>
+                                <th class="num" data-sort="targetDaily" title="Target ÷ selling days in month">Target Run Rate</th>
+                                <th class="num" data-sort="actualDaily" title="Actual ÷ selling days passed">Actual Run Rate</th>
+                                <th class="num" data-sort="balance" title="Actual − target">Balance</th>
+                                <th class="num" data-sort="requiredDaily" title="Shortfall ÷ remaining selling days">Required Daily</th>
+                                <th data-sort="status">Status</th>
+                                <th class="num" data-sort="pctAchieved" title="Actual ÷ target">% Achieved</th>
                             </tr></thead>
                             <tbody></tbody>
                         </table>
@@ -3668,36 +3646,35 @@
                         </select>
                         <select id="spsrCmpRep" class="mini-select" title="Salesperson" style="display:none;"></select>
                     </div>
-                    <div class="chart-wrap" style="position:relative; padding:10px 14px 14px;"><canvas id="spsrCmpChart"></canvas></div>
-                </div>
+                    <div class="chart-wrap" style="position:relative; min-height:360px; height:360px; padding:10px 14px 14px;"><canvas id="spsrCmpChart"></canvas></div>
                 </div>
             </section>
 
             <!-- TAB: Salesperson Margin Run Rate -->
             <section data-tab-content="salespersonMarginRate" style="display:none;">
-                <div class="rr-split">
-                <div class="rr-kpis">
+                <div class="hint">Margin (GP$) run-rate for <strong id="spmrMonth">—</strong>. Selling days = Mon–Fri minus Vic public holidays. GM $ Targets come from the FY2026-27 budget by salesperson code.</div>
+                <div class="hint" id="spmrNote" style="display:none;"></div>
+                <div class="kpi-row">
                     <div class="kpi k-rev"><div class="label">Total Selling Days</div><div class="value" id="spmrSdTotal">—</div></div>
                     <div class="kpi k-inv"><div class="label">Selling Days Passed</div><div class="value" id="spmrSdPassed">—</div></div>
                     <div class="kpi k-cust"><div class="label">Remaining Selling Days</div><div class="value" id="spmrSdRemaining">—</div></div>
                     <div class="kpi k-gpp"><div class="label">% Month Passed</div><div class="value" id="spmrSdPct">—</div></div>
                 </div>
-                <div class="hint rr-note"><span>(<strong id="spmrMonth">—</strong> · selling days = Mon–Fri minus Vic public holidays · GM $ Targets from the FY2026-27 budget by salesperson code<span id="spmrNote"></span>)</span></div>
                 <div class="panel">
                     <div class="panel-header"><h2>Margin Run Rate · by Salesperson</h2><select id="spmrMonthSel" class="mini-select" title="Month"></select></div>
                     <div class="table-scroll">
-                        <table id="spmrTable" class="rr-compact">
+                        <table id="spmrTable">
                             <thead><tr>
                                 <th data-sort="entity">Salesperson</th>
-                                <th class="num" data-sort="pyVal" title="GM $ For Month PY (same month last year)">GM $ PY</th>
-                                <th class="num" data-sort="target" title="GM $ Target (FY2026-27 budget)">Target</th>
-                                <th class="num" data-sort="cyVal" title="GM $ For Month">Actual</th>
-                                <th class="num" data-sort="targetDaily" title="Target Run Rate = target ÷ selling days in month">Target /day</th>
-                                <th class="num" data-sort="actualDaily" title="Actual Run Rate = actual ÷ selling days passed">Actual /day</th>
-                                <th class="num" data-sort="balance" title="Balance = actual − target">Balance</th>
-                                <th class="num" data-sort="requiredDaily" title="Required Daily = shortfall ÷ remaining selling days">Req. /day</th>
-                                <th data-sort="status" title="Status">Status</th>
-                                <th class="num" data-sort="pctAchieved" title="% Achieved = actual ÷ target">% Achieved</th>
+                                <th class="num" data-sort="pyVal" title="Same month last year">GM $ For Month PY</th>
+                                <th class="num" data-sort="target" title="FY2026-27 budget">GM $ Target</th>
+                                <th class="num" data-sort="cyVal">GM $ For Month</th>
+                                <th class="num" data-sort="targetDaily" title="Target ÷ selling days in month">Target Run Rate</th>
+                                <th class="num" data-sort="actualDaily" title="Actual ÷ selling days passed">Actual Run Rate</th>
+                                <th class="num" data-sort="balance" title="Actual − target">Balance</th>
+                                <th class="num" data-sort="requiredDaily" title="Shortfall ÷ remaining selling days">Required Daily</th>
+                                <th data-sort="status">Status</th>
+                                <th class="num" data-sort="pctAchieved" title="Actual ÷ target">% Achieved</th>
                             </tr></thead>
                             <tbody></tbody>
                         </table>
@@ -3716,8 +3693,7 @@
                         </select>
                         <select id="spmrCmpRep" class="mini-select" title="Salesperson" style="display:none;"></select>
                     </div>
-                    <div class="chart-wrap" style="position:relative; padding:10px 14px 14px;"><canvas id="spmrCmpChart"></canvas></div>
-                </div>
+                    <div class="chart-wrap" style="position:relative; min-height:360px; height:360px; padding:10px 14px 14px;"><canvas id="spmrCmpChart"></canvas></div>
                 </div>
             </section>
 
@@ -12559,8 +12535,7 @@ function renderRunRateTab(opts) {
     const balanceCell = r => !r.target ? '<td class="num">—</td>'
         : opts.budget ? `<td class="num ${r.balance >= 0 ? "pos" : "neg"}">${r.balance >= 0 ? "+" : "−"}${fmtMoneyFull(Math.abs(r.balance))}</td>`
         : `<td class="num">${fmtMoneyFull(r.balance)}</td>`;
-    // Budget tabs use short badge labels so the table fits beside the chart.
-    const badge = st => opts.budget ? statusBadgeRunRate(st === "BEHIND PLANNED DAILY RUN RATE" ? "BEHIND" : st === "TARGET MISSED" ? "MISSED" : st === "TARGET MET" ? "MET" : st) : statusBadgeRunRate(st);
+    const badge = statusBadgeRunRate;
     const pctCell = r => r.pctAchieved == null ? '<td class="num">—</td>'
         : opts.budget ? `<td class="num"><span class="rr-bar${r.pctAchieved >= 1 ? " full" : ""}" title="${fmtPct(r.pctAchieved)} of target"><span class="rr-fill" style="width:${Math.max(0, Math.min(100, r.pctAchieved * 100)).toFixed(1)}%;"></span><span class="rr-lbl">${fmtPct(r.pctAchieved)}</span></span></td>`
         : `<td class="num">${fmtPct(r.pctAchieved)}</td>`;
@@ -12618,11 +12593,11 @@ function renderRunRateTab(opts) {
         const seen = new Set(state.invoices.map(i => i.salesperson || "(unassigned)"));
         const notSeen = Object.keys(SALESPERSON_BUDGET_FY2027[opts.metric]).filter(c => !seen.has(c));
         const noBudget = entities.filter(e => !SALESPERSON_BUDGET_FY2027[opts.metric][e]);
-        if (!state.invoices.length) msgs.push("no sales loaded yet — Load sales or Fast lookup to see actuals");
-        else if (!state.invoices.some(i => inMonth(i, 0))) msgs.push("no invoices in the loaded data for " + monthLbl + " — the loaded range does not cover this month");
-        if (notSeen.length) msgs.push("budgeted codes with no invoices in the loaded data: " + notSeen.map(c => c + " " + SALESPERSON_BUDGET_NAMES[c]).join(", "));
-        if (noBudget.length) msgs.push("codes in the data with no FY2026-27 budget: " + noBudget.join(", "));
-        if (note) note.textContent = msgs.length ? " · " + msgs.join(" · ") : "";
+        if (!state.invoices.length) msgs.push("No sales loaded yet — Load sales (or Fast lookup) to see actuals.");
+        else if (!state.invoices.some(i => inMonth(i, 0))) msgs.push("No invoices in the loaded data for " + monthLbl + " — the loaded range does not cover this month.");
+        if (notSeen.length) msgs.push("Budgeted codes with no invoices in the loaded data: " + notSeen.map(c => c + " (" + SALESPERSON_BUDGET_NAMES[c] + ")").join(", ") + ".");
+        if (noBudget.length) msgs.push("Salesperson codes in the data with no FY2026-27 budget: " + noBudget.join(", ") + ".");
+        if (note) { note.textContent = msgs.join(" "); note.style.display = msgs.length ? "" : "none"; }
         renderRunRateComparison(opts, mk, rows, today);
     }
 
