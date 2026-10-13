@@ -3557,15 +3557,15 @@
                     <div class="table-scroll">
                         <table id="branchTargetTable">
                             <thead><tr>
-                                <th>Fiscal Year</th>
-                                <th>Month</th>
-                                <th>Branch</th>
-                                <th class="num">Sales $</th>
-                                <th class="num">GP $</th>
-                                <th class="num">GP %</th>
-                                <th class="num" title="Sales $ target for the branch and month (targets file)">Sales $ Target</th>
-                                <th class="num" title="Sales $ − target">Sales vs Target</th>
-                                <th class="num" title="Sales $ ÷ target">% Achieved</th>
+                                <th data-sort="month" title="Click to flip the month order">Fiscal Year</th>
+                                <th data-sort="month" title="Click to flip the month order">Month</th>
+                                <th data-sort="branch" title="Sorts the branches within each month">Branch</th>
+                                <th class="num" data-sort="sales" title="Sorts the branches within each month">Sales $</th>
+                                <th class="num" data-sort="gp" title="Sorts the branches within each month">GP $</th>
+                                <th class="num" data-sort="gpPct" title="Sorts the branches within each month">GP %</th>
+                                <th class="num" data-sort="target" title="Sales $ target for the branch and month (targets file)">Sales $ Target</th>
+                                <th class="num" data-sort="balance" title="Sales $ − target">Sales vs Target</th>
+                                <th class="num" data-sort="pct" title="Sales $ ÷ target">% Achieved</th>
                             </tr></thead>
                             <tbody></tbody>
                         </table>
@@ -4206,6 +4206,7 @@ const state = {
     statusChartType: "pie",
     runRateMonth: {},               // prefix -> "YYYY-MM" chosen in the month selector (salesperson run-rate tabs)
     sortRunRate: { spsr: { key: "cyVal", dir: "desc" }, spmr: { key: "cyVal", dir: "desc" }, brsr: { key: "cyVal", dir: "desc" } },
+    sortBranchTarget: { key: "branch", dir: "asc" },   // "month" flips the month order; anything else sorts branches within each month
     runRateCmp: { spsr: { view: "monthTvA", rep: "" }, spmr: { view: "monthTvA", rep: "" }, brsr: { view: "monthTvA", rep: "" } },
     currentItemDetail: null,
     sort: { key: "revenue", dir: "desc" },
@@ -12829,13 +12830,19 @@ function renderBranchTargets() {
         if (!monthM.has(r.monthKey)) monthM.set(r.monthKey, new Map());
         monthM.get(r.monthKey).set(r.branch, r);
     }
-    // Sort FYs descending, months ascending within FY
-    const fys = [...map.keys()].sort((a, b) => b - a);
+    // Headers: Fiscal Year / Month flip the month order; the rest sort the
+    // branches inside each month (month groups stay together).
+    const btSort = state.sortBranchTarget;
+    const btTable = document.getElementById("branchTargetTable");
+    if (btTable && !btTable.dataset.sortWired) { attachSortHandlers("#branchTargetTable", btSort, renderBranchTargets, new Set(["branch", "month"])); btTable.dataset.sortWired = "1"; }
+    paintSortHeaders("#branchTargetTable", btSort);
+    const monthDir = btSort.key === "month" && btSort.dir === "desc" ? -1 : 1;
+    const fys = [...map.keys()].sort((a, b) => (a - b) * monthDir);
     const tbody = document.querySelector("#branchTargetTable tbody");
     const rowsHtml = [];
     for (const fy of fys) {
         const monthM = map.get(fy);
-        const months = [...monthM.keys()].sort();
+        const months = [...monthM.keys()].sort((a, b) => a.localeCompare(b) * monthDir);
         for (const mk of months) {
             const bMap = monthM.get(mk);
             const branches = [...bMap.keys()].sort();
@@ -12864,7 +12871,24 @@ function renderBranchTargets() {
                 ${pctCellBt(monthTotals.sales, anyTarget ? monthTarget : 0)}
             </tr>`);
             // Budgeted branches with no invoices this month still get a row.
-            const listed = [...new Set([...branches, ...budgetedCodes.filter(c => tgtFor(mk, c) != null)])].sort();
+            const listed = [...new Set([...branches, ...budgetedCodes.filter(c => tgtFor(mk, c) != null)])];
+            if (btSort.key === "month" || btSort.key === "branch") {
+                listed.sort((a, b) => a.localeCompare(b) * (btSort.key === "branch" && btSort.dir === "desc" ? -1 : 1));
+            } else {
+                const val = b => {
+                    const r = bMap.get(b) || { sales: 0, gp: 0, gpPct: 0 }, t = tgtFor(mk, b);
+                    switch (btSort.key) {
+                        case "sales":   return r.sales;
+                        case "gp":      return r.gp;
+                        case "gpPct":   return r.gpPct;
+                        case "target":  return t == null ? -Infinity : t;
+                        case "balance": return t == null ? -Infinity : r.sales - t;
+                        case "pct":     return t ? r.sales / t : -Infinity;
+                        default:        return 0;
+                    }
+                };
+                listed.sort((a, b) => (val(a) - val(b)) * (btSort.dir === "asc" ? 1 : -1));
+            }
             for (const b of listed) {
                 const r = bMap.get(b) || { sales: 0, gp: 0, gpPct: 0 };
                 const t = tgtFor(mk, b);
