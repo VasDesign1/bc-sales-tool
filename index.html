@@ -318,8 +318,11 @@
         th.sorted-asc::after  { content: ' ▲'; font-size: 10px; }
         /* % achieved bar on the salesperson run-rate tabs: 0% empty → 100% full */
         .rr-bar { position: relative; display: inline-block; width: 130px; height: 18px; border-radius: 9px; background: rgba(128,128,128,0.18); overflow: hidden; vertical-align: middle; }
-        .rr-bar .rr-fill { position: absolute; left: 0; top: 0; bottom: 0; background: #fb8c00; border-radius: 9px; }
-        .rr-bar.full .rr-fill { background: #43a047; }
+        .rr-bar .rr-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 9px; }
+        .rr-bar.b0 .rr-fill { background: #e53935; }   /* under 50% */
+        .rr-bar.b1 .rr-fill { background: #fb8c00; }   /* 50–79% */
+        .rr-bar.b2 .rr-fill { background: #fdd835; }   /* 80–99% */
+        .rr-bar.b3 .rr-fill { background: #43a047; }   /* 100% and over */
         .rr-bar .rr-lbl { position: absolute; inset: 0; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; color: inherit; }
         th.sorted-desc::after { content: ' ▼'; font-size: 10px; }
         /* Reconciliation drill-down: every sortable header shows a faint ⇅
@@ -12537,7 +12540,7 @@ function renderRunRateTab(opts) {
         : `<td class="num">${fmtMoneyFull(r.balance)}</td>`;
     const badge = statusBadgeRunRate;
     const pctCell = r => r.pctAchieved == null ? '<td class="num">—</td>'
-        : opts.budget ? `<td class="num"><span class="rr-bar${r.pctAchieved >= 1 ? " full" : ""}" title="${fmtPct(r.pctAchieved)} of target"><span class="rr-fill" style="width:${Math.max(0, Math.min(100, r.pctAchieved * 100)).toFixed(1)}%;"></span><span class="rr-lbl">${fmtPct(r.pctAchieved)}</span></span></td>`
+        : opts.budget ? `<td class="num"><span class="rr-bar b${rrPctBand(r.pctAchieved)}" title="${fmtPct(r.pctAchieved)} of target"><span class="rr-fill" style="width:${Math.max(0, Math.min(100, r.pctAchieved * 100)).toFixed(1)}%;"></span><span class="rr-lbl">${fmtPct(r.pctAchieved)}</span></span></td>`
         : `<td class="num">${fmtPct(r.pctAchieved)}</td>`;
     const bodyHtml = rows.map(r => {
         tCy += r.cyVal; tPy += r.pyVal; tTarget += r.target;
@@ -12685,7 +12688,7 @@ function renderRunRateComparison(opts, mk, rows, today) {
         const pct = codes.map(c => { const r = rowFor(c); return r.target ? r.cyVal / r.target * 100 : 0; });
         cfg = { type: "bar",
             data: { labels: codes.map(label), datasets: [
-                { type: "bar", label: "% of target achieved · " + monthLbl, data: pct, backgroundColor: pct.map(p => p >= 100 ? "#43a047" : "#fb8c00"), borderRadius: 4 },
+                { type: "bar", label: "% of target achieved · " + monthLbl, data: pct, backgroundColor: pct.map(p => RR_PCT_COLOURS[rrPctBand(p / 100)]), borderRadius: 4 },
                 { type: "line", label: "100% (target)", data: codes.map(() => 100), borderColor: "#e53935", borderDash: [6, 4], pointRadius: 0, borderWidth: 2 } ] },
             options: chartBase({ plugins: { tooltip: { callbacks: { label: c => c.dataset.label + ": " + c.parsed.y.toFixed(1) + "%" } } }, scales: { y: { beginAtZero: true, ticks: { callback: v => v + "%" } } } }) };
     } else if (prefs.view === "monthBal") {
@@ -14029,6 +14032,10 @@ function computeRunRate(actual, target, sdTotal, sdPassed, sdRemain) {
     const pctAchieved = target > 0 ? actual / target : null;
     return { targetDaily, actualDaily, balance, requiredDaily, status, pctAchieved };
 }
+// % of target → colour band shared by the % Achieved bar and the
+// "% of target achieved" comparison chart (p is a ratio, 1 = 100%).
+function rrPctBand(p) { return p >= 1 ? 3 : p >= 0.8 ? 2 : p >= 0.5 ? 1 : 0; }
+const RR_PCT_COLOURS = ["#e53935", "#fb8c00", "#fdd835", "#43a047"];
 function statusBadgeRunRate(status) {
     if (status === "ON TRACK")    return '<span class="badge badge-paid">ON TRACK</span>';
     if (status === "TARGET MET")  return '<span class="badge badge-paid">TARGET MET</span>';
