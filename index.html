@@ -218,6 +218,10 @@
         .card.span-8  { grid-column: span 8; }
         .card.span-6  { grid-column: span 6; }
         .card.span-4  { grid-column: span 4; }
+        /* Salesperson run-rate tabs: table and comparison chart side by side */
+        .rr-split { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: 14px; align-items: start; }
+        .rr-split > .panel { margin-bottom: 18px; }
+        @media (max-width: 1400px) { .rr-split { grid-template-columns: minmax(0, 1fr); } }
 
         @media (max-width: 1100px) {
             .sidebar { width: 200px; }
@@ -3610,6 +3614,7 @@
                     <div class="kpi k-cust"><div class="label">Remaining Selling Days</div><div class="value" id="spsrSdRemaining">—</div></div>
                     <div class="kpi k-gpp"><div class="label">% Month Passed</div><div class="value" id="spsrSdPct">—</div></div>
                 </div>
+                <div class="rr-split">
                 <div class="panel">
                     <div class="panel-header"><h2>Sales Run Rate · by Salesperson</h2><select id="spsrMonthSel" class="mini-select" title="Month"></select></div>
                     <div class="table-scroll">
@@ -3630,7 +3635,7 @@
                         </table>
                     </div>
                 </div>
-                <div class="panel" style="margin-top:16px;">
+                <div class="panel">
                     <div class="panel-header"><h2>Comparisons · Sales vs budget</h2>
                         <select id="spsrCmpView" class="mini-select" title="Comparison">
                             <option value="monthTvA" selected>Target vs actual — selected month, by salesperson</option>
@@ -3643,7 +3648,8 @@
                         </select>
                         <select id="spsrCmpRep" class="mini-select" title="Salesperson" style="display:none;"></select>
                     </div>
-                    <div class="chart-wrap" style="position:relative; min-height:340px; height:340px;"><canvas id="spsrCmpChart"></canvas></div>
+                    <div class="chart-wrap" style="position:relative; min-height:420px; height:420px; padding:10px 14px 14px;"><canvas id="spsrCmpChart"></canvas></div>
+                </div>
                 </div>
             </section>
 
@@ -3657,6 +3663,7 @@
                     <div class="kpi k-cust"><div class="label">Remaining Selling Days</div><div class="value" id="spmrSdRemaining">—</div></div>
                     <div class="kpi k-gpp"><div class="label">% Month Passed</div><div class="value" id="spmrSdPct">—</div></div>
                 </div>
+                <div class="rr-split">
                 <div class="panel">
                     <div class="panel-header"><h2>Margin Run Rate · by Salesperson</h2><select id="spmrMonthSel" class="mini-select" title="Month"></select></div>
                     <div class="table-scroll">
@@ -3677,7 +3684,7 @@
                         </table>
                     </div>
                 </div>
-                <div class="panel" style="margin-top:16px;">
+                <div class="panel">
                     <div class="panel-header"><h2>Comparisons · Margin (GP$) vs budget</h2>
                         <select id="spmrCmpView" class="mini-select" title="Comparison">
                             <option value="monthTvA" selected>Target vs actual — selected month, by salesperson</option>
@@ -3690,7 +3697,8 @@
                         </select>
                         <select id="spmrCmpRep" class="mini-select" title="Salesperson" style="display:none;"></select>
                     </div>
-                    <div class="chart-wrap" style="position:relative; min-height:340px; height:340px;"><canvas id="spmrCmpChart"></canvas></div>
+                    <div class="chart-wrap" style="position:relative; min-height:420px; height:420px; padding:10px 14px 14px;"><canvas id="spmrCmpChart"></canvas></div>
+                </div>
                 </div>
             </section>
 
