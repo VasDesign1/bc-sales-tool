@@ -14066,7 +14066,7 @@ function statusBadgeRunRate(status) {
 //   the name under "Rep Name", one target per month column; stops at a
 //   blank name or a "TOTAL" row. When a row has no code cell, the code is
 //   the rep's initials (Faik: Wiise salesperson codes ARE the initials —
-//   Rep Name → PB, Rep Name → CB).
+//   e.g. Jane Smith → JS).
 // Used ONLY by the Salesperson Sales Run Rate and Salesperson Margin
 // Run Rate tabs. Nothing else in the tool reads these figures.
 // ============================================================
@@ -14095,7 +14095,7 @@ function spTargetsMonthKey(v) {
     }
     return null;
 }
-// "Rep Name" → "PB": first letter of each word (Wiise salesperson codes are the initials).
+// "Jane Smith" → "JS": first letter of each word (Wiise salesperson codes are the initials).
 function spInitials(name) { return (name || "").split(/[\s\-]+/).filter(Boolean).map(w => w[0]).join(""); }
 function parseTargetsWorkbook(wb) {
     const out = { months: new Set(), names: {}, sales: {}, margin: {}, blocks: 0 };
