@@ -14205,17 +14205,13 @@ async function loadSalespersonTargets(force) {
     paintTargetsStatus();
     if (state.tab === "salespersonSalesRate" || state.tab === "salespersonMarginRate") renderCurrentTab();
 }
-// Which files are ticked. Stored per device as the list of UNTICKED
-// names, so a file that appears later in the folder is included until
-// someone unticks it.
-const SP_TARGETS_EXCL_KEY = "bcstTargetFilesExcluded";
-function targetsExcluded() { try { return new Set(JSON.parse(localStorage.getItem(SP_TARGETS_EXCL_KEY) || "[]")); } catch (e) { return new Set(); } }
-function targetsFileOn(name) { return !targetsExcluded().has(name); }
-function setTargetsFileOn(name, on) {
-    const ex = targetsExcluded();
-    if (on) ex.delete(name); else ex.add(name);
-    try { localStorage.setItem(SP_TARGETS_EXCL_KEY, JSON.stringify([...ex])); } catch (e) { /* storage blocked */ }
-}
+// Which files are ticked. Kept for this browser session only (Faik,
+// 2026-10-13): every file is ticked again when the tool is next opened.
+// Held as the set of UNTICKED names, so a file that appears in the
+// folder after a reload is included until someone unticks it.
+const spTargetsExcluded = new Set();
+function targetsFileOn(name) { return !spTargetsExcluded.has(name); }
+function setTargetsFileOn(name, on) { if (on) spTargetsExcluded.delete(name); else spTargetsExcluded.add(name); }
 // Merge the ticked files (oldest → newest, so a newer file wins on overlap).
 function applyTargetsSelection() {
     const merged = { months: new Set(), names: {}, sales: {}, margin: {} };
