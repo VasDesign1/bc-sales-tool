@@ -3551,9 +3551,9 @@
                     <div class="kpi k-gp"><div class="label">Gross Profit</div><div class="value" id="btKpiGp">—</div></div>
                     <div class="kpi k-gpp"><div class="label">Gross Profit Margin</div><div class="value" id="btKpiGpp">—</div></div>
                 </div>
-                <div class="hint">Type a value in the Sales $ Target / GP $ Target cells — saved to this browser only (localStorage). They persist across reloads but won't sync to other machines.</div>
+                <div class="hint rr-hint"><span>Every loaded month, by branch, against the Sales $ target for that branch and month. Months follow the toolbar range.</span><span class="rr-tgt"><span class="rr-tgt-lbl">Targets</span><span id="btTgtStatus" title="Read from the Sales Budgets-Targets folder on SharePoint, matched by location code">not loaded</span><button type="button" class="more-btn" id="btTgtReload" title="Re-read the targets folder on SharePoint">↻</button></span></div>
                 <div class="panel">
-                    <div class="panel-header"><h2>Fiscal Year × Month × Branch — Sales vs Targets</h2></div>
+                    <div class="panel-header"><h2>Fiscal Year × Month × Branch — Sales vs Targets</h2><span class="rr-legend" title="% Achieved = actual ÷ target"><span class="b0">&lt; 50%</span><span class="b1">50–99%</span><span class="b2">100%+</span></span></div>
                     <div class="table-scroll">
                         <table id="branchTargetTable">
                             <thead><tr>
@@ -3563,8 +3563,9 @@
                                 <th class="num">Sales $</th>
                                 <th class="num">GP $</th>
                                 <th class="num">GP %</th>
-                                <th class="num">Sales $ Target</th>
-                                <th class="num">GP $ Target</th>
+                                <th class="num" title="Sales $ target for the branch and month (targets file)">Sales $ Target</th>
+                                <th class="num" title="Sales $ − target">Sales vs Target</th>
+                                <th class="num" title="Sales $ ÷ target">% Achieved</th>
                             </tr></thead>
                             <tbody></tbody>
                         </table>
@@ -3574,7 +3575,7 @@
 
             <!-- TAB: Branch Sales Run Rate -->
             <section data-tab-content="branchSalesRate" style="display:none;">
-                <div class="hint">Run-rate for the current month (<strong id="brsrMonth">—</strong>). Selling days = Mon–Fri minus Victorian public holidays. Enter targets in the Sales Target column; they save automatically to this browser.</div>
+                <div class="hint rr-hint"><span>Sales run-rate for <strong id="brsrMonth">—</strong>. Selling days = Mon–Fri minus Vic public holidays.</span><span class="rr-tgt"><span class="rr-tgt-lbl">Targets</span><span id="brsrTgtStatus" title="Read from the Sales Budgets-Targets folder on SharePoint, matched by location code">not loaded</span><button type="button" class="more-btn" id="brsrTgtReload" title="Re-read the targets folder on SharePoint">↻</button></span></div>
                 <div class="kpi-row">
                     <div class="kpi k-rev"><div class="label">Total Selling Days</div><div class="value" id="brsrSdTotal">—</div></div>
                     <div class="kpi k-inv"><div class="label">Selling Days Passed</div><div class="value" id="brsrSdPassed">—</div></div>
@@ -3582,24 +3583,39 @@
                     <div class="kpi k-gpp"><div class="label">% Month Passed</div><div class="value" id="brsrSdPct">—</div></div>
                 </div>
                 <div class="panel">
-                    <div class="panel-header"><h2>Sales Run Rate · by Branch</h2></div>
+                    <div class="panel-header"><h2>Sales Run Rate · by Branch</h2><span class="rr-legend" title="% Achieved = actual ÷ target"><span class="b0">&lt; 50%</span><span class="b1">50–99%</span><span class="b2">100%+</span></span><select id="brsrMonthSel" class="mini-select" title="Month"></select></div>
                     <div class="table-scroll">
                         <table id="brsrTable">
                             <thead><tr>
-                                <th>Branch</th>
-                                <th class="num">Sales For Month PY</th>
-                                <th class="num">Sales Target</th>
-                                <th class="num">Sales For Month</th>
-                                <th class="num">Target Run Rate</th>
-                                <th class="num">Actual Run Rate</th>
-                                <th class="num">Balance</th>
-                                <th class="num">Required Daily</th>
-                                <th>Status</th>
-                                <th class="num">% Achieved</th>
+                                <th data-sort="entity">Branch</th>
+                                <th class="num" data-sort="pyVal" title="Same month last year">Sales For Month PY</th>
+                                <th class="num" data-sort="target" title="Targets file">Sales Target</th>
+                                <th class="num" data-sort="cyVal">Sales For Month</th>
+                                <th class="num" data-sort="targetDaily" title="Target ÷ selling days in month">Target Run Rate</th>
+                                <th class="num" data-sort="actualDaily" title="Actual ÷ selling days passed">Actual Run Rate</th>
+                                <th class="num" data-sort="balance" title="Actual − target">Balance</th>
+                                <th class="num" data-sort="requiredDaily" title="Shortfall ÷ remaining selling days">Required Daily</th>
+                                <th data-sort="status">Status</th>
+                                <th class="num" data-sort="pctAchieved" title="Actual ÷ target">% Achieved</th>
                             </tr></thead>
                             <tbody></tbody>
                         </table>
                     </div>
+                </div>
+                <div class="panel">
+                    <div class="panel-header"><h2>Comparisons · Sales vs budget</h2>
+                        <select id="brsrCmpView" class="mini-select" title="Comparison">
+                            <option value="monthTvA" selected>Target vs actual — selected month, by branch</option>
+                            <option value="monthPct">% of target achieved — selected month</option>
+                            <option value="monthBal">Ahead / behind target — selected month</option>
+                            <option value="fyTargets">Monthly targets — whole FY, by branch</option>
+                            <option value="fyOne">One branch — monthly actual vs target, whole FY</option>
+                            <option value="fyCum">FY to date — cumulative actual vs target, by branch</option>
+                            <option value="share">Share of total — target vs actual, selected month</option>
+                        </select>
+                        <select id="brsrCmpRep" class="mini-select" title="Branch" style="display:none;"></select>
+                    </div>
+                    <div class="chart-wrap" style="position:relative; min-height:360px; height:360px; padding:10px 14px 14px;"><canvas id="brsrCmpChart"></canvas></div>
                 </div>
             </section>
 
@@ -4189,8 +4205,8 @@ const state = {
     locationChartType: "barH",     salespersonChartType: "barH",
     statusChartType: "pie",
     runRateMonth: {},               // prefix -> "YYYY-MM" chosen in the month selector (salesperson run-rate tabs)
-    sortRunRate: { spsr: { key: "cyVal", dir: "desc" }, spmr: { key: "cyVal", dir: "desc" } },
-    runRateCmp: { spsr: { view: "monthTvA", rep: "" }, spmr: { view: "monthTvA", rep: "" } },
+    sortRunRate: { spsr: { key: "cyVal", dir: "desc" }, spmr: { key: "cyVal", dir: "desc" }, brsr: { key: "cyVal", dir: "desc" } },
+    runRateCmp: { spsr: { view: "monthTvA", rep: "" }, spmr: { view: "monthTvA", rep: "" }, brsr: { view: "monthTvA", rep: "" } },
     currentItemDetail: null,
     sort: { key: "revenue", dir: "desc" },
     sortBranch: { key: "salesAmount", dir: "desc" },
@@ -12471,7 +12487,7 @@ function renderRunRateTab(opts) {
         if (spTargets.status === "idle") loadSalespersonTargets();
         paintTargetsStatus(opts.prefix);
         const sel = document.getElementById(opts.prefix + "MonthSel");
-        const months = spBudgetMonths().length ? spBudgetMonths() : [todayMk];
+        const months = spBudgetMonths(opts.entity).length ? spBudgetMonths(opts.entity) : [todayMk];
         const sig = months.join(",");
         if (!months.includes(state.runRateMonth[opts.prefix] || "")) {
             // default: today's month if budgeted, else the latest budgeted month not after today, else the first
@@ -12537,7 +12553,7 @@ function renderRunRateTab(opts) {
     // Budget mode: every budgeted code gets a row even with no sales yet,
     // and a code is dropped only when the salesperson filter excludes it.
     const budgetCodes = opts.budget
-        ? Object.keys(spBudgetTable(opts.metric)).filter(c => !state.filters.salesperson || c === state.filters.salesperson)
+        ? Object.keys(spBudgetTable(opts.metric, opts.entity)).filter(c => opts.entity === "branch" ? (!state.filters.location || c === state.filters.location) : (!state.filters.salesperson || c === state.filters.salesperson))
         : [];
     const entities = [...new Set([...cyByEntity.keys(), ...pyByEntity.keys(), ...budgetCodes])].sort();
     const metricKey = opts.entity + (opts.metric === "sales" ? "Sales" : "Margin");
@@ -12550,7 +12566,7 @@ function renderRunRateTab(opts) {
         const py = pyByEntity.get(ent) || { sales: 0, cost: 0 };
         const cyVal = opts.metric === "sales" ? cy.sales : (cy.sales - cy.cost);
         const pyVal = opts.metric === "sales" ? py.sales : (py.sales - py.cost);
-        const target = opts.budget ? (salespersonBudgetTarget(opts.metric, mk, ent) || 0) : (getTarget(metricKey, fy, mk, ent) || 0);
+        const target = opts.budget ? (salespersonBudgetTarget(opts.metric, mk, ent, opts.entity) || 0) : (getTarget(metricKey, fy, mk, ent) || 0);
         const rr = computeRunRate(cyVal, target, sd.total, sd.passed, sd.remaining);
         if (opts.budget && sd.isPast)   rr.status = closedStatus(cyVal, target);
         if (opts.budget && sd.isFuture) rr.status = target > 0 ? "NOT STARTED" : "NO PLAN";
@@ -12581,7 +12597,7 @@ function renderRunRateTab(opts) {
         : `<td class="num">${fmtPct(r.pctAchieved)}</td>`;
     const bodyHtml = rows.map(r => {
         tCy += r.cyVal; tPy += r.pyVal; tTarget += r.target;
-        const name = opts.budget && spBudgetNames()[r.entity] ? `<span class="rr-name">${escapeHtml(spBudgetNames()[r.entity])}</span>` : "";
+        const name = opts.budget && spBudgetNames(opts.entity)[r.entity] ? `<span class="rr-name">${escapeHtml(spBudgetNames(opts.entity)[r.entity])}</span>` : "";
         return `<tr>
             <td>${escapeHtml(r.entity)}${name}</td>
             <td class="num">${r.pyVal ? fmtMoneyFull(r.pyVal) : "—"}</td>
@@ -12638,7 +12654,7 @@ function renderRunRateTab(opts) {
         });
     });
 }
-function renderBranchSalesRunRate()       { renderRunRateTab({ metric: "sales",  entity: "branch",      prefix: "brsr" }); }
+function renderBranchSalesRunRate()       { renderRunRateTab({ metric: "sales",  entity: "branch",      prefix: "brsr", budget: true }); }
 function renderBranchMarginRunRate()      { renderRunRateTab({ metric: "margin", entity: "branch",      prefix: "brmr" }); }
 function renderSalespersonSalesRunRate()  { renderRunRateTab({ metric: "sales",  entity: "salesperson", prefix: "spsr", budget: true }); }
 function renderSalespersonMarginRunRate() { renderRunRateTab({ metric: "margin", entity: "salesperson", prefix: "spmr", budget: true }); }
@@ -12649,6 +12665,32 @@ function renderSalespersonMarginRunRate() { renderRunRateTab({ metric: "margin",
 // salesperson and branch filters.
 // ============================================================
 // code -> { "YYYY-MM" -> value } for every budget month, metric = sales|margin
+function budgetFyActuals(metric, entity) {
+    if (entity === "branch") return branchFyActuals(metric);
+    return salespersonFyActuals(metric);
+}
+// Branch version: per invoice LINE by location code, same maths as the
+// branch run-rate table (lineNetAmount / totalCostFromLine).
+function branchFyActuals(metric) {
+    const byCode = new Map();
+    const months = new Set(spBudgetMonths("branch"));
+    for (const inv of state.invoices) {
+        const mk = monthKey(inv.postingDate);
+        if (!months.has(mk)) continue;
+        if (state.filters.salesperson && (inv.salesperson || "(unassigned)") !== state.filters.salesperson) continue;
+        for (const ln of (inv.salesInvoiceLines || [])) {
+            const ent = locationCode(ln.locationId);
+            if (state.filters.location && ent !== state.filters.location) continue;
+            if (state.filters.item && (ln.lineObjectNumber || ln.itemId || "") !== state.filters.item) continue;
+            const sales = lineNetAmount(ln);
+            const v = metric === "sales" ? sales : sales - totalCostFromLine(ln, 1, inv.postingDate, inv.customerNumber, inv.number);
+            if (!byCode.has(ent)) byCode.set(ent, {});
+            const m = byCode.get(ent);
+            m[mk] = (m[mk] || 0) + v;
+        }
+    }
+    return byCode;
+}
 function salespersonFyActuals(metric) {
     const byCode = new Map();
     const months = new Set(spBudgetMonths());
@@ -12669,14 +12711,14 @@ function salespersonFyActuals(metric) {
     return byCode;
 }
 function renderRunRateComparison(opts, mk, rows, today) {
-    const prefix = opts.prefix, metric = opts.metric;
+    const prefix = opts.prefix, metric = opts.metric, entity = opts.entity;
     const prefs = state.runRateCmp[prefix];
     const viewSel = document.getElementById(prefix + "CmpView");
     const repSel  = document.getElementById(prefix + "CmpRep");
     const canvas  = document.getElementById(prefix + "CmpChart");
     if (!viewSel || !repSel || !canvas) return;
-    const codes = Object.keys(spBudgetTable(metric));
-    const label = c => c + (spBudgetNames()[c] ? " · " + spBudgetNames()[c] : "");
+    const codes = Object.keys(spBudgetTable(metric, entity));
+    const label = c => c + (spBudgetNames(entity)[c] ? " · " + spBudgetNames(entity)[c] : "");
     const colour = c => ENTITY_PALETTE[Math.max(0, codes.indexOf(c)) % ENTITY_PALETTE.length];
     if (!viewSel.dataset.wired) {
         viewSel.addEventListener("change", () => { prefs.view = viewSel.value; renderCurrentTab(); });
@@ -12695,9 +12737,9 @@ function renderRunRateComparison(opts, mk, rows, today) {
     const metricLbl = metric === "sales" ? "Sales" : "GP $";
     const monthLbl = monthLabelFromKey(mk);
     const todayMk = localISO(today).slice(0, 7);
-    const fyMonths = spBudgetMonths().length ? spBudgetMonths() : [mk];
+    const fyMonths = spBudgetMonths(entity).length ? spBudgetMonths(entity) : [mk];
     const elapsed = fyMonths.filter(m => m <= todayMk);           // months with any actuals possible
-    const tgt = (c, m) => salespersonBudgetTarget(metric, m, c) || 0;
+    const tgt = (c, m) => salespersonBudgetTarget(metric, m, c, entity) || 0;
     const rowFor = c => rows.find(r => r.entity === c) || { cyVal: 0, target: tgt(c, mk), pctAchieved: null, balance: 0 - tgt(c, mk) };
     const money = v => fmtMoneyFull(v);
     const moneyTicks = { ticks: { callback: v => fmtMoney(v) } };
@@ -12726,14 +12768,14 @@ function renderRunRateComparison(opts, mk, rows, today) {
             data: { labels: fyMonths.map(monthLabelFromKey), datasets: codes.map(c => ({ label: label(c), data: fyMonths.map(m => tgt(c, m)), borderColor: colour(c), backgroundColor: colour(c), tension: 0.25, pointRadius: 3 })) },
             options: chartBase({ plugins: { tooltip: { callbacks: { label: c => c.dataset.label + ": " + money(c.parsed.y) } } }, scales: { y: moneyTicks } }) };
     } else if (prefs.view === "fyOne") {
-        const act = salespersonFyActuals(metric).get(prefs.rep) || {};
+        const act = budgetFyActuals(metric, entity).get(prefs.rep) || {};
         cfg = { type: "bar",
             data: { labels: fyMonths.map(monthLabelFromKey), datasets: [
                 { type: "bar", label: metricLbl + " actual", data: fyMonths.map(m => elapsed.includes(m) ? (act[m] || 0) : null), backgroundColor: colour(prefs.rep), borderRadius: 4 },
                 { type: "line", label: metricLbl + " target", data: fyMonths.map(m => tgt(prefs.rep, m)), borderColor: "#e53935", backgroundColor: "#e53935", tension: 0.25, pointRadius: 3 } ] },
             options: chartBase({ plugins: { tooltip: { callbacks: { label: c => c.dataset.label + ": " + (c.parsed.y == null ? "—" : money(c.parsed.y)) } } }, scales: { y: moneyTicks } }) };
     } else if (prefs.view === "fyCum") {
-        const act = salespersonFyActuals(metric);
+        const act = budgetFyActuals(metric, entity);
         const cumA = codes.map(c => elapsed.reduce((s, m) => s + ((act.get(c) || {})[m] || 0), 0));
         const cumT = codes.map(c => elapsed.reduce((s, m) => s + tgt(c, m), 0));
         cfg = { type: "bar",
@@ -12758,6 +12800,15 @@ function renderRunRateComparison(opts, mk, rows, today) {
 // ============================================================
 function renderBranchTargets() {
     renderFilterChips();
+    if (spTargets.status === "idle") loadSalespersonTargets();
+    paintTargetsStatus("bt");
+    const tgtFor = (mk, b) => salespersonBudgetTarget("sales", mk, b, "branch");
+    const budgetedCodes = Object.keys(spBudgetTable("sales", "branch")).filter(c => !state.filters.location || c === state.filters.location);
+    const bNames = spBudgetNames("branch");
+    const balCell = (actual, target) => target == null ? '<td class="num">—</td>'
+        : `<td class="num ${actual - target >= 0 ? "pos" : "neg"}">${actual - target >= 0 ? "+" : "−"}${fmtMoneyFull(Math.abs(actual - target))}</td>`;
+    const pctCellBt = (actual, target) => !target ? '<td class="num">—</td>'
+        : `<td class="num"><span class="rr-bar b${rrPctBand(actual / target)}" title="${fmtPct(actual / target)} of target"><span class="rr-fill" style="width:${Math.max(0, Math.min(100, actual / target * 100)).toFixed(1)}%;"></span><span class="rr-lbl">${fmtPct(actual / target)}</span></span></td>`;
     // KPIs across the loaded period
     const groups = aggregateBranchMonthly(state.filtered);
     const totSales = groups.reduce((s, r) => s + r.sales, 0);
@@ -12795,6 +12846,10 @@ function renderBranchTargets() {
                 monthTotals.gp    += r.gp;
                 monthTotals.qty   += r.qty;
             }
+            // Month target = every budgeted branch for that month (or just the
+            // filtered branch), whether or not it has invoices yet.
+            let monthTarget = 0, anyTarget = false;
+            for (const c of budgetedCodes) { const t = tgtFor(mk, c); if (t != null) { monthTarget += t; anyTarget = true; } }
             rowsHtml.push(`<tr style="background:#eef0fb; font-weight:700;">
                 <td>FY ${fy}</td>
                 <td>${escapeHtml(monthLabelFromKey(mk))}</td>
@@ -12802,37 +12857,31 @@ function renderBranchTargets() {
                 <td class="num">${fmtMoneyFull(monthTotals.sales)}</td>
                 <td class="num ${monthTotals.gp >= 0 ? "pos" : "neg"}">${fmtMoneyFull(monthTotals.gp)}</td>
                 <td class="num">${fmtPct(monthTotals.sales ? monthTotals.gp / monthTotals.sales : 0)}</td>
-                <td class="num"></td>
-                <td class="num"></td>
+                <td class="num">${anyTarget ? fmtMoneyFull(monthTarget) : "—"}</td>
+                ${balCell(monthTotals.sales, anyTarget ? monthTarget : null)}
+                ${pctCellBt(monthTotals.sales, anyTarget ? monthTarget : 0)}
             </tr>`);
-            for (const b of branches) {
-                const r = bMap.get(b);
-                const tgtSales = getTarget("branchSalesTarget", fy, mk, b) || "";
-                const tgtGp    = getTarget("branchGpTarget",    fy, mk, b) || "";
+            // Budgeted branches with no invoices this month still get a row.
+            const listed = [...new Set([...branches, ...budgetedCodes.filter(c => tgtFor(mk, c) != null)])].sort();
+            for (const b of listed) {
+                const r = bMap.get(b) || { sales: 0, gp: 0, gpPct: 0 };
+                const t = tgtFor(mk, b);
+                const nm = bNames[b] ? `<span class="rr-name">${escapeHtml(bNames[b])}</span>` : "";
                 rowsHtml.push(`<tr>
                     <td></td>
                     <td></td>
-                    <td>${escapeHtml(b)}</td>
+                    <td>${escapeHtml(b)}${nm}</td>
                     <td class="num">${fmtMoneyFull(r.sales)}</td>
                     <td class="num ${r.gp >= 0 ? "pos" : "neg"}">${fmtMoneyFull(r.gp)}</td>
                     <td class="num">${fmtPct(r.gpPct)}</td>
-                    <td class="num"><input type="number" data-tgt-metric="branchSalesTarget" data-tgt-fy="${fy}" data-tgt-mk="${escapeAttr(mk)}" data-tgt-ent="${escapeAttr(b)}" value="${tgtSales}" placeholder="—" style="width:110px; text-align:right; border:1px solid #d6d8eb; border-radius:6px; padding:4px;"></td>
-                    <td class="num"><input type="number" data-tgt-metric="branchGpTarget"    data-tgt-fy="${fy}" data-tgt-mk="${escapeAttr(mk)}" data-tgt-ent="${escapeAttr(b)}" value="${tgtGp}"    placeholder="—" style="width:110px; text-align:right; border:1px solid #d6d8eb; border-radius:6px; padding:4px;"></td>
+                    <td class="num">${t != null ? fmtMoneyFull(t) : "—"}</td>
+                    ${balCell(r.sales, t)}
+                    ${pctCellBt(r.sales, t || 0)}
                 </tr>`);
             }
         }
     }
-    tbody.innerHTML = rowsHtml.join("") || '<tr><td colspan="8" class="empty">No data.</td></tr>';
-    tbody.querySelectorAll("input[data-tgt-metric]").forEach(inp => {
-        inp.addEventListener("change", e => {
-            const m = e.target.dataset.tgtMetric;
-            const fy_ = parseInt(e.target.dataset.tgtFy);
-            const mk_ = e.target.dataset.tgtMk;
-            const ent_ = e.target.dataset.tgtEnt;
-            const v = e.target.value === "" ? null : parseFloat(e.target.value);
-            setTarget(m, fy_, mk_, ent_, v);
-        });
-    });
+    tbody.innerHTML = rowsHtml.join("") || '<tr><td colspan="9" class="empty">No data.</td></tr>';
 }
 
 // ============================================================
@@ -14093,16 +14142,26 @@ function statusBadgeRunRate(status) {
 // Run Rate tabs. Nothing else in the tool reads these figures.
 // ============================================================
 const SP_TARGETS_FOLDER = "Sales Budgets-Targets";
-const spTargets = { status: "idle", error: "", files: [], months: [], names: {}, sales: {}, margin: {} };
-function spBudgetMonths()      { return spTargets.months; }
-function spBudgetNames()       { return spTargets.names; }
-function spBudgetTable(metric) { return spTargets[metric] || {}; }
-// Target for one salesperson code / month ("YYYY-MM") / metric
-// ("sales" | "margin"); null when the code or month is not budgeted.
-function salespersonBudgetTarget(metric, mk, code) {
-    const row = spBudgetTable(metric)[(code || "").toUpperCase()];
+const spTargets = { status: "idle", error: "", files: [], months: [], names: {}, sales: {}, margin: {},
+                    branch: { months: [], names: {}, sales: {}, margin: {} } };
+const TARGET_TABS = new Set(["salespersonSalesRate", "salespersonMarginRate", "branchSalesRate", "branchTarget"]);
+// entity: "salesperson" (default) or "branch"
+function spBudgetMonths(entity)        { return entity === "branch" ? spTargets.branch.months : spTargets.months; }
+function spBudgetNames(entity)         { return entity === "branch" ? spTargets.branch.names : spTargets.names; }
+function spBudgetTable(metric, entity) { return (entity === "branch" ? spTargets.branch[metric] : spTargets[metric]) || {}; }
+// Target for one code / month ("YYYY-MM") / metric ("sales" | "margin")
+// / entity; null when the code or month is not budgeted.
+function salespersonBudgetTarget(metric, mk, code, entity) {
+    const row = spBudgetTable(metric, entity)[(code || "").toUpperCase()];
     const v = row ? row[mk] : null;
     return (v == null || isNaN(v)) ? null : v;
+}
+// Branch sheet carries names only; Wiise location codes (Faik, 2026-10-14).
+// A code written beside the branch name in the sheet takes priority.
+const BRANCH_CODE_BY_NAME = [[/keilor/i, "10"], [/shep+[ae]rton/i, "20"], [/dandenong/i, "30"]];
+function branchCodeFor(name) {
+    for (const [re, code] of BRANCH_CODE_BY_NAME) if (re.test(name)) return code;
+    return null;
 }
 // Header-row cell → "YYYY-MM" (Excel date serial, Date, or "Jul-26" text); null otherwise.
 function spTargetsMonthKey(v) {
@@ -14120,15 +14179,49 @@ function spTargetsMonthKey(v) {
 // "Jane Smith" → "JS": first letter of each word (Wiise salesperson codes are the initials).
 function spInitials(name) { return (name || "").split(/[\s\-]+/).filter(Boolean).map(w => w[0]).join(""); }
 function parseTargetsWorkbook(wb) {
-    const out = { months: new Set(), names: {}, sales: {}, margin: {}, blocks: 0 };
+    const out = { months: new Set(), names: {}, sales: {}, margin: {}, blocks: 0,
+                  branch: { months: new Set(), names: {}, sales: {}, margin: {} } };
     for (const sn of wb.SheetNames) {
         const ws = wb.Sheets[sn];
         if (!ws || !ws["!ref"]) continue;
         const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null });
+        const branchSheet = /branch|location|store/i.test(sn);
         for (let r = 0; r < rows.length; r++) {
             const row = rows[r] || [];
             const hdrCol = row.findIndex(v => typeof v === "string" && /rep\s*name/i.test(v));
-            if (hdrCol < 0) continue;
+            if (hdrCol < 0) {
+                // Branch sheet layout: a row holding the branch name, then a
+                // header row of months (Jul-26 …), then one row of figures.
+                if (!branchSheet) continue;
+                const monthCols = [];
+                row.forEach((v, c) => { const mk = spTargetsMonthKey(v); if (mk) monthCols.push({ c, mk }); });
+                if (monthCols.length < 3) continue;
+                const vals = rows[r + 1] || [];
+                if (!monthCols.some(({ c }) => typeof vals[c] === "number")) continue;
+                // Name row: nearest row above with a text cell.
+                let name = "", codeCell = null, title = "";
+                for (let k = r - 1; k >= Math.max(0, r - 3) && !name; k--) {
+                    const nr = rows[k] || [];
+                    const txt = nr.find(v => typeof v === "string" && v.trim());
+                    if (txt) {
+                        name = txt.trim(); title = nr.filter(v => typeof v === "string").join(" ");
+                        codeCell = nr.find((v, i) => i !== nr.indexOf(txt) && v != null && String(v).trim() !== "" && /^[A-Za-z0-9]{1,6}$/.test(String(v).trim()));
+                    }
+                }
+                if (!name) continue;
+                const metric = /\bGP\b|gross|margin/i.test(title) ? "margin" : "sales";
+                const code = String(codeCell != null ? codeCell : (branchCodeFor(name) || name)).trim().toUpperCase();
+                const b = out.branch;
+                b.names[code] = name;
+                if (!b[metric][code]) b[metric][code] = {};
+                for (const { c, mk } of monthCols) {
+                    const v = vals[c];
+                    if (typeof v === "number" && !isNaN(v)) { b[metric][code][mk] = v; b.months.add(mk); }
+                }
+                out.blocks++;
+                r += 1;
+                continue;
+            }
             const monthCols = [];
             row.forEach((v, c) => { if (c !== hdrCol) { const mk = spTargetsMonthKey(v); if (mk) monthCols.push({ c, mk }); } });
             if (!monthCols.length) continue;
@@ -14162,6 +14255,7 @@ function parseTargetsWorkbook(wb) {
         }
     }
     out.months = [...out.months].sort();
+    out.branch.months = [...out.branch.months].sort();
     return out;
 }
 async function loadSalespersonTargets(force) {
@@ -14193,7 +14287,7 @@ async function loadSalespersonTargets(force) {
             try { parsed = parseTargetsWorkbook(XLSX.read(await resp.arrayBuffer(), { type: "array" })); }
             catch (e) { skipped.push(f.name + " (not readable)"); continue; }
             if (!parsed.blocks) { skipped.push(f.name + " (no \"Rep Name\" header with month columns)"); continue; }
-            read.push({ name: f.name, modified: f.lastModifiedDateTime || "", months: parsed.months, parsed });
+            read.push({ name: f.name, modified: f.lastModifiedDateTime || "", months: [...new Set([...parsed.months, ...parsed.branch.months])].sort(), parsed });
         }
         if (!read.length) throw new Error("no readable targets file in " + SP_TARGETS_FOLDER + (skipped.length ? " — " + skipped.join("; ") : ""));
         spTargets.all = read;              // oldest → newest, each with its parsed workbook
@@ -14203,7 +14297,7 @@ async function loadSalespersonTargets(force) {
         spTargets.status = "error"; spTargets.error = e.message || String(e);
     }
     paintTargetsStatus();
-    if (state.tab === "salespersonSalesRate" || state.tab === "salespersonMarginRate") renderCurrentTab();
+    if (TARGET_TABS.has(state.tab)) renderCurrentTab();
 }
 // Which files are ticked. Kept for this browser session only (Faik,
 // 2026-10-13): every file is ticked again when the tool is next opened.
@@ -14215,17 +14309,23 @@ function setTargetsFileOn(name, on) { if (on) spTargetsExcluded.delete(name); el
 // Merge the ticked files (oldest → newest, so a newer file wins on overlap).
 function applyTargetsSelection() {
     const merged = { months: new Set(), names: {}, sales: {}, margin: {} };
+    const mergedB = { months: new Set(), names: {}, sales: {}, margin: {} };
     const used = [];
+    const mergeInto = (dst, src) => {
+        for (const m of src.months) dst.months.add(m);
+        Object.assign(dst.names, src.names);
+        for (const metric of ["sales", "margin"]) {
+            for (const [code, row] of Object.entries(src[metric])) dst[metric][code] = Object.assign(dst[metric][code] || {}, row);
+        }
+    };
     for (const f of (spTargets.all || [])) {
         if (!targetsFileOn(f.name)) continue;
-        for (const m of f.parsed.months) merged.months.add(m);
-        Object.assign(merged.names, f.parsed.names);
-        for (const metric of ["sales", "margin"]) {
-            for (const [code, row] of Object.entries(f.parsed[metric])) merged[metric][code] = Object.assign(merged[metric][code] || {}, row);
-        }
+        mergeInto(merged, f.parsed);
+        if (f.parsed.branch) mergeInto(mergedB, f.parsed.branch);
         used.push(f);
     }
     spTargets.months = [...merged.months].sort(); spTargets.names = merged.names; spTargets.sales = merged.sales; spTargets.margin = merged.margin;
+    spTargets.branch = { months: [...mergedB.months].sort(), names: mergedB.names, sales: mergedB.sales, margin: mergedB.margin };
     spTargets.files = used.slice().reverse();
     spTargets.status = "ready";
 }
@@ -14248,7 +14348,7 @@ function openTargetsPicker(anchor) {
         pop.remove();
         applyTargetsSelection();
         paintTargetsStatus();
-        if (state.tab === "salespersonSalesRate" || state.tab === "salespersonMarginRate") renderCurrentTab();
+        if (TARGET_TABS.has(state.tab)) renderCurrentTab();
     });
     setTimeout(() => {
         const close = e => { if (!pop.contains(e.target) && e.target !== anchor) { pop.remove(); document.removeEventListener("mousedown", close); } };
@@ -14257,7 +14357,7 @@ function openTargetsPicker(anchor) {
 }
 // Status text in both tabs' hint strips + the Reload link (wired once).
 function paintTargetsStatus(prefix) {
-    for (const px of ["spsr", "spmr"]) {
+    for (const px of ["spsr", "spmr", "brsr", "bt"]) {
         const el = document.getElementById(px + "TgtStatus");
         if (el) {
             let t;
@@ -14270,7 +14370,8 @@ function paintTargetsStatus(prefix) {
                 el.title = "Click to choose which files to use. Read from the Sales Budgets-Targets folder on SharePoint, matched by salesperson code; newest file wins where months overlap.\n"
                          + fl.map(f => "• " + f.name + " — " + fmtD(f.modified) + (f.months.length ? " — " + monthLabelFromKey(f.months[0]) + " – " + monthLabelFromKey(f.months[f.months.length - 1]) : "")).join("\n")
                          + ((spTargets.skipped || []).length ? "\nNot readable: " + spTargets.skipped.join("; ") : "")
-                         + "\n" + Object.keys(spTargets.sales).length + " sales rows, " + Object.keys(spTargets.margin).length + " GP rows.";
+                         + "\n" + Object.keys(spTargets.sales).length + " salesperson sales rows, " + Object.keys(spTargets.margin).length + " salesperson GP rows, "
+                         + Object.keys(spTargets.branch.sales).length + " branch sales rows, " + Object.keys(spTargets.branch.margin).length + " branch GP rows.";
             } else if (spTargets.status === "loading") t = "loading…";
             else if (spTargets.status === "signin") t = "sign in to read the targets";
             else if (spTargets.status === "error") t = "could not load — " + spTargets.error;
