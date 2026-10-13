@@ -322,9 +322,6 @@
         .rr-bar.b0 .rr-fill { background: #e53935; }   /* under 50% */
         .rr-bar.b1 .rr-fill { background: #fb8c00; }   /* 50–99% */
         .rr-bar.b2 .rr-fill { background: #43a047; }   /* 100% and over */
-        /* Data note (codes with no budget etc.) as small bracketed text beside the panel title */
-        .rr-headnote { flex: 0 1 auto; min-width: 0; font-size: 11px; font-weight: 400; line-height: 1.3; opacity: .7; white-space: normal; }
-        .rr-headnote:empty { display: none; }
         /* Legend for the bands, shown in the run-rate panel header */
         .rr-legend { display: inline-flex; align-items: center; gap: 12px; margin-left: auto; margin-right: 6px; font-size: 11px; font-weight: 600; opacity: .85; white-space: nowrap; }
         .rr-legend span::before { content: ""; display: inline-block; width: 12px; height: 12px; border-radius: 6px; margin-right: 5px; vertical-align: -2px; }
@@ -3624,7 +3621,7 @@
                     <div class="kpi k-gpp"><div class="label">% Month Passed</div><div class="value" id="spsrSdPct">—</div></div>
                 </div>
                 <div class="panel">
-                    <div class="panel-header"><h2>Sales Run Rate · by Salesperson</h2><span class="rr-headnote" id="spsrNote"></span><span class="rr-legend" title="% Achieved = actual ÷ target"><span class="b0">&lt; 50%</span><span class="b1">50–99%</span><span class="b2">100%+</span></span><select id="spsrMonthSel" class="mini-select" title="Month"></select></div>
+                    <div class="panel-header"><h2>Sales Run Rate · by Salesperson</h2><span class="rr-legend" title="% Achieved = actual ÷ target"><span class="b0">&lt; 50%</span><span class="b1">50–99%</span><span class="b2">100%+</span></span><select id="spsrMonthSel" class="mini-select" title="Month"></select></div>
                     <div class="table-scroll">
                         <table id="spsrTable">
                             <thead><tr>
@@ -3670,7 +3667,7 @@
                     <div class="kpi k-gpp"><div class="label">% Month Passed</div><div class="value" id="spmrSdPct">—</div></div>
                 </div>
                 <div class="panel">
-                    <div class="panel-header"><h2>Margin Run Rate · by Salesperson</h2><span class="rr-headnote" id="spmrNote"></span><span class="rr-legend" title="% Achieved = actual ÷ target"><span class="b0">&lt; 50%</span><span class="b1">50–99%</span><span class="b2">100%+</span></span><select id="spmrMonthSel" class="mini-select" title="Month"></select></div>
+                    <div class="panel-header"><h2>Margin Run Rate · by Salesperson</h2><span class="rr-legend" title="% Achieved = actual ÷ target"><span class="b0">&lt; 50%</span><span class="b1">50–99%</span><span class="b2">100%+</span></span><select id="spmrMonthSel" class="mini-select" title="Month"></select></div>
                     <div class="table-scroll">
                         <table id="spmrTable">
                             <thead><tr>
@@ -12593,22 +12590,7 @@ function renderRunRateTab(opts) {
     }
     tbody.innerHTML = (bodyHtml || '<tr><td colspan="10" class="empty">No data this month.</td></tr>') + (bodyHtml ? totalHtml : "");
 
-    // Budget mode notes: codes that never appear in the loaded invoices
-    // (possible code mismatch), codes seen in the data with no budget,
-    // and a selected month that the current load does not cover.
-    if (opts.budget) {
-        const note = document.getElementById(opts.prefix + "Note");
-        const msgs = [];
-        const seen = new Set(state.invoices.map(i => i.salesperson || "(unassigned)"));
-        const notSeen = Object.keys(SALESPERSON_BUDGET_FY2027[opts.metric]).filter(c => !seen.has(c));
-        const noBudget = entities.filter(e => !SALESPERSON_BUDGET_FY2027[opts.metric][e]);
-        if (!state.invoices.length) msgs.push("no sales loaded yet — Load sales or Fast lookup to see actuals");
-        else if (!state.invoices.some(i => inMonth(i, 0))) msgs.push("no invoices in the loaded data for " + monthLbl + " — the loaded range does not cover this month");
-        if (notSeen.length) msgs.push("budgeted codes with no invoices in the loaded data: " + notSeen.map(c => c + " " + SALESPERSON_BUDGET_NAMES[c]).join(", "));
-        if (noBudget.length) msgs.push("codes in the data with no FY2026-27 budget: " + noBudget.join(", "));
-        if (note) note.textContent = msgs.length ? "(" + msgs.join(" · ") + ")" : "";
-        renderRunRateComparison(opts, mk, rows, today);
-    }
+    if (opts.budget) renderRunRateComparison(opts, mk, rows, today);
 
     tbody.querySelectorAll("input[data-target-metric]").forEach(inp => {
         inp.addEventListener("change", e => {
