@@ -1681,13 +1681,13 @@
             <!-- Restricted nav: hidden for everyone except the owner
                  account (see updateRestrictedNav). Hidden by default so
                  non-owners and not-signed-in viewers never see a flash. -->
-            <!-- Targets & Run Rate: the group label and the two Salesperson
-                 run-rate tabs are open to everyone (Faik, 2026-10-13). The
-                 three Branch tabs stay owner-only until the branch budget
-                 arrives. -->
+            <!-- Targets & Run Rate: open to everyone — the two Salesperson
+                 run-rate tabs (Faik, 2026-10-13) and Branch Sales & Targets +
+                 Branch Sales Run Rate (Faik, 2026-10-14). Branch Margin Run
+                 Rate stays owner-only until branch GP targets exist. -->
             <div class="group-label">Targets &amp; Run Rate</div>
-            <a data-tab="branchTarget" class="restrictedNav" style="display:none;">Branch Sales &amp; Targets</a>
-            <a data-tab="branchSalesRate" class="restrictedNav" style="display:none;">Branch Sales Run Rate</a>
+            <a data-tab="branchTarget">Branch Sales &amp; Targets</a>
+            <a data-tab="branchSalesRate">Branch Sales Run Rate</a>
             <a data-tab="branchMarginRate" class="restrictedNav" style="display:none;">Branch Margin Run Rate</a>
             <a data-tab="salespersonSalesRate">Salesperson Sales Run Rate</a>
             <a data-tab="salespersonMarginRate">Salesperson Margin Run Rate</a>
@@ -16742,10 +16742,10 @@ function sreconToggle(row, side) {
 // Fast lookup sessions). If a restricted tab is somehow active when
 // the nav hides, we bounce to Overview.
 const RESTRICTED_NAV_OWNER = "faiko@vicair.com.au";
-// salespersonSalesRate / salespersonMarginRate are open to everyone
-// (Faik, 2026-10-13) — the budget-driven tabs. Branch tabs still owner-only.
-const RESTRICTED_TABS = new Set(["branchTarget", "branchSalesRate", "branchMarginRate",
-                                 "keyCustomers", "ordersPastDel"]);
+// The budget-driven tabs are open to everyone: salespersonSalesRate /
+// salespersonMarginRate (Faik, 2026-10-13), branchTarget / branchSalesRate
+// (Faik, 2026-10-14). Branch Margin Run Rate + Lists stay owner-only.
+const RESTRICTED_TABS = new Set(["branchMarginRate", "keyCustomers", "ordersPastDel"]);
 // The Finance group (P&L tab) has its own allow-list (Faik 2026-09-23).
 // Finance view (P&L tab + Overview reconciliation rows): Faik, Michael,
 // Daniel and Shane — approved by Faik 2026-10-03. Nobody else.
