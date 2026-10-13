@@ -3597,7 +3597,8 @@
 
             <!-- TAB: Salesperson Sales Run Rate -->
             <section data-tab-content="salespersonSalesRate" style="display:none;">
-                <div class="hint">Sales run-rate for the current month (<strong id="spsrMonth">—</strong>). Selling days = Mon–Fri minus Vic public holidays.</div>
+                <div class="hint">Sales run-rate for <strong id="spsrMonth">—</strong>. Selling days = Mon–Fri minus Vic public holidays. Sales Targets come from the FY2026-27 budget (Budgets FY2627) by salesperson code — nothing to type here.</div>
+                <div class="hint" id="spsrNote" style="display:none;"></div>
                 <div class="kpi-row">
                     <div class="kpi k-rev"><div class="label">Total Selling Days</div><div class="value" id="spsrSdTotal">—</div></div>
                     <div class="kpi k-inv"><div class="label">Selling Days Passed</div><div class="value" id="spsrSdPassed">—</div></div>
@@ -3605,7 +3606,7 @@
                     <div class="kpi k-gpp"><div class="label">% Month Passed</div><div class="value" id="spsrSdPct">—</div></div>
                 </div>
                 <div class="panel">
-                    <div class="panel-header"><h2>Sales Run Rate · by Salesperson</h2></div>
+                    <div class="panel-header"><h2>Sales Run Rate · by Salesperson</h2><select id="spsrMonthSel" class="mini-select" title="Month"></select></div>
                     <div class="table-scroll">
                         <table id="spsrTable">
                             <thead><tr>
@@ -3628,7 +3629,8 @@
 
             <!-- TAB: Salesperson Margin Run Rate -->
             <section data-tab-content="salespersonMarginRate" style="display:none;">
-                <div class="hint">Margin (GP$) run-rate for the current month (<strong id="spmrMonth">—</strong>).</div>
+                <div class="hint">Margin (GP$) run-rate for <strong id="spmrMonth">—</strong>. Selling days = Mon–Fri minus Vic public holidays. GM $ Targets come from the FY2026-27 budget (Budgets FY2627) by salesperson code — nothing to type here.</div>
+                <div class="hint" id="spmrNote" style="display:none;"></div>
                 <div class="kpi-row">
                     <div class="kpi k-rev"><div class="label">Total Selling Days</div><div class="value" id="spmrSdTotal">—</div></div>
                     <div class="kpi k-inv"><div class="label">Selling Days Passed</div><div class="value" id="spmrSdPassed">—</div></div>
@@ -3636,7 +3638,7 @@
                     <div class="kpi k-gpp"><div class="label">% Month Passed</div><div class="value" id="spmrSdPct">—</div></div>
                 </div>
                 <div class="panel">
-                    <div class="panel-header"><h2>Margin Run Rate · by Salesperson</h2></div>
+                    <div class="panel-header"><h2>Margin Run Rate · by Salesperson</h2><select id="spmrMonthSel" class="mini-select" title="Month"></select></div>
                     <div class="table-scroll">
                         <table id="spmrTable">
                             <thead><tr>
@@ -4119,6 +4121,7 @@ const state = {
     topCustomersChartType: "barH", topItemsChartType: "barH",
     locationChartType: "barH",     salespersonChartType: "barH",
     statusChartType: "pie",
+    runRateMonth: {},               // prefix -> "YYYY-MM" chosen in the month selector (salesperson run-rate tabs)
     currentItemDetail: null,
     sort: { key: "revenue", dir: "desc" },
     sortBranch: { key: "salesAmount", dir: "desc" },
@@ -12387,13 +12390,29 @@ function renderReturns() {
 // RUN-RATE TABS (4 tabs share this engine)
 // ============================================================
 function renderRunRateTab(opts) {
-    // opts: { metric: "sales"|"margin", entity: "branch"|"salesperson", prefix }
+    // opts: { metric: "sales"|"margin", entity: "branch"|"salesperson", prefix, budget }
+    // budget = true → targets come from SALESPERSON_BUDGET_FY2027 (read-only
+    // cells, month selector); otherwise manual localStorage targets for the
+    // current month, exactly as before.
     renderFilterChips();
     const today = new Date();
-    const sd = sellingDaysForMonth(today);
-    const fy = fiscalYear(today.toISOString().slice(0, 10));
-    const mk = monthKey(today.toISOString().slice(0, 10));
-    const monthLbl = today.toLocaleDateString("en-AU", { month: "long", year: "numeric" });
+    const todayMk = localISO(today).slice(0, 7);
+    let mk = todayMk;
+    if (opts.budget) {
+        const sel = document.getElementById(opts.prefix + "MonthSel");
+        if (!state.runRateMonth[opts.prefix]) state.runRateMonth[opts.prefix] = SALESPERSON_BUDGET_MONTHS.includes(todayMk) ? todayMk : SALESPERSON_BUDGET_MONTHS[0];
+        mk = state.runRateMonth[opts.prefix];
+        if (sel && !sel.dataset.wired) {
+            sel.innerHTML = SALESPERSON_BUDGET_MONTHS.map(m => '<option value="' + m + '">' + escapeHtml(monthLabelFromKey(m)) + (m === todayMk ? " (current)" : "") + '</option>').join("");
+            sel.addEventListener("change", () => { state.runRateMonth[opts.prefix] = sel.value; renderCurrentTab(); });
+            sel.dataset.wired = "1";
+        }
+        if (sel) sel.value = mk;
+    }
+    const [selY, selM] = mk.split("-").map(Number);
+    const sd = opts.budget ? sellingDaysForMonthKey(mk, today) : sellingDaysForMonth(today);
+    const fy = fiscalYear(mk + "-01");
+    const monthLbl = new Date(selY, selM - 1, 1).toLocaleDateString("en-AU", { month: "long", year: "numeric" });
 
     document.getElementById(opts.prefix + "Month").textContent = monthLbl;
     document.getElementById(opts.prefix + "SdTotal").textContent = fmtInt(sd.total);
@@ -12403,7 +12422,7 @@ function renderRunRateTab(opts) {
 
     const inMonth = (inv, yearOffset) => {
         const d = new Date(inv.postingDate);
-        return d.getFullYear() === today.getFullYear() - yearOffset && d.getMonth() === today.getMonth();
+        return d.getFullYear() === selY - yearOffset && d.getMonth() === selM - 1;
     };
     const cyByEntity = new Map(), pyByEntity = new Map();
 
@@ -12435,43 +12454,94 @@ function renderRunRateTab(opts) {
     aggregate(state.invoices.filter(i => inMonth(i, 0)), cyByEntity);
     aggregate(state.invoices.filter(i => inMonth(i, 1)), pyByEntity);
 
-    const entities = [...new Set([...cyByEntity.keys(), ...pyByEntity.keys()])].sort();
+    // Budget mode: every budgeted code gets a row even with no sales yet,
+    // and a code is dropped only when the salesperson filter excludes it.
+    const budgetCodes = opts.budget
+        ? Object.keys(SALESPERSON_BUDGET_FY2027[opts.metric]).filter(c => !state.filters.salesperson || c === state.filters.salesperson)
+        : [];
+    const entities = [...new Set([...cyByEntity.keys(), ...pyByEntity.keys(), ...budgetCodes])].sort();
     const metricKey = opts.entity + (opts.metric === "sales" ? "Sales" : "Margin");
+    // Past month → the month is closed: status is met / missed on the
+    // full-month figure and "Required Daily" no longer means anything.
+    // Future month → nothing has happened yet.
+    const closedStatus = (actual, target) => target > 0 ? (actual >= target ? "TARGET MET" : "TARGET MISSED") : "NO PLAN";
     const rows = entities.map(ent => {
         const cy = cyByEntity.get(ent) || { sales: 0, cost: 0 };
         const py = pyByEntity.get(ent) || { sales: 0, cost: 0 };
         const cyVal = opts.metric === "sales" ? cy.sales : (cy.sales - cy.cost);
         const pyVal = opts.metric === "sales" ? py.sales : (py.sales - py.cost);
-        const target = getTarget(metricKey, fy, mk, ent) || 0;
+        const target = opts.budget ? (salespersonBudgetTarget(opts.metric, mk, ent) || 0) : (getTarget(metricKey, fy, mk, ent) || 0);
         const rr = computeRunRate(cyVal, target, sd.total, sd.passed, sd.remaining);
+        if (opts.budget && sd.isPast)   rr.status = closedStatus(cyVal, target);
+        if (opts.budget && sd.isFuture) rr.status = target > 0 ? "NOT STARTED" : "NO PLAN";
         return { entity: ent, cyVal, pyVal, target, metricKey, ...rr };
     }).sort((a, b) => b.cyVal - a.cyVal);
 
     const tbody = document.querySelector("#" + opts.prefix + "Table tbody");
     let tCy = 0, tPy = 0, tTarget = 0;
+    const targetCell = r => opts.budget
+        ? `<td class="num">${r.target ? fmtMoneyFull(r.target) : "—"}</td>`
+        : `<td class="num"><input type="number" data-target-metric="${escapeAttr(r.metricKey)}" data-target-fy="${fy}" data-target-mk="${escapeAttr(mk)}" data-target-ent="${escapeAttr(r.entity)}" value="${r.target || ""}" placeholder="—" style="width:110px; text-align:right; border:1px solid #d6d8eb; border-radius:6px; padding:4px;"></td>`;
+    const requiredCell = r => (opts.budget && (sd.isPast || !sd.remaining)) ? "n/a" : (r.target ? fmtMoneyFull(r.requiredDaily) : "—");
     const bodyHtml = rows.map(r => {
         tCy += r.cyVal; tPy += r.pyVal; tTarget += r.target;
+        const name = opts.budget && SALESPERSON_BUDGET_NAMES[r.entity] ? ` <span class="muted" style="opacity:.7;">${escapeHtml(SALESPERSON_BUDGET_NAMES[r.entity])}</span>` : "";
         return `<tr>
-            <td>${escapeHtml(r.entity)}</td>
+            <td>${escapeHtml(r.entity)}${name}</td>
             <td class="num">${r.pyVal ? fmtMoneyFull(r.pyVal) : "—"}</td>
-            <td class="num"><input type="number" data-target-metric="${escapeAttr(r.metricKey)}" data-target-fy="${fy}" data-target-mk="${escapeAttr(mk)}" data-target-ent="${escapeAttr(r.entity)}" value="${r.target || ""}" placeholder="—" style="width:110px; text-align:right; border:1px solid #d6d8eb; border-radius:6px; padding:4px;"></td>
+            ${targetCell(r)}
             <td class="num">${r.cyVal ? fmtMoneyFull(r.cyVal) : "—"}</td>
             <td class="num">${r.target ? fmtMoneyFull(r.targetDaily) : "—"}</td>
             <td class="num">${r.actualDaily ? fmtMoneyFull(r.actualDaily) : "—"}</td>
             <td class="num">${r.target ? fmtMoneyFull(r.balance) : "—"}</td>
-            <td class="num">${r.target ? fmtMoneyFull(r.requiredDaily) : "—"}</td>
+            <td class="num">${requiredCell(r)}</td>
             <td>${statusBadgeRunRate(r.status)}</td>
             <td class="num">${r.pctAchieved == null ? "—" : fmtPct(r.pctAchieved)}</td>
         </tr>`;
     }).join("");
-    const totalHtml = `<tr style="font-weight:700; background:#eef0fb;">
-        <td>Total</td>
-        <td class="num">${tPy ? fmtMoneyFull(tPy) : "—"}</td>
-        <td class="num">${tTarget ? fmtMoneyFull(tTarget) : "—"}</td>
-        <td class="num">${fmtMoneyFull(tCy)}</td>
-        <td colspan="6"></td>
-    </tr>`;
+    let totalHtml;
+    if (opts.budget) {
+        const t = computeRunRate(tCy, tTarget, sd.total, sd.passed, sd.remaining);
+        if (sd.isPast) t.status = closedStatus(tCy, tTarget);
+        if (sd.isFuture) t.status = tTarget > 0 ? "NOT STARTED" : "NO PLAN";
+        totalHtml = `<tr style="font-weight:700; background:#eef0fb;">
+            <td>Total</td>
+            <td class="num">${tPy ? fmtMoneyFull(tPy) : "—"}</td>
+            <td class="num">${tTarget ? fmtMoneyFull(tTarget) : "—"}</td>
+            <td class="num">${fmtMoneyFull(tCy)}</td>
+            <td class="num">${tTarget ? fmtMoneyFull(t.targetDaily) : "—"}</td>
+            <td class="num">${t.actualDaily ? fmtMoneyFull(t.actualDaily) : "—"}</td>
+            <td class="num">${tTarget ? fmtMoneyFull(t.balance) : "—"}</td>
+            <td class="num">${requiredCell({ target: tTarget, requiredDaily: t.requiredDaily })}</td>
+            <td>${statusBadgeRunRate(t.status)}</td>
+            <td class="num">${t.pctAchieved == null ? "—" : fmtPct(t.pctAchieved)}</td>
+        </tr>`;
+    } else {
+        totalHtml = `<tr style="font-weight:700; background:#eef0fb;">
+            <td>Total</td>
+            <td class="num">${tPy ? fmtMoneyFull(tPy) : "—"}</td>
+            <td class="num">${tTarget ? fmtMoneyFull(tTarget) : "—"}</td>
+            <td class="num">${fmtMoneyFull(tCy)}</td>
+            <td colspan="6"></td>
+        </tr>`;
+    }
     tbody.innerHTML = (bodyHtml || '<tr><td colspan="10" class="empty">No data this month.</td></tr>') + (bodyHtml ? totalHtml : "");
+
+    // Budget mode notes: codes that never appear in the loaded invoices
+    // (possible code mismatch), codes seen in the data with no budget,
+    // and a selected month that the current load does not cover.
+    if (opts.budget) {
+        const note = document.getElementById(opts.prefix + "Note");
+        const msgs = [];
+        const seen = new Set(state.invoices.map(i => i.salesperson || "(unassigned)"));
+        const notSeen = Object.keys(SALESPERSON_BUDGET_FY2027[opts.metric]).filter(c => !seen.has(c));
+        const noBudget = entities.filter(e => !SALESPERSON_BUDGET_FY2027[opts.metric][e]);
+        if (!state.invoices.length) msgs.push("No sales loaded yet — Load sales (or Fast lookup) to see actuals.");
+        else if (!state.invoices.some(i => inMonth(i, 0))) msgs.push("No invoices in the loaded data for " + monthLbl + " — the loaded range does not cover this month.");
+        if (notSeen.length) msgs.push("Budgeted codes with no invoices in the loaded data: " + notSeen.map(c => c + " (" + SALESPERSON_BUDGET_NAMES[c] + ")").join(", ") + ".");
+        if (noBudget.length) msgs.push("Salesperson codes in the data with no FY2026-27 budget: " + noBudget.join(", ") + ".");
+        if (note) { note.textContent = msgs.join(" "); note.style.display = msgs.length ? "" : "none"; }
+    }
 
     tbody.querySelectorAll("input[data-target-metric]").forEach(inp => {
         inp.addEventListener("change", e => {
@@ -12487,8 +12557,8 @@ function renderRunRateTab(opts) {
 }
 function renderBranchSalesRunRate()       { renderRunRateTab({ metric: "sales",  entity: "branch",      prefix: "brsr" }); }
 function renderBranchMarginRunRate()      { renderRunRateTab({ metric: "margin", entity: "branch",      prefix: "brmr" }); }
-function renderSalespersonSalesRunRate()  { renderRunRateTab({ metric: "sales",  entity: "salesperson", prefix: "spsr" }); }
-function renderSalespersonMarginRunRate() { renderRunRateTab({ metric: "margin", entity: "salesperson", prefix: "spmr" }); }
+function renderSalespersonSalesRunRate()  { renderRunRateTab({ metric: "sales",  entity: "salesperson", prefix: "spsr", budget: true }); }
+function renderSalespersonMarginRunRate() { renderRunRateTab({ metric: "margin", entity: "salesperson", prefix: "spmr", budget: true }); }
 
 // ============================================================
 // BRANCH SALES & TARGETS (multi-month with editable targets)
@@ -13796,8 +13866,44 @@ function computeRunRate(actual, target, sdTotal, sdPassed, sdRemain) {
 }
 function statusBadgeRunRate(status) {
     if (status === "ON TRACK")    return '<span class="badge badge-paid">ON TRACK</span>';
+    if (status === "TARGET MET")  return '<span class="badge badge-paid">TARGET MET</span>';
     if (status === "NO PLAN")     return '<span class="badge badge-draft">No Plan</span>';
+    if (status === "NOT STARTED") return '<span class="badge badge-draft">Not started</span>';
     return '<span class="badge" style="background:#ffcdd2; color:#b71c1c;">' + escapeHtml(status) + '</span>';
+}
+
+// ============================================================
+// SALESPERSON BUDGET FY2026-27 (from "Budgets FY2627 CURRENT.xlsx",
+// sheet "Salesperson Targets", keyed by Wiise salesperson code)
+// ------------------------------------------------------------
+// Used ONLY by the Salesperson Sales Run Rate and Salesperson Margin
+// Run Rate tabs. Nothing else in the tool reads this table. Branch
+// tabs keep their own (manual) targets until a branch budget arrives.
+// Months run Jul 2026 → Jun 2027 in column order.
+// ============================================================
+const SALESPERSON_BUDGET_MONTHS = ["2026-07","2026-08","2026-09","2026-10","2026-11","2026-12","2027-01","2027-02","2027-03","2027-04","2027-05","2027-06"];
+const SALESPERSON_BUDGET_NAMES = {};
+const SALESPERSON_BUDGET_FY2027 = { sales: {}, margin: {} }; // figures removed from history 2026-10-13
+// Budget target for one salesperson code / month ("YYYY-MM") / metric
+// ("sales" | "margin"). null when the code or month is not budgeted.
+function salespersonBudgetTarget(metric, mk, code) {
+    const i = SALESPERSON_BUDGET_MONTHS.indexOf(mk);
+    if (i < 0) return null;
+    const row = (SALESPERSON_BUDGET_FY2027[metric] || {})[(code || "").toUpperCase()];
+    return row ? row[i] : null;
+}
+// Selling-day position for a chosen month relative to today:
+// current month → live (as sellingDaysForMonth), a past month → fully
+// elapsed, a future month → nothing elapsed yet.
+function sellingDaysForMonthKey(mk, today) {
+    const [y, m] = mk.split("-").map(Number);
+    const start = new Date(y, m - 1, 1), end = new Date(y, m, 0);
+    const total = sellingDaysInRange(start, end);
+    let passed;
+    if (today > end) passed = total;
+    else if (today < start) passed = 0;
+    else passed = sellingDaysInRange(start, today);
+    return { total, passed, remaining: Math.max(0, total - passed), isPast: today > end, isFuture: today < start };
 }
 
 // ============================================================
