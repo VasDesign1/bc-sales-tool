@@ -322,6 +322,12 @@
         .rr-bar.b0 .rr-fill { background: #e53935; }   /* under 50% */
         .rr-bar.b1 .rr-fill { background: #fb8c00; }   /* 50–99% */
         .rr-bar.b2 .rr-fill { background: #43a047; }   /* 100% and over */
+        /* Run-rate hint: sentence on the left, targets status pill on the right */
+        .rr-hint { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
+        .rr-tgt { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; white-space: nowrap; }
+        .rr-tgt .rr-tgt-lbl { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; opacity: .7; }
+        .rr-tgt .more-btn { background: white; color: #3f51b5; border: 1px solid #d6d8eb; padding: 2px 8px; border-radius: 6px; cursor: pointer; font-size: 13px; line-height: 1.2; }
+        .rr-tgt .more-btn:hover { background: #eef0fb; }
         /* Legend for the bands, shown in the run-rate panel header */
         .rr-legend { display: inline-flex; align-items: center; gap: 12px; margin-left: auto; margin-right: 6px; font-size: 11px; font-weight: 600; opacity: .85; white-space: nowrap; }
         .rr-legend span::before { content: ""; display: inline-block; width: 12px; height: 12px; border-radius: 6px; margin-right: 5px; vertical-align: -2px; }
@@ -3617,7 +3623,7 @@
 
             <!-- TAB: Salesperson Sales Run Rate -->
             <section data-tab-content="salespersonSalesRate" style="display:none;">
-                <div class="hint">Sales run-rate for <strong id="spsrMonth">—</strong>. Selling days = Mon–Fri minus Vic public holidays. Sales Targets are read from the <strong>Sales Budgets-Targets</strong> folder on SharePoint, newest Excel file, by salesperson code (<span id="spsrTgtStatus">not loaded</span>). <a href="#" id="spsrTgtReload">Reload targets</a></div>
+                <div class="hint rr-hint"><span>Sales run-rate for <strong id="spsrMonth">—</strong>. Selling days = Mon–Fri minus Vic public holidays.</span><span class="rr-tgt"><span class="rr-tgt-lbl">Targets</span><span id="spsrTgtStatus" title="Read from the Sales Budgets-Targets folder on SharePoint, newest Excel file, matched by salesperson code">not loaded</span><button type="button" class="more-btn" id="spsrTgtReload" title="Re-read the targets folder on SharePoint">↻</button></span></div>
                 <div class="kpi-row">
                     <div class="kpi k-rev"><div class="label">Total Selling Days</div><div class="value" id="spsrSdTotal">—</div></div>
                     <div class="kpi k-inv"><div class="label">Selling Days Passed</div><div class="value" id="spsrSdPassed">—</div></div>
@@ -3663,7 +3669,7 @@
 
             <!-- TAB: Salesperson Margin Run Rate -->
             <section data-tab-content="salespersonMarginRate" style="display:none;">
-                <div class="hint">Margin (GP$) run-rate for <strong id="spmrMonth">—</strong>. Selling days = Mon–Fri minus Vic public holidays. GM $ Targets are read from the <strong>Sales Budgets-Targets</strong> folder on SharePoint, newest Excel file, by salesperson code (<span id="spmrTgtStatus">not loaded</span>). <a href="#" id="spmrTgtReload">Reload targets</a></div>
+                <div class="hint rr-hint"><span>Margin (GP$) run-rate for <strong id="spmrMonth">—</strong>. Selling days = Mon–Fri minus Vic public holidays.</span><span class="rr-tgt"><span class="rr-tgt-lbl">Targets</span><span id="spmrTgtStatus" title="Read from the Sales Budgets-Targets folder on SharePoint, newest Excel file, matched by salesperson code">not loaded</span><button type="button" class="more-btn" id="spmrTgtReload" title="Re-read the targets folder on SharePoint">↻</button></span></div>
                 <div class="kpi-row">
                     <div class="kpi k-rev"><div class="label">Total Selling Days</div><div class="value" id="spmrSdTotal">—</div></div>
                     <div class="kpi k-inv"><div class="label">Selling Days Passed</div><div class="value" id="spmrSdPassed">—</div></div>
@@ -14185,8 +14191,10 @@ function paintTargetsStatus(prefix) {
             let t;
             if (spTargets.status === "ready") {
                 const when = spTargets.modified ? new Date(spTargets.modified) : null;
-                t = spTargets.fileName + (when && !isNaN(when) ? ", updated " + when.toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" }) : "")
-                  + " · " + Object.keys(spTargets.sales).length + " sales / " + Object.keys(spTargets.margin).length + " GP rows";
+                t = spTargets.fileName + (when && !isNaN(when) ? " · " + when.toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" }) : "");
+                el.title = "Read from the Sales Budgets-Targets folder on SharePoint, newest Excel file, matched by salesperson code. "
+                         + Object.keys(spTargets.sales).length + " sales rows, " + Object.keys(spTargets.margin).length + " GP rows, months "
+                         + (spTargets.months.length ? monthLabelFromKey(spTargets.months[0]) + " – " + monthLabelFromKey(spTargets.months[spTargets.months.length - 1]) : "none") + ".";
             } else if (spTargets.status === "loading") t = "loading…";
             else if (spTargets.status === "signin") t = "sign in to read the targets";
             else if (spTargets.status === "error") t = "could not load — " + spTargets.error;
