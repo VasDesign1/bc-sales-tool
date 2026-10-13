@@ -219,9 +219,18 @@
         .card.span-6  { grid-column: span 6; }
         .card.span-4  { grid-column: span 4; }
         /* Salesperson run-rate tabs: table and comparison chart side by side */
-        .rr-split { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: 14px; align-items: start; }
+        .rr-split { display: grid; grid-template-columns: minmax(0, 8fr) minmax(0, 4fr); gap: 14px; align-items: start; }
         .rr-split > .panel { margin-bottom: 18px; }
-        @media (max-width: 1400px) { .rr-split { grid-template-columns: minmax(0, 1fr); } }
+        @media (max-width: 1300px) { .rr-split { grid-template-columns: minmax(0, 1fr); } }
+        /* Compact run-rate table: all ten columns fit the left pane without a scrollbar */
+        table.rr-compact { font-size: 12px; }
+        table.rr-compact th { padding: 8px 7px; font-size: 10px; letter-spacing: 0; }
+        table.rr-compact td { padding: 6px 7px; }
+        table.rr-compact td:first-child { white-space: normal; min-width: 96px; line-height: 1.15; }
+        table.rr-compact td:first-child .rr-name { display: block; font-size: 10px; opacity: .7; }
+        table.rr-compact .badge { padding: 2px 7px; font-size: 10px; white-space: nowrap; }
+        table.rr-compact .rr-bar { width: 84px; height: 16px; }
+        table.rr-compact .rr-bar .rr-lbl { font-size: 10px; line-height: 16px; }
 
         @media (max-width: 1100px) {
             .sidebar { width: 200px; }
@@ -3618,18 +3627,18 @@
                 <div class="panel">
                     <div class="panel-header"><h2>Sales Run Rate · by Salesperson</h2><select id="spsrMonthSel" class="mini-select" title="Month"></select></div>
                     <div class="table-scroll">
-                        <table id="spsrTable">
+                        <table id="spsrTable" class="rr-compact">
                             <thead><tr>
                                 <th data-sort="entity">Salesperson</th>
-                                <th class="num" data-sort="pyVal">Sales For Month PY</th>
-                                <th class="num" data-sort="target">Sales Target</th>
-                                <th class="num" data-sort="cyVal">Sales For Month</th>
-                                <th class="num" data-sort="targetDaily">Target Run Rate</th>
-                                <th class="num" data-sort="actualDaily">Actual Run Rate</th>
-                                <th class="num" data-sort="balance">Balance</th>
-                                <th class="num" data-sort="requiredDaily">Required Daily</th>
-                                <th data-sort="status">Status</th>
-                                <th class="num" data-sort="pctAchieved">% Achieved</th>
+                                <th class="num" data-sort="pyVal" title="Sales For Month PY (same month last year)">Sales PY</th>
+                                <th class="num" data-sort="target" title="Sales Target (FY2026-27 budget)">Target</th>
+                                <th class="num" data-sort="cyVal" title="Sales For Month">Actual</th>
+                                <th class="num" data-sort="targetDaily" title="Target Run Rate = target ÷ selling days in month">Target /day</th>
+                                <th class="num" data-sort="actualDaily" title="Actual Run Rate = actual ÷ selling days passed">Actual /day</th>
+                                <th class="num" data-sort="balance" title="Balance = actual − target">Balance</th>
+                                <th class="num" data-sort="requiredDaily" title="Required Daily = shortfall ÷ remaining selling days">Req. /day</th>
+                                <th data-sort="status" title="Status">Status</th>
+                                <th class="num" data-sort="pctAchieved" title="% Achieved = actual ÷ target">% Achieved</th>
                             </tr></thead>
                             <tbody></tbody>
                         </table>
@@ -3667,18 +3676,18 @@
                 <div class="panel">
                     <div class="panel-header"><h2>Margin Run Rate · by Salesperson</h2><select id="spmrMonthSel" class="mini-select" title="Month"></select></div>
                     <div class="table-scroll">
-                        <table id="spmrTable">
+                        <table id="spmrTable" class="rr-compact">
                             <thead><tr>
                                 <th data-sort="entity">Salesperson</th>
-                                <th class="num" data-sort="pyVal">GM $ For Month PY</th>
-                                <th class="num" data-sort="target">GM $ Target</th>
-                                <th class="num" data-sort="cyVal">GM $ For Month</th>
-                                <th class="num" data-sort="targetDaily">Target Run Rate</th>
-                                <th class="num" data-sort="actualDaily">Actual Run Rate</th>
-                                <th class="num" data-sort="balance">Balance</th>
-                                <th class="num" data-sort="requiredDaily">Required Daily</th>
-                                <th data-sort="status">Status</th>
-                                <th class="num" data-sort="pctAchieved">% Achieved</th>
+                                <th class="num" data-sort="pyVal" title="GM $ For Month PY (same month last year)">GM $ PY</th>
+                                <th class="num" data-sort="target" title="GM $ Target (FY2026-27 budget)">Target</th>
+                                <th class="num" data-sort="cyVal" title="GM $ For Month">Actual</th>
+                                <th class="num" data-sort="targetDaily" title="Target Run Rate = target ÷ selling days in month">Target /day</th>
+                                <th class="num" data-sort="actualDaily" title="Actual Run Rate = actual ÷ selling days passed">Actual /day</th>
+                                <th class="num" data-sort="balance" title="Balance = actual − target">Balance</th>
+                                <th class="num" data-sort="requiredDaily" title="Required Daily = shortfall ÷ remaining selling days">Req. /day</th>
+                                <th data-sort="status" title="Status">Status</th>
+                                <th class="num" data-sort="pctAchieved" title="% Achieved = actual ÷ target">% Achieved</th>
                             </tr></thead>
                             <tbody></tbody>
                         </table>
@@ -12540,12 +12549,14 @@ function renderRunRateTab(opts) {
     const balanceCell = r => !r.target ? '<td class="num">—</td>'
         : opts.budget ? `<td class="num ${r.balance >= 0 ? "pos" : "neg"}">${r.balance >= 0 ? "+" : "−"}${fmtMoneyFull(Math.abs(r.balance))}</td>`
         : `<td class="num">${fmtMoneyFull(r.balance)}</td>`;
+    // Budget tabs use short badge labels so the table fits beside the chart.
+    const badge = st => opts.budget ? statusBadgeRunRate(st === "BEHIND PLANNED DAILY RUN RATE" ? "BEHIND" : st === "TARGET MISSED" ? "MISSED" : st === "TARGET MET" ? "MET" : st) : statusBadgeRunRate(st);
     const pctCell = r => r.pctAchieved == null ? '<td class="num">—</td>'
         : opts.budget ? `<td class="num"><span class="rr-bar${r.pctAchieved >= 1 ? " full" : ""}" title="${fmtPct(r.pctAchieved)} of target"><span class="rr-fill" style="width:${Math.max(0, Math.min(100, r.pctAchieved * 100)).toFixed(1)}%;"></span><span class="rr-lbl">${fmtPct(r.pctAchieved)}</span></span></td>`
         : `<td class="num">${fmtPct(r.pctAchieved)}</td>`;
     const bodyHtml = rows.map(r => {
         tCy += r.cyVal; tPy += r.pyVal; tTarget += r.target;
-        const name = opts.budget && SALESPERSON_BUDGET_NAMES[r.entity] ? ` <span class="muted" style="opacity:.7;">${escapeHtml(SALESPERSON_BUDGET_NAMES[r.entity])}</span>` : "";
+        const name = opts.budget && SALESPERSON_BUDGET_NAMES[r.entity] ? `<span class="rr-name">${escapeHtml(SALESPERSON_BUDGET_NAMES[r.entity])}</span>` : "";
         return `<tr>
             <td>${escapeHtml(r.entity)}${name}</td>
             <td class="num">${r.pyVal ? fmtMoneyFull(r.pyVal) : "—"}</td>
@@ -12555,7 +12566,7 @@ function renderRunRateTab(opts) {
             <td class="num">${r.actualDaily ? fmtMoneyFull(r.actualDaily) : "—"}</td>
             ${balanceCell(r)}
             <td class="num">${requiredCell(r)}</td>
-            <td>${statusBadgeRunRate(r.status)}</td>
+            <td>${badge(r.status)}</td>
             ${pctCell(r)}
         </tr>`;
     }).join("");
@@ -12574,7 +12585,7 @@ function renderRunRateTab(opts) {
             <td class="num">${t.actualDaily ? fmtMoneyFull(t.actualDaily) : "—"}</td>
             ${balanceCell(t)}
             <td class="num">${requiredCell({ target: tTarget, requiredDaily: t.requiredDaily })}</td>
-            <td>${statusBadgeRunRate(t.status)}</td>
+            <td>${badge(t.status)}</td>
             ${pctCell(t)}
         </tr>`;
     } else {
@@ -14036,6 +14047,7 @@ function computeRunRate(actual, target, sdTotal, sdPassed, sdRemain) {
 function statusBadgeRunRate(status) {
     if (status === "ON TRACK")    return '<span class="badge badge-paid">ON TRACK</span>';
     if (status === "TARGET MET")  return '<span class="badge badge-paid">TARGET MET</span>';
+    if (status === "MET")         return '<span class="badge badge-paid">MET</span>';
     if (status === "NO PLAN")     return '<span class="badge badge-draft">No Plan</span>';
     if (status === "NOT STARTED") return '<span class="badge badge-draft">Not started</span>';
     return '<span class="badge" style="background:#ffcdd2; color:#b71c1c;">' + escapeHtml(status) + '</span>';
