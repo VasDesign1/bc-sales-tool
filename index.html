@@ -746,9 +746,48 @@
         .tab-strip .ts-row button.active { background: linear-gradient(135deg, #3f51b5, #5c6bc0); }
         .tab-strip button.stub { color: #9a9a9a; }
         .tab-strip button.stub::after { content: 'WIP'; font-size: 9px; margin-left: 6px; opacity: .8; }
-        html.theme-onyx .tab-strip button, html.theme-aurora .tab-strip button, html.theme-velvet .tab-strip button { background: #141416; color: #d4af7a; border-color: #2a2820; }
-        html.theme-onyx .tab-strip .ts-row button.active, html.theme-aurora .tab-strip .ts-row button.active, html.theme-velvet .tab-strip .ts-row button.active { background: #d4af7a; color: #141416; }
-        html.theme-onyx .tab-strip .ts-row, html.theme-aurora .tab-strip .ts-row, html.theme-velvet .tab-strip .ts-row { border-bottom-color: #2a2820; }
+        /* Per-theme tab colours: inactive = that theme's panel, active = its primary button */
+        html.theme-onyx .tab-strip button { background: #141416; border-color: #2a2820; color: #c8c4bb; box-shadow: none; }
+        html.theme-onyx .tab-strip button:hover { filter: brightness(0.96); }
+        html.theme-onyx .tab-strip .ts-row button.active { background: #d4af7a; color: #0a0a0b; border-color: transparent; }
+        html.theme-onyx .tab-strip .ts-row { border-bottom-color: #2a2820; }
+        html.theme-linen .tab-strip button { background: rgba(45,42,36,0.06); border-color: rgba(45,42,36,0.18); color: #2d2a24; box-shadow: none; }
+        html.theme-linen .tab-strip button:hover { filter: brightness(0.96); }
+        html.theme-linen .tab-strip .ts-row button.active { background: #5b6e3f; color: #f4f1eb; border-color: transparent; }
+        html.theme-linen .tab-strip .ts-row { border-bottom-color: rgba(45,42,36,0.25); }
+        html.theme-aurora .tab-strip button { background: rgba(20,20,35,0.7); border-color: rgba(255,255,255,0.12); color: #e8e6f5; box-shadow: none; }
+        html.theme-aurora .tab-strip button:hover { filter: brightness(0.96); }
+        html.theme-aurora .tab-strip .ts-row button.active { background: linear-gradient(135deg, #b57bff, #6be0ff); color: #08081b; border-color: transparent; }
+        html.theme-aurora .tab-strip .ts-row { border-bottom-color: rgba(255,255,255,0.14); }
+        html.theme-atelier .tab-strip button { background: #fff; border-color: #000; color: #000; box-shadow: none; }
+        html.theme-atelier .tab-strip button:hover { filter: brightness(0.96); }
+        html.theme-atelier .tab-strip .ts-row button.active { background: #ff4400; color: #fff; border-color: transparent; }
+        html.theme-atelier .tab-strip .ts-row { border-bottom-color: #000; }
+        html.theme-atelier .tab-strip button { border-radius: 0; border-width: 2px; text-transform: uppercase; }
+        html.theme-concierge .tab-strip button { background: #f3eee5; border-color: rgba(44,42,38,0.14); color: #2c2a26; box-shadow: none; }
+        html.theme-concierge .tab-strip button:hover { filter: brightness(0.96); }
+        html.theme-concierge .tab-strip .ts-row button.active { background: #0e4d3f; color: #f3eee5; border-color: transparent; }
+        html.theme-concierge .tab-strip .ts-row { border-bottom-color: rgba(44,42,38,0.22); }
+        html.theme-marble .tab-strip button { background: #ffffff; border-color: rgba(28,40,51,0.12); color: #1e3a5f; box-shadow: none; }
+        html.theme-marble .tab-strip button:hover { filter: brightness(0.96); }
+        html.theme-marble .tab-strip .ts-row button.active { background: #1e3a5f; color: #f9fafb; border-color: transparent; }
+        html.theme-marble .tab-strip .ts-row { border-bottom-color: rgba(28,40,51,0.18); }
+        html.theme-velvet .tab-strip button { background: #2a1014; border-color: rgba(201,160,74,0.22); color: #c9a04a; box-shadow: none; }
+        html.theme-velvet .tab-strip button:hover { filter: brightness(0.96); }
+        html.theme-velvet .tab-strip .ts-row button.active { background: #c9a04a; color: #1a0a0f; border-color: transparent; }
+        html.theme-velvet .tab-strip .ts-row { border-bottom-color: rgba(201,160,74,0.3); }
+        html.theme-glacier .tab-strip button { background: #f6f9fb; border-color: rgba(26,39,56,0.12); color: #1b4f7e; box-shadow: none; }
+        html.theme-glacier .tab-strip button:hover { filter: brightness(0.96); }
+        html.theme-glacier .tab-strip .ts-row button.active { background: #1b4f7e; color: #f6f9fb; border-color: transparent; }
+        html.theme-glacier .tab-strip .ts-row { border-bottom-color: rgba(26,39,56,0.18); }
+        html.theme-bibliotheque .tab-strip button { background: #f6efdd; border-color: rgba(42,28,14,0.16); color: #7a1f2b; box-shadow: none; }
+        html.theme-bibliotheque .tab-strip button:hover { filter: brightness(0.96); }
+        html.theme-bibliotheque .tab-strip .ts-row button.active { background: #7a1f2b; color: #f6efdd; border-color: transparent; }
+        html.theme-bibliotheque .tab-strip .ts-row { border-bottom-color: rgba(42,28,14,0.24); }
+        html.theme-pavilion .tab-strip button { background: #f9f5ec; border-color: rgba(46,51,41,0.14); color: #2e3329; box-shadow: none; }
+        html.theme-pavilion .tab-strip button:hover { filter: brightness(0.96); }
+        html.theme-pavilion .tab-strip .ts-row button.active { background: #6e7d5e; color: #f9f5ec; border-color: transparent; }
+        html.theme-pavilion .tab-strip .ts-row { border-bottom-color: rgba(46,51,41,0.22); }
         .theme-btn {
             margin-left: 16px;
             padding: 5px 12px; border: 1px solid #d6d8eb; background: transparent;
