@@ -1820,8 +1820,8 @@
                 <!-- Grid: column 1 is as wide as the widest button, so Theme and Sign out match; nothing wraps -->
                 <div style="display:grid; grid-template-columns:max-content auto; column-gap:8px; row-gap:6px; align-items:center; margin-left:16px;">
                     <button class="theme-btn" id="themeBtn" title="Change interface theme" style="margin-left:0; width:100%; white-space:nowrap; text-align:center;">Theme</button>
-                    <!-- Owner-only trial (ownerUi) -->
-                    <button type="button" class="help-btn ownerUi" id="helpBtn" style="display:none;" aria-label="Help: hover anything to see what it means" title="Help: hover anything to see what it means">?</button>
+                    <!-- Help (?) is open to everyone (Faik, 2026-10-14); Tab View stays owner-only -->
+                    <button type="button" class="help-btn" id="helpBtn" aria-label="Help: hover anything to see what it means" title="Help: hover anything to see what it means">?</button>
                     <button class="theme-btn" id="signOutBtn" title="Sign out" style="display:none; margin-left:0; width:100%; white-space:nowrap; text-align:center; grid-column:1;">Sign out</button>
                 </div>
             </div>
@@ -16865,9 +16865,9 @@ function currentSignInName() {
     } catch (e) { /* MSAL unavailable → not signed in */ }
     return "";
 }
-// ---- Tab view + Help mode: owner-only trial (Faik, 2026-10-14) ----
-// The "?" button and the TAB VIEW switch carry class ownerUi and are shown
-// only for RESTRICTED_NAV_OWNER. Tab view hides the sidebar and lists the
+// ---- Tab view (owner-only trial) + Help mode (everyone), Faik 2026-10-14 ----
+// The TAB VIEW switch carries class ownerUi and is shown only for
+// RESTRICTED_NAV_OWNER; the "?" button is open to all users. Tab view hides the sidebar and lists the
 // same tabs, in the same groups, as a strip under the filters; it is built
 // from the sidebar links so hidden (restricted) tabs stay hidden.
 let tabView = false, tabViewAllowed = false;   // allowed = signed in as the owner
@@ -16926,7 +16926,6 @@ function updateRestrictedNav() {
     // Owner-only trial UI: Help (?) and Tab View
     document.querySelectorAll(".ownerUi").forEach(el => { el.style.display = show ? "" : "none"; });
     tabViewAllowed = show;
-    if (!show && window.isHelpMode && window.isHelpMode()) window.toggleHelpMode(false);
     applyTabView();
     const showPnl = PNL_VIEWERS.has(user);
     document.querySelectorAll(".financeNav").forEach(el => { el.style.display = showPnl ? "" : "none"; });
