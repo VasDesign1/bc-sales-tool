@@ -3327,6 +3327,10 @@
                     <div class="kpi k-cust"><div class="label">Adjusted Profit</div><div class="value" id="mtdKpiAdjGp">—</div><div class="sub" id="mtdKpiAdjGpSub">net of returns</div></div>
                     <div class="kpi k-avg"><div class="label">Adjusted Profit Margin</div><div class="value" id="mtdKpiAdjGpp">—</div><div class="sub" id="mtdKpiAdjGppSub">after credit memos</div></div>
                 </div>
+                <div class="kpi-row" style="grid-template-columns: repeat(2, 1fr);" title="Sales-order pipeline for the current calendar month: lines whose scheduled shipment date falls in this month (1st to month end). Same basis as the Overview tiles, independent of the toolbar date range.">
+                    <div class="kpi k-rev"><div class="label">Outstanding Sales Orders</div><div class="value" id="mtdPipeOpenAmt">—</div><div class="sub" id="mtdPipeOpenSub">orders not fully shipped</div></div>
+                    <div class="kpi k-gp"><div class="label">Shipped Not Invoiced</div><div class="value" id="mtdPipeSniAmt">—</div><div class="sub" id="mtdPipeSniSub">delivered, awaiting invoice</div></div>
+                </div>
                 <div class="chart-grid">
                     <div class="card span-12">
                         <div class="head"><h3>Month-to-Date Sales Performance (cumulative)</h3><div class="meta" id="mtdMeta"></div></div>
@@ -6249,12 +6253,14 @@ function renderFilterChips() {
 // via each order's orderDate against the toolbar predicate. That way
 // "May 2026" shows the pipeline as of orders placed in May, not the
 // current-state global pipeline.
-function paintPipelineKpis() {
+// Shared sales-order pipeline calc. inRange(isoDate) → boolean decides
+// which lines count, by their scheduled shipmentDate. Overview passes
+// the toolbar predicate; MTD passes the current calendar month.
+function computePipelineOrders(inRange) {
     const pick = (ln, names) => {
         for (const n of names) if (ln[n] != null) return num(ln[n]);
         return 0;
     };
-    const inRange = getDateRangePredicate();
     let openCount = 0, openAmt = 0, sniCount = 0, sniAmt = 0;
     if (state.salesOrderOutstandingLines && state.salesOrderOutstandingLines.length) {
         // EX-GST basis. Outstanding and SNI both filter by the line's
@@ -6298,6 +6304,11 @@ function paintPipelineKpis() {
             if (sniLines)  { sniCount++; sniAmt  += soSni; }
         }
     }
+    return { openCount, openAmt, sniCount, sniAmt };
+}
+
+function paintPipelineKpis() {
+    const { openCount, openAmt, sniCount, sniAmt } = computePipelineOrders(getDateRangePredicate());
     let oiCount = 0, oiAmt = 0;
     for (const inv of (state.filtered || [])) {
         const st = (inv.status || "").toString().toLowerCase();
@@ -14629,6 +14640,23 @@ function renderMTD() {
         return d >= mStart && d <= today;
     };
     paintAdjustedKpis("mtdKpi", totSales, totGp, mtdAdjPredicate);
+
+    // Sales-order pipeline for this calendar month (1st → month end):
+    // what is still scheduled to ship this month, and what has shipped
+    // this month but is not yet invoiced. Whole month rather than
+    // 1st → today so orders due later this month are included.
+    const mEndISO = fmtLocalYMD(new Date(today.getFullYear(), today.getMonth() + 1, 0));
+    const mtdShipInRange = iso => {
+        if (!iso) return false;
+        const k = String(iso).substring(0, 10);
+        return k >= mStartISO && k <= mEndISO;
+    };
+    const pipe = computePipelineOrders(mtdShipInRange);
+    const monthLabel = mStart.toLocaleDateString("en-AU", { month: "long", year: "numeric" });
+    document.getElementById("mtdPipeOpenAmt").textContent = fmtMoneyFull(pipe.openAmt);
+    document.getElementById("mtdPipeOpenSub").textContent = pipe.openCount + " orders · scheduled to ship in " + monthLabel;
+    document.getElementById("mtdPipeSniAmt").textContent  = fmtMoneyFull(pipe.sniAmt);
+    document.getElementById("mtdPipeSniSub").textContent  = pipe.sniCount + " orders · scheduled-to-ship in " + monthLabel;
 
     destroyChart("mtd");
     const ctx = document.getElementById("mtdChart").getContext("2d");
