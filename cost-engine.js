@@ -32,6 +32,7 @@ function buildCostMaps(iles) {
     //   (b) the existing avg-unit-cost maps (item, item+month,
     //       cust+item+month) — fallback when the document-key lookup
     //       misses (Ship-first-Invoice-later workflows, etc.).
+    invalidateLineCostMemo();
     state.itemAvgCost = new Map();
     state.itemAvgCostNonInv = new Map();
     state.itemMonthAvgCost = new Map();         // key "itemNo|YYYY-MM" -> avg unit cost
@@ -250,7 +251,7 @@ function shipmentBridgeUnitCost(customerNumber, itemNo, postingDate, which, wind
     return totalQty > 0 ? totalCost / totalQty : 0;
 }
 
-function costFromLine(line, sign, postingDate, customerNumber, documentNumber) {
+function costFromLineRaw(line, sign, postingDate, customerNumber, documentNumber) {
     if (!isItemLine(line)) return 0;
     sign = (sign == null) ? 1 : sign;
     const itemNo = line.lineObjectNumber || line.itemId || "";
@@ -310,11 +311,54 @@ function costFromLine(line, sign, postingDate, customerNumber, documentNumber) {
 // combined helper so the headline number matches PBI. The drill-down
 // trees keep the two parts separate via costFromLine + costNonInvFromLine
 // because they expose distinct "Adj Cost" and "Cost Non-Inv" columns.
-function totalCostFromLine(line, sign, postingDate, customerNumber, documentNumber) {
-    return costFromLine(line, sign, postingDate, customerNumber, documentNumber) +
-           costNonInvFromLine(line, sign, postingDate, customerNumber, documentNumber);
+// ---- Per-line memo ----
+// A line's cost depends only on the line itself, its document (posting
+// date / customer / number) and the cost maps built at load. None of
+// those move when the user changes the toolbar dates, filters or tab,
+// so the answer is kept against the line object (WeakMap: it goes
+// away with the line) and reused. buildCostMaps / ingestValueEntries
+// reset the memo so a fresh load never reads a stale value. Lines that
+// arrive with preCost / preCostNonInv already on them (snapshot robot,
+// formatVersion 2) skip the lookup altogether.
+let _lineCostMemo = new WeakMap();
+let _lineCostGen = 0;
+function invalidateLineCostMemo() { _lineCostGen++; _lineCostMemo = new WeakMap(); }
+function lineCostPair(line, postingDate, customerNumber, documentNumber) {
+    if (line == null || typeof line !== "object") return { inv: 0, ni: 0 };
+    if (line.preCost != null) return { inv: num(line.preCost), ni: num(line.preCostNonInv) };
+    let m = _lineCostMemo.get(line);
+    if (m && m.gen === _lineCostGen && m.doc === documentNumber) return m;
+    m = { gen: _lineCostGen, doc: documentNumber,
+          inv: costFromLineRaw(line, 1, postingDate, customerNumber, documentNumber),
+          ni:  costNonInvFromLineRaw(line, 1, postingDate, customerNumber, documentNumber) };
+    _lineCostMemo.set(line, m);
+    return m;
+}
+function costFromLine(line, sign, postingDate, customerNumber, documentNumber) {
+    return lineCostPair(line, postingDate, customerNumber, documentNumber).inv * ((sign == null) ? 1 : sign);
 }
 function costNonInvFromLine(line, sign, postingDate, customerNumber, documentNumber) {
+    return lineCostPair(line, postingDate, customerNumber, documentNumber).ni * ((sign == null) ? 1 : sign);
+}
+function totalCostFromLine(line, sign, postingDate, customerNumber, documentNumber) {
+    const p = lineCostPair(line, postingDate, customerNumber, documentNumber);
+    return (p.inv + p.ni) * ((sign == null) ? 1 : sign);
+}
+// Snapshot robot: stamp every line of `docs` with the cost the browser
+// would compute, so the tool reads it instead of running the lookup.
+function precostLines(docs, linesKey) {
+    let lines = 0, costed = 0;
+    for (const d of (docs || [])) {
+        for (const ln of (d[linesKey] || [])) {
+            ln.preCost       = costFromLineRaw(ln, 1, d.postingDate, d.customerNumber, d.number);
+            ln.preCostNonInv = costNonInvFromLineRaw(ln, 1, d.postingDate, d.customerNumber, d.number);
+            lines++;
+            if (ln.preCost || ln.preCostNonInv) costed++;
+        }
+    }
+    return { lines, costed };
+}
+function costNonInvFromLineRaw(line, sign, postingDate, customerNumber, documentNumber) {
     if (!isItemLine(line)) return 0;
     sign = (sign == null) ? 1 : sign;
     const itemNo = line.lineObjectNumber || line.itemId || "";
@@ -363,6 +407,7 @@ function isSalesValueEntry(v) {
 // Shared between full and fast load: stash VE rows and build the
 // per-(doc|item) / per-invoice cost maps every cost consumer reads.
 function ingestValueEntries(valueEntries) {
+    invalidateLineCostMemo();
     state.valueEntries = valueEntries || [];
     // Build per-(docNumber|itemNo) cost map from VE rows so direct-
     // invoice items (no shipment / no ILE entry) still get accurate
@@ -404,5 +449,6 @@ if (typeof module !== "undefined" && module.exports) {
         monthKey, isItemLine, isSalesValueEntry,
         buildCostMaps, ingestValueEntries,
         shipmentBridgeUnitCost, costFromLine, costNonInvFromLine, totalCostFromLine,
+        costFromLineRaw, costNonInvFromLineRaw, invalidateLineCostMemo, precostLines,
     };
 }
