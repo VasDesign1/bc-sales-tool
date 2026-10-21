@@ -4625,6 +4625,20 @@ function filterStateKey() {
     return state.filterGen + "|" + (f ? f.value : "") + "|" + (t ? t.value : "") + "|" + (state.includeRentals ? 1 : 0);
 }
 
+// Coalesce bursts of toolbar edits into one rebuild. A native date box
+// fires "change" for the day, the month and the year separately, and
+// the quick-range / month pickers can fire while a date timer is still
+// pending; each of those used to run a full rebuild + render.
+let _refreshTimer = null;
+function scheduleRefresh(delayMs) {
+    clearTimeout(_refreshTimer);
+    _refreshTimer = setTimeout(() => {
+        _refreshTimer = null;
+        if (state.invoices && state.invoices.length) { rebuildFiltered(); renderCurrentTab(); }
+        else if (state.tab === "pnl") renderPnl();
+    }, delayMs == null ? 350 : delayMs);
+}
+
 function rebuildFiltered() {
     const inRange = getDateRangePredicate();
     state.filtered = state.invoices.filter(inv =>
@@ -17203,23 +17217,22 @@ function wireEvents() {
         if (!v) return;
         document.getElementById("quickRange").value = "";
         applyMonth(v);
-        rebuildFiltered(); renderCurrentTab();
+        scheduleRefresh(0);
     });
     document.getElementById("quickRange").addEventListener("change", e => {
         if (e.target.value) applyQuickRange(e.target.value);
-        if (state.invoices && state.invoices.length) { rebuildFiltered(); renderCurrentTab(); }
-        else if (state.tab === "pnl") renderPnl();
+        scheduleRefresh(0);
     });
     ["fromDate", "toDate"].forEach(id => {
         document.getElementById(id).addEventListener("change", () => {
             document.getElementById("quickRange").value = "";
             document.getElementById("monthPicker").value = "";
             setPeriodBadge();
-            // Already-loaded data: re-filter in place so the user gets
-            // instant feedback. Out-of-range warning is shown by
+            // Already-loaded data: re-filter in place once the edit has
+            // settled (the date box fires change per day / month / year
+            // segment). Out-of-range warning is shown by
             // updateDateRangeWarning() called from rebuildFiltered.
-            if (state.invoices && state.invoices.length) { rebuildFiltered(); renderCurrentTab(); }
-            else if (state.tab === "pnl") renderPnl();
+            scheduleRefresh();
         });
     });
 
