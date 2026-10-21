@@ -5026,7 +5026,7 @@ function ringDataLabels(opts) {
         formatter,
     };
 }
-function chartBase(opts) { return Object.assign({ responsive: true, maintainAspectRatio: false, animation: { duration: 400 } }, opts); }
+function chartBase(opts) { return Object.assign({ responsive: true, maintainAspectRatio: false, animation: { duration: 150 } }, opts); }
 
 // Distinct multi-colour palette used by the Branch / Salesperson entity
 // charts. Exported at module scope so the Overview-tab single-series
@@ -10544,12 +10544,32 @@ function downloadXLSX(rows, sheetName, baseName, opts) {
 // ============================================================
 // EOM TAB
 // ============================================================
+// The EOM row set is built (and sorted) once per filter state + sort
+// order and kept; the search box and the GP toggles only filter the
+// kept rows. The customer drill tree below the table is likewise kept
+// per filter state + GP toggles (search text does not feed it).
+function eomBaseRows() {
+    const key = filterStateKey() + "|" + state.sortEom.key + "|" + state.sortEom.dir;
+    if (state._eomRows && state._eomRows.key === key) return state._eomRows.rows;
+    const rows = buildEOMRows(state.filtered);
+    for (const r of rows) r._search = (r.customer + " " + r.invoiceNumber + " " + r.salesperson + " " + r.itemNumber + " " + r.description + " " + r.branch + " " + r.itemCategory).toLowerCase();
+    sortRowsBy(rows, state.sortEom);
+    state._eomRows = { key, rows };
+    return rows;
+}
+function eomDrillRoots() {
+    const key = filterStateKey() + "|" + (state.eomGpLow ? 1 : 0) + "|" + (state.eomGpHigh ? 1 : 0);
+    if (state._eomTree && state._eomTree.key === key) return state._eomTree.roots;
+    const roots = buildEOMDrillTree();
+    state._eomTree = { key, roots };
+    return roots;
+}
 function renderEOM() {
     renderFilterChips();
-    let rows = buildEOMRows(state.filtered);
+    let rows = eomBaseRows();
     if (state.eomFilter) {
         const q = state.eomFilter.toLowerCase();
-        rows = rows.filter(r => (r.customer + " " + r.invoiceNumber + " " + r.salesperson + " " + r.itemNumber + " " + r.description + " " + r.branch + " " + r.itemCategory).toLowerCase().includes(q));
+        rows = rows.filter(r => r._search.includes(q));
     }
     // GP % filter toggles — low (<20%) and/or high (>90%). Both on = union.
     // Exclude $0 sales lines so they don't dominate the low bucket.
@@ -10569,7 +10589,6 @@ function renderEOM() {
     document.getElementById("eomKpiGpp").textContent   = fmtPct(totSales ? totGp / totSales : 0);
     paintAdjustedKpis("eomKpi", totSales, totGp);
 
-    sortRowsBy(rows, state.sortEom);
     paintSortHeaders("#eomTable", state.sortEom);
     const tbody = document.querySelector("#eomTable tbody");
     tbody.innerHTML = rows.slice(0, 2000).map(r => `
@@ -15060,7 +15079,7 @@ function renderBranchDrillTree() {
     renderDrillTree(buildBranchDrillTree(state.filtered), "#branchDrillTable");
 }
 function renderEOMDrillTree() {
-    renderDrillTree(buildEOMDrillTree(), "#eomDrillTable");
+    renderDrillTree(eomDrillRoots(), "#eomDrillTable");
 }
 function renderSalespersonDrillTree() {
     renderDrillTree(buildSalespersonDrillTree(state.filtered), "#salespersonDrillTable");
@@ -17445,7 +17464,12 @@ function wireEvents() {
     });
 
     // EOM search
-    document.getElementById("eomSearch").addEventListener("input", e => { state.eomFilter = e.target.value; renderEOM(); });
+    let _eomSearchTimer = null;
+    document.getElementById("eomSearch").addEventListener("input", e => {
+        state.eomFilter = e.target.value;
+        clearTimeout(_eomSearchTimer);
+        _eomSearchTimer = setTimeout(renderEOM, 200);
+    });
     document.getElementById("eomGpLowBtn").addEventListener("click", () => {
         state.eomGpLow = !state.eomGpLow;
         document.getElementById("eomGpLowBtn").classList.toggle("active", state.eomGpLow);
