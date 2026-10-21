@@ -66,6 +66,7 @@ global.bcGetToken = async function bcGetToken() {
 };
 
 const F = require(path.join(__dirname, "..", "bc-fetchers.js"));
+const CE = require(path.join(__dirname, "..", "cost-engine.js"));
 const SP = require(path.join(__dirname, "sp-upload.js"));
 const PBKDF2_ITERATIONS = 600000;   // keep in sync with decryptSnapshot() in index.html
 
@@ -232,9 +233,29 @@ let chosen = null;   // visible to the failure handler below
         throw new Error("[VE check] newest value entry is " + veMax + " but the window runs to " + expectEnd + " (" + staleDays + " days short) — fetch truncated? aborting snapshot");
     }
 
+    // ---- Pre-cost every invoice / credit-memo line (formatVersion 2) ----
+    // Same maps, same tiered lookup the browser runs (shared
+    // cost-engine.js), done once here so each tool user's browser reads
+    // preCost / preCostNonInv off the line instead of recomputing it on
+    // every tab switch and date change.
+    const tc0 = Date.now();
+    state.invoices = invoices || [];
+    state.creditMemos = creditMemos || [];
+    state.shipments = shipments || [];
+    state.returnReceipts = returnReceipts || [];
+    CE.ingestValueEntries(valueEntries || []);
+    CE.buildCostMaps(iles || []);
+    const pcInv = CE.precostLines(state.invoices, "salesInvoiceLines");
+    const pcCm  = CE.precostLines(state.creditMemos, "salesCreditMemoLines");
+    let preCostTotal = 0;
+    for (const inv of state.invoices) for (const ln of (inv.salesInvoiceLines || [])) preCostTotal += (ln.preCost || 0) + (ln.preCostNonInv || 0);
+    console.log("[Pre-cost] " + pcInv.lines + " invoice lines (" + pcInv.costed + " with cost) · "
+        + pcCm.lines + " credit-memo lines (" + pcCm.costed + " with cost) · sum of invoice line cost "
+        + preCostTotal.toFixed(2) + " · " + ((Date.now() - tc0) / 1000).toFixed(1) + "s");
+
     const payload = {
         meta: {
-            formatVersion: 1,
+            formatVersion: 2,
             slot,
             fetchedAtUtc: new Date().toISOString(),
             fetchedAtMelbourne: mel.date + " " + mel.hhmm,
@@ -278,7 +299,7 @@ let chosen = null;   // visible to the failure handler below
         fetchedAtMelbourne: payload.meta.fetchedAtMelbourne,
         from, to,
         bytes: bin.length,
-        formatVersion: 1,
+        formatVersion: 2,
     }, null, 2);
     fs.writeFileSync(path.join(outDir, slot + ".meta.json"), metaJson);
     console.log("Wrote " + slot + ".bin (" + (bin.length / 1048576).toFixed(2) + " MB, "

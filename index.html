@@ -16992,6 +16992,12 @@ function applyLoadedData(d) {
         state.loadedFrom = from;
         state.loadedTo   = to;
         buildCostMaps(iles);
+        {   // Snapshot robot (formatVersion 2) stamps preCost on every line;
+            // a live Load sales computes in the browser on first use instead.
+            let pre = 0, tot = 0;
+            for (const inv of state.invoices) for (const ln of (inv.salesInvoiceLines || [])) { tot++; if (ln.preCost != null) pre++; }
+            console.log("[Cost] " + pre + "/" + tot + " invoice lines carry pre-computed cost" + (pre ? " (snapshot robot)" : " - computed in browser on first use, then kept"));
+        }
         updateCostQualityBadge();
         populateFilterDropdowns();
         rebuildFiltered();
