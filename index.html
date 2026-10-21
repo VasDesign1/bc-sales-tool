@@ -4293,7 +4293,6 @@ const state = {
     veCostByDocItem: new Map(),
     veCostByInvoice: new Map(),
     veCostNonInvByDocItem: new Map(),
-    byCustomer: new Map(), byItem: new Map(), byLocation: new Map(), bySalesperson: new Map(),
     currentCustomer: null, currentInvoice: null, currentItem: null,
     // Single shared bucket so a Day / Week / Month pick on any drill (or
     // Overview's Revenue-over-time) carries over to the next drill. User
@@ -4604,14 +4603,34 @@ function getDateRangePredicate() {
     };
 }
 
+// The four roll-ups (by customer / item / branch / salesperson) are
+// built on first use per filter generation, not on every rebuild: a
+// date change on the EOM tab no longer pays for roll-ups only the
+// Overview / Branch / Salesperson / Item tabs read. Reading
+// state.byCustomer etc. is unchanged for every caller.
+state._agg = {};
+state.filterGen = 0;
+[["byCustomer", aggregateByCustomer], ["byItem", aggregateByItem],
+ ["byLocation", aggregateByLocation], ["bySalesperson", aggregateBySalesperson]].forEach(([k, fn]) => {
+    Object.defineProperty(state, k, {
+        enumerable: true, configurable: true,
+        get() { if (!state._agg[k]) state._agg[k] = fn(state.filtered); return state._agg[k]; },
+        set(v) { state._agg[k] = v; },
+    });
+});
+// Key that changes whenever anything feeding the per-tab caches changes:
+// filter generation (every rebuildFiltered), toolbar dates, rentals toggle.
+function filterStateKey() {
+    const f = document.getElementById("fromDate"), t = document.getElementById("toDate");
+    return state.filterGen + "|" + (f ? f.value : "") + "|" + (t ? t.value : "") + "|" + (state.includeRentals ? 1 : 0);
+}
+
 function rebuildFiltered() {
     const inRange = getDateRangePredicate();
     state.filtered = state.invoices.filter(inv =>
         inRange(inv.postingDate) && invoiceMatchesFilters(inv));
-    state.byCustomer = aggregateByCustomer(state.filtered);
-    state.byItem     = aggregateByItem(state.filtered);
-    state.byLocation = aggregateByLocation(state.filtered);
-    state.bySalesperson = aggregateBySalesperson(state.filtered);
+    state._agg = {};
+    state.filterGen++;
     updateDateRangeWarning();
 }
 
@@ -5207,6 +5226,16 @@ function chartViewTogglePillHTML(chartId) {
 // shows a sales-KPI row. Credit revenue and the implied cost are
 // subtracted from gross totals to give "net of returns" figures.
 function getAdjustments(dateOverride, visibleItems) {
+    // Toolbar-scoped call (no override, no visible-items set) is the
+    // one every tab's Adjusted tiles make; keep it per filter state.
+    if (dateOverride || visibleItems) return getAdjustmentsRaw(dateOverride, visibleItems);
+    const key = filterStateKey() + "|" + JSON.stringify(state.filters) + "|" + ((state.valueEntries || []).length);
+    if (state._adj && state._adj.key === key) return state._adj.val;
+    const val = getAdjustmentsRaw();
+    state._adj = { key, val };
+    return val;
+}
+function getAdjustmentsRaw(dateOverride, visibleItems) {
     // Sales side always comes from Document mode (invoice lines), which
     // is gross of credit memos — so we ALWAYS subtract `credit` from
     // sales. Cost side comes from Value Entries when they're loaded;
@@ -5288,6 +5317,13 @@ function getAdjustments(dateOverride, visibleItems) {
 //     need a join via documentNumber → invoice. v1 ignores them in VE
 //     mode; the toggle handler logs a warning when active.
 function getValueEntryTotals() {
+    const key = filterStateKey() + "|" + (state.filters.customer || "") + "|" + (state.filters.item || "") + "|" + (state.veDateField || "");
+    if (state._veTotals && state._veTotals.key === key) return state._veTotals.val;
+    const val = getValueEntryTotalsRaw();
+    state._veTotals = { key, val };
+    return val;
+}
+function getValueEntryTotalsRaw() {
     const inRange = getDateRangePredicate();
     // Default to Posting_Date — confirmed on 05/05/2026 single-day test:
     // PBI Sales matched our Posting_Date sum to within \$46 (data
