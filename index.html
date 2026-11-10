@@ -97,6 +97,8 @@
         /* Build tree / Update forecast sit beside lifted fields: same lift and
            the same 36px height as the boxes, so they share one line. */
         #decompApply, #fcRerun { margin-bottom: 11.5px; height: 36px; box-sizing: border-box; padding-top: 0; padding-bottom: 0; }
+        /* Forecast method: wide enough for "Linear trend (least-squares)" */
+        #fcMethod { width: 240px; }
         .period-frame > legend label { font-size: 11px; letter-spacing: 0.08em; }
         .period-frame .field label { font-size: 9.5px; font-weight: 600; text-transform: none; letter-spacing: 0.2px; }
         .toolbar label { font-size: 10px; font-weight: 700; color: #6e72a6; text-transform: uppercase; letter-spacing: 0.5px; }
@@ -224,6 +226,21 @@
         /* Salesperson run-rate tabs: table and comparison chart side by side */
         /* Salesperson run-rate tables: rep name beside the code */
         .rr-name { font-size: 11px; opacity: .7; margin-left: 6px; }
+
+        /* ---------- LOADING CARD (showBusy / hideBusy) ----------
+           Centred card over a dimmed page for work that would otherwise look
+           like a freeze: opening the EOM Report, and Load sales. The card is a
+           .card and the bar a .btn-primary, so both take the active theme. The
+           bar moves by transform only, which keeps animating while the page
+           itself is busy. */
+        #busyWrap { position: fixed; inset: 0; z-index: 9000; display: none; align-items: center; justify-content: center; background: rgba(20,22,30,0.38); }
+        #busyWrap.on { display: flex; }
+        #busyWrap .busy-card { width: 400px; max-width: calc(100vw - 48px); padding: 24px 28px; text-align: center; display: block; box-shadow: 0 18px 50px rgba(0,0,0,0.30); }
+        #busyWrap .busy-card h3 { font-size: 16px; margin: 0; }
+        #busyWrap .busy-track { height: 10px; border-radius: 6px; overflow: hidden; margin: 14px 0 10px; background: rgba(128,128,128,0.22); }
+        #busyWrap .busy-bar { display: block; height: 100%; width: 40%; border-radius: 6px; padding: 0; box-shadow: none; will-change: transform; animation: busySlide 1.3s ease-in-out infinite; }
+        #busyWrap .busy-detail { font-size: 12.5px; opacity: .75; line-height: 1.45; min-height: 18px; }
+        @keyframes busySlide { 0% { transform: translateX(-100%); } 100% { transform: translateX(250%); } }
 
         /* EOM Report header: items packed left, wider search box, the two GP
            buttons close together, Export to Excel at the right edge. */
@@ -4247,6 +4264,7 @@
 </div>
 
 <div class="progress" id="bcProgress"><span id="bcProgressText"></span></div>
+<div id="busyWrap" role="status" aria-live="polite"><div class="card busy-card"><h3 id="busyTitle">Loading…</h3><div class="busy-track"><span class="busy-bar btn-primary"></span></div><div class="busy-detail" id="busyDetail"></div></div></div>
 
 <!-- TOP N MODAL -->
 <div class="modal-overlay" id="topNModal" style="display:none;">
@@ -4348,9 +4366,36 @@ async function spFetch(name) {
     return resp;
 }
 function updateBCProgress(label, detail) {
+    // While the loading card is up it carries the progress line itself,
+    // so there is no second message in the corner.
+    if (busyIsOn()) { setBusyDetail(label + ": " + detail); return; }
     const el = document.getElementById("bcProgressText");
     const wrap = document.getElementById("bcProgress");
     if (el && wrap) { el.textContent = label + ": " + detail; wrap.style.display = "block"; }
+}
+// Loading card: showBusy(title, detail) … hideBusy().
+function busyIsOn() { const w = document.getElementById("busyWrap"); return !!(w && w.classList.contains("on")); }
+function setBusyDetail(t) { const d = document.getElementById("busyDetail"); if (d) d.textContent = t || ""; }
+function showBusy(title, detail) {
+    const w = document.getElementById("busyWrap"); if (!w) return;
+    document.getElementById("busyTitle").textContent = title || "Loading…";
+    setBusyDetail(detail);
+    w.classList.add("on");
+    // Some themes draw .card with no fill (Linen): give the card the page
+    // colour so the page underneath does not show through it.
+    const card = w.querySelector(".busy-card");
+    card.style.backgroundColor = "";
+    if (/^(transparent|rgba\(.*,\s*0\))$/.test(getComputedStyle(card).backgroundColor)) card.style.backgroundColor = getComputedStyle(document.body).backgroundColor;
+}
+function hideBusy() { const w = document.getElementById("busyWrap"); if (w) w.classList.remove("on"); }
+// Run fn once the browser has had a chance to paint (so the card is on
+// screen before heavy work blocks the page). The timer covers a
+// background tab, where animation frames do not fire.
+function afterPaint(fn) {
+    let done = false;
+    const go = () => { if (done) return; done = true; fn(); };
+    requestAnimationFrame(() => setTimeout(go, 30));
+    setTimeout(go, 250);
 }
 function hideBCProgress() {
     const wrap = document.getElementById("bcProgress");
@@ -5688,7 +5733,15 @@ function setActiveTab(name) {
     });
     document.querySelectorAll(".drill").forEach(d => d.style.display = "none");
     document.getElementById("headerTitle").textContent = TAB_TITLES[name] || "Sales";
-    if (state.invoices.length || name === "pnl") renderCurrentTab();
+    // The EOM Report builds every invoice line the first time it opens for
+    // a filter state, which blocks the page for a few seconds: show the
+    // loading card, let it paint, then build. Already-built rows open at once.
+    const eomCold = name === "eom" && state.invoices.length &&
+        !(state._eomRows && state._eomRows.key === filterStateKey() + "|" + state.sortEom.key + "|" + state.sortEom.dir);
+    if (eomCold) {
+        showBusy("Loading the EOM Report", "Building the line-level detail…");
+        afterPaint(() => { try { if (state.tab === "eom") renderCurrentTab(); } finally { hideBusy(); } });
+    } else if (state.invoices.length || name === "pnl") renderCurrentTab();
     window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -17368,6 +17421,7 @@ async function handleLoad() {
     const btn = document.getElementById("loadBtn");
     btn.disabled = true;
     btn.textContent = "Loading…";
+    showBusy("Loading sales from Wiise", "Connecting…");
     try {
         const [locs, items, customers, invoices, iles, creditMemos, shipments, returnReceipts, quotes, quoteExtras, blanketOrders, valueEntries, salesOrders, salesOrderOutstanding, _residentialLookup, _quoteArchive] = await Promise.all([
             fetchLocations(),
@@ -17398,6 +17452,7 @@ async function handleLoad() {
         alert("Load failed: " + (err.message || err));
     } finally {
         hideBCProgress();
+        hideBusy();
         btn.disabled = false; btn.textContent = "Reload sales";
     }
 }
