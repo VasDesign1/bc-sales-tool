@@ -299,6 +299,10 @@
         .ds-days .kpi { padding: 12px 18px; }
         .ds-table tr.ds-total td { font-weight: 700; background: rgba(128,128,128,0.14); }   /* neutral tint: reads on light and dark themes */
         .ds-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; }
+        /* AirTouch & Omniflow Targets tab: always side by side (Faik, 2026-11-11); a narrow pane scrolls its own table */
+        #ktPair { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important; }
+        #ktPair > div { min-width: 0; }
+        #ktPair .panel-header .meta { display: none; }
         .ds-pair > .panel { min-width: 0; }
         .ds-kit-sum { display: flex; flex-wrap: wrap; gap: 8px 26px; padding: 12px 16px 14px; align-items: flex-end; }
         .ds-kit-stat > span { display: block; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; opacity: .65; margin-bottom: 3px; }
@@ -1865,6 +1869,7 @@
             <a data-tab="branchMarginRate" class="restrictedNav" style="display:none;">Branch Margin Run Rate</a>
             <a data-tab="salespersonSalesRate">Salesperson Sales Run Rate</a>
             <a data-tab="salespersonMarginRate">Salesperson Margin Run Rate</a>
+            <a data-tab="kitTargets">AirTouch &amp; Omniflow Targets</a>
 
             <div class="group-label restrictedNav" style="display:none;">Lists</div>
             <a data-tab="keyCustomers" class="stub restrictedNav" style="display:none;">Key Customer Sales</a>
@@ -3965,6 +3970,20 @@
                 </div>
             </section>
 
+            <!-- TAB: AirTouch & Omniflow Targets (Faik, 2026-11-11): the Daily Snapshot's two kit
+                 panels for any month, side by side, each with its own chart underneath.
+                 Panels are painted by dsPaintKits, charts by renderKitChart. -->
+            <section data-tab-content="kitTargets" style="display:none;">
+                <div class="hint rr-hint"><span>Units sold in <strong id="ktMonth">—</strong> against the monthly quantity targets. Click a code to see who sold it, to whom and on which invoice. Selling days = Mon–Fri minus Vic public holidays.</span><span class="rr-tgt"><span class="rr-tgt-lbl">Month</span><select id="ktMonthSel" class="mini-select" title="Month"></select></span></div>
+                <div class="kpi-row">
+                    <div class="kpi k-rev"><div class="label">Total Selling Days</div><div class="value" id="ktSdTotal">—</div></div>
+                    <div class="kpi k-inv"><div class="label">Selling Days Passed</div><div class="value" id="ktSdPassed">—</div></div>
+                    <div class="kpi k-cust"><div class="label">Remaining Selling Days</div><div class="value" id="ktSdRemaining">—</div></div>
+                    <div class="kpi k-gpp"><div class="label">% Month Passed</div><div class="value" id="ktSdPct">—</div></div>
+                </div>
+                <div class="ds-pair" id="ktPair"></div>
+            </section>
+
             <!-- TAB: Salesperson Margin Run Rate -->
             <section data-tab-content="salespersonMarginRate" style="display:none;">
                 <div class="hint rr-hint"><span>Margin (GP$) run-rate for <strong id="spmrMonth">—</strong>. Selling days = Mon–Fri minus Vic public holidays.</span><span class="rr-tgt"><span class="rr-tgt-lbl">Targets</span><span id="spmrTgtStatus" title="Read from the Sales Budgets-Targets folder on SharePoint, newest Excel file, matched by salesperson code">not loaded</span><button type="button" class="more-btn" id="spmrTgtReload" title="Re-read the targets folder on SharePoint">↻</button></span></div>
@@ -4525,6 +4544,8 @@ const state = {
     topCustomersChartType: "barH", topItemsChartType: "barH",
     locationChartType: "barH",     salespersonChartType: "barH",
     statusChartType: "pie",
+    kitMonth: "",                   // "YYYY-MM" chosen on the AirTouch & Omniflow Targets tab ("" = current month)
+    kitChart: {},                   // kit group key -> chart view chosen on that tab
     runRateMonth: {},               // prefix -> "YYYY-MM" chosen in the month selector (salesperson run-rate tabs)
     sortRunRate: { spsr: { key: "cyVal", dir: "desc" }, spmr: { key: "cyVal", dir: "desc" }, brsr: { key: "cyVal", dir: "desc" } },
     sortBranchTarget: { key: "branch", dir: "asc" },   // "month" flips the month order; anything else sorts branches within each month
@@ -4593,6 +4614,7 @@ const TAB_TITLES = {
     branchMarginRate: "Branch Margin Run Rate",
     salespersonSalesRate: "Salesperson Sales Run Rate",
     salespersonMarginRate: "Salesperson Margin Run Rate",
+    kitTargets: "AirTouch & Omniflow Targets",
     keyCustomers: "Key Customer Sales",
     ordersPastDel: "Orders past Requested Delivery",
     pnl: "Profit & Loss (General Ledger)",
@@ -5851,6 +5873,7 @@ function renderCurrentTab() {
         case "branchSalesRate":        renderBranchSalesRunRate(); break;
         case "branchMarginRate":       renderBranchMarginRunRate(); break;
         case "salespersonSalesRate":   renderSalespersonSalesRunRate(); break;
+        case "kitTargets":             renderKitTargets(); break;
         case "salespersonMarginRate":  renderSalespersonMarginRunRate(); break;
         case "pnl":                    renderPnl(); break;
     }
@@ -14289,7 +14312,7 @@ function statusBadgeRunRate(status) {
 const SP_TARGETS_FOLDER = "Sales Budgets-Targets";
 const spTargets = { status: "idle", error: "", files: [], months: [], names: {}, sales: {}, margin: {},
                     branch: { months: [], names: {}, sales: {}, margin: {} } };
-const TARGET_TABS = new Set(["salespersonSalesRate", "salespersonMarginRate", "branchSalesRate", "branchTarget", "dailySnapshot"]);
+const TARGET_TABS = new Set(["salespersonSalesRate", "salespersonMarginRate", "branchSalesRate", "branchTarget", "dailySnapshot", "kitTargets"]);
 // entity: "salesperson" (default) or "branch"
 function spBudgetMonths(entity)        { return entity === "branch" ? spTargets.branch.months : spTargets.months; }
 function spBudgetNames(entity)         { return entity === "branch" ? spTargets.branch.names : spTargets.names; }
@@ -14661,10 +14684,16 @@ function dsKitFigures(group, m, sd) {
     const docs = new Set(); rows.forEach(r => r.docs.forEach(x => docs.add(x)));
     const rr = computeRunRate(qty, group.target, sd.total, sd.passed, sd.remaining);
     rr.balance = qty - group.target;   // + when over target, − when behind (as the run-rate tables)
+    if (sd.isPast) rr.status = qty >= group.target ? "TARGET MET" : "TARGET MISSED";   // a finished month (AirTouch & Omniflow Targets tab)
     return Object.assign({ key: group.key, title: group.title, target: group.target, rows, qty, sales, docs: docs.size }, rr);
 }
-function dsPaintKits(kits, loaded, sd) {
-    const host = document.getElementById("dsKits");
+// hostId: where the panels go — the Daily Snapshot's #dsKits by default,
+// or one pane of the AirTouch & Omniflow Targets tab.
+function dsPaintKits(kits, loaded, sd, hostId) {
+    hostId = hostId || "dsKits";
+    const host = document.getElementById(hostId), idp = hostId === "dsKits" ? "dsKit" : hostId;
+    const store = state._dsKits || (state._dsKits = {});
+    const again = () => { const s = store[hostId]; if (s) dsPaintKits(s.kits, s.loaded, s.sd, hostId); };
     if (!host.dataset.wired) {
         host.addEventListener("click", e => {
             if (e.target.closest("a")) return;
@@ -14673,18 +14702,18 @@ function dsPaintKits(kits, loaded, sd) {
                 const st = state.sortKits[th.dataset.kit], key = th.dataset.kitSort;
                 if (st.key === key) st.dir = st.dir === "asc" ? "desc" : "asc";
                 else { st.key = key; st.dir = (key === "label" || key === "branches") ? "asc" : "desc"; }
-                if (state._dsKits) dsPaintKits(state._dsKits.kits, state._dsKits.loaded, state._dsKits.sd);
+                again();
                 return;
             }
             const tr = e.target.closest("tr[data-key]");
             if (!tr || tr.dataset.expandable !== "1") return;
             const k = tr.dataset.key;
             if (state.expandedMatrix.has(k)) state.expandedMatrix.delete(k); else state.expandedMatrix.add(k);
-            if (state._dsKits) dsPaintKits(state._dsKits.kits, state._dsKits.loaded, state._dsKits.sd);
+            again();
         });
         host.dataset.wired = "1";
     }
-    state._dsKits = { kits, loaded, sd };
+    store[hostId] = { kits, loaded, sd };
     const q = n => Number.isInteger(n) ? fmtInt(n) : fmtQty(n);
     const perDay = n => (Math.round(n * 10) / 10).toLocaleString("en-AU", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
     state.sortKits = state.sortKits || {};
@@ -14713,21 +14742,149 @@ function dsPaintKits(kits, loaded, sd) {
         const stat = (lbl, val) => `<div class="ds-kit-stat"><span>${lbl}</span><b>${val}</b></div>`;
         const bal = !loaded ? "—" : `<i style="font-style:normal; color:${k.balance >= 0 ? "#2e7d32" : "#c62828"};">${k.balance >= 0 ? "+" : "−"}${q(Math.abs(k.balance))}</i>`;
         const bar = !loaded ? "—" : `<span class="rr-bar b${rrPctBand(k.pctAchieved)}" title="${fmtPct(k.pctAchieved)} of target"><span class="rr-fill" style="width:${Math.max(0, Math.min(100, k.pctAchieved * 100)).toFixed(1)}%;"></span><span class="rr-lbl">${fmtPct(k.pctAchieved)}</span></span>`;
-        return `<div class="panel" id="dsKit_${k.key}">
+        return `<div class="panel" id="${idp}_${k.key}">
             <div class="panel-header"><h2>${escapeHtml(k.title)}</h2><span class="meta">target ${fmtInt(k.target)} units a month, all codes together · click a code to see who sold it</span></div>
             <div class="ds-kit-sum">
-                ${stat("Sold this month", loaded ? q(k.qty) : "—")}${stat("Target", fmtInt(k.target))}${stat("Balance", bal)}
+                ${stat(sd.isPast ? "Sold in the month" : "Sold this month", loaded ? q(k.qty) : "—")}${stat("Target", fmtInt(k.target))}${stat("Balance", bal)}
                 ${stat("Target a day", perDay(k.targetDaily))}${stat("Actual a day", loaded ? perDay(k.actualDaily) : "—")}${stat("Required a day", !loaded ? "—" : !sd.remaining ? "n/a" : perDay(Math.max(0, k.requiredDaily)))}
                 ${stat("Status", loaded ? statusBadgeRunRate(k.status) : "—")}${stat("% Achieved", bar)}
             </div>
             <div class="table-scroll">
-                <table id="dsKitTable_${k.key}" class="ds-table">
+                <table id="${idp}Table_${k.key}" class="ds-table">
                     <thead><tr>${th("label", "Item code → Salesperson → Customer → Invoice")}${th("branches", "Branch")}${th("qty", "Qty", 1)}${th("sales", "Sales (excl. tax)", 1)}${th("docs", "Invoices", 1)}</tr></thead>
                     <tbody>${acc.join("")}<tr class="ds-total"><td>Total</td><td></td><td class="num">${loaded ? q(k.qty) : "—"}</td><td class="num">${loaded ? fmtMoneyFull(k.sales) : "—"}</td><td class="num">${loaded ? fmtInt(k.docs) : "—"}</td></tr></tbody>
                 </table>
             </div>
         </div>`;
     }).join("");
+}
+// ============================================================
+// AIRTOUCH & OMNIFLOW TARGETS TAB (Faik, 2026-11-11)
+// The Daily Snapshot's kit panels for any month the loaded data covers,
+// with a chart under each. Same figures (dsKitFigures), same drill-down.
+// ============================================================
+// Units of one kit group's codes between two dates, added up by any key
+// (month, code, salesperson, branch, day). Same filters as dsKitFigures.
+function kitUnits(group, from, to, keyFn) {
+    const want = new Map(group.items.map(c => [c.toUpperCase(), c])), fl = state.filters, out = new Map();
+    for (const inv of state.invoices) {
+        const day = String(inv.postingDate || "").slice(0, 10);
+        if (day < from || day > to) continue;
+        const sp = inv.salesperson || "(unassigned)";
+        if (fl.salesperson && sp !== fl.salesperson) continue;
+        if (fl.customer && (inv.customerNumber || "") !== fl.customer) continue;
+        for (const ln of (inv.salesInvoiceLines || [])) {
+            const code = want.get(String(ln.lineObjectNumber || "").trim().toUpperCase());
+            if (!code) continue;
+            const branch = locationCode(ln.locationId);
+            if (fl.location && branch !== fl.location) continue;
+            const k = keyFn({ day, code, sp, branch });
+            out.set(k, (out.get(k) || 0) + num(ln.quantity));
+        }
+    }
+    return out;
+}
+const KIT_CHART_VIEWS = [
+    ["fy",     "Units by month — whole financial year, against the target"],
+    ["pace",   "Selected month — day by day against the target pace"],
+    ["codes",  "Selected month — units by item code"],
+    ["sp",     "Selected month — units by salesperson"],
+    ["branch", "Selected month — units by branch"],
+];
+function renderKitTargets() {
+    renderFilterChips();
+    if (spTargets.status === "idle") loadSalespersonTargets();     // salesperson names for the drill-down and the chart
+    const $ = id => document.getElementById(id);
+    const today = new Date(), todayMk = localISO(today).slice(0, 7);
+    const nextMk = m => localISO(new Date(+m.slice(0, 4), +m.slice(5), 1)).slice(0, 7);
+    // Months on offer: from the first month the loaded data holds to this month.
+    let first = todayMk;
+    for (const inv of state.invoices) { const k = String(inv.postingDate || "").slice(0, 7); if (k && k < first) first = k; }
+    if (first < WIISE_FIRST_MONTH) first = WIISE_FIRST_MONTH;
+    const months = []; for (let m = first; m <= todayMk; m = nextMk(m)) months.push(m);
+    if (!months.includes(state.kitMonth)) state.kitMonth = todayMk;
+    const mk = state.kitMonth, sel = $("ktMonthSel"), sig = months.join(",");
+    if (sel.dataset.sig !== sig) {
+        sel.innerHTML = months.map(m => '<option value="' + m + '">' + escapeHtml(monthLabelFromKey(m)) + (m === todayMk ? " (current)" : "") + "</option>").join("");
+        sel.dataset.sig = sig;
+    }
+    if (!sel.dataset.wired) { sel.addEventListener("change", () => { state.kitMonth = sel.value; renderCurrentTab(); }); sel.dataset.wired = "1"; }
+    sel.value = mk;
+    const [y, mo] = mk.split("-").map(Number);
+    const sd = sellingDaysForMonthKey(mk, today);
+    // The month's window in the shape dsKitFigures reads: 1st → today, or → month end once the month is over.
+    const win = { mStart: new Date(y, mo - 1, 1), today: mk === todayMk ? today : new Date(y, mo, 0, 23, 59, 59) };
+    $("ktMonth").textContent = new Date(y, mo - 1, 1).toLocaleDateString("en-AU", { month: "long", year: "numeric" });
+    $("ktSdTotal").textContent = fmtInt(sd.total);
+    $("ktSdPassed").textContent = fmtInt(sd.passed);
+    $("ktSdRemaining").textContent = fmtInt(sd.remaining);
+    $("ktSdPct").textContent = sd.total ? fmtPct(sd.passed / sd.total) : "—";
+    const pair = $("ktPair"), loaded = state.invoices.length > 0;
+    if (!pair.dataset.built) {      // one column per kit group: its panel, then its chart
+        pair.innerHTML = DS_KIT_TARGETS.map(g => `<div><div id="ktKit_${g.key}"></div>
+            <div class="panel"><div class="panel-header"><h2>${escapeHtml(g.title.replace(/ Targets$/, ""))} · charts</h2>
+                <select id="ktCmp_${g.key}" class="mini-select" title="Chart">${KIT_CHART_VIEWS.map(v => '<option value="' + v[0] + '">' + v[1] + "</option>").join("")}</select></div>
+                <div class="chart-wrap" style="position:relative; min-height:340px; height:340px; padding:10px 14px 14px;"><canvas id="ktChart_${g.key}"></canvas></div></div></div>`).join("");
+        DS_KIT_TARGETS.forEach(g => $("ktCmp_" + g.key).addEventListener("change", e => { state.kitChart[g.key] = e.target.value; renderCurrentTab(); }));
+        pair.dataset.built = "1";
+    }
+    DS_KIT_TARGETS.forEach(g => {
+        dsPaintKits([dsKitFigures(g, win, sd)], loaded, sd, "ktKit_" + g.key);
+        renderKitChart(g, mk, sd, today);
+    });
+}
+function renderKitChart(g, mk, sd, today) {
+    const view = state.kitChart[g.key] || (state.kitChart[g.key] = "fy");
+    const sel = document.getElementById("ktCmp_" + g.key), canvas = document.getElementById("ktChart_" + g.key), key = "ktChart_" + g.key;
+    if (!sel || !canvas) return;
+    sel.value = view;
+    destroyChart(key);
+    const [y, mo] = mk.split("-").map(Number), todayMk = localISO(today).slice(0, 7);
+    const mStart = mk + "-01", mEnd = localISO(new Date(y, mo, 0)), monthLbl = monthLabelFromKey(mk);
+    const colour = i => ENTITY_PALETTE[i % ENTITY_PALETTE.length];
+    const units = v => (Number.isInteger(v) ? fmtInt(v) : fmtQty(v)) + " units";
+    const tip = { callbacks: { label: c => c.dataset.label + ": " + (c.parsed.y == null ? "—" : units(c.parsed.y)) } };
+    const wholeTicks = { beginAtZero: true, ticks: { precision: 0 } };
+    let cfg;
+    if (view === "fy") {
+        // The financial year (July → June) holding the selected month; one stacked bar a month, a slice per code.
+        const fy0 = mo >= 7 ? y : y - 1, fyMonths = [];
+        for (let i = 0; i < 12; i++) fyMonths.push(localISO(new Date(fy0, 6 + i, 1)).slice(0, 7));
+        const by = kitUnits(g, fyMonths[0] + "-01", localISO(new Date(fy0 + 1, 6, 0)), r => r.day.slice(0, 7) + "|" + r.code);
+        cfg = { type: "bar",
+            data: { labels: fyMonths.map(monthLabelFromKey), datasets: g.items.map((c, i) => ({ type: "bar", label: c, stack: "u", data: fyMonths.map(m => m <= todayMk ? (by.get(m + "|" + c) || 0) : null),
+                    backgroundColor: fyMonths.map(m => colour(i) + (m === mk ? "" : "99")), borderRadius: 3 }))
+                .concat([{ type: "line", label: "Target (" + fmtInt(g.target) + " a month)", data: fyMonths.map(() => g.target), borderColor: "#e53935", backgroundColor: "#e53935", borderDash: [6, 4], pointRadius: 0, borderWidth: 2 }]) },
+            options: chartBase({ plugins: { tooltip: { mode: "index", intersect: false, callbacks: { label: tip.callbacks.label,
+                    footer: items => "All codes: " + units(items.filter(i => i.dataset.type === "bar").reduce((s, i) => s + (i.parsed.y || 0), 0)) } } },
+                scales: { x: { stacked: true }, y: Object.assign({ stacked: true }, wholeTicks) },
+                // Click a month to open it in the panel above.
+                onClick: (e, els) => { if (els.length && fyMonths[els[0].index] <= todayMk) { state.kitMonth = fyMonths[els[0].index]; renderCurrentTab(); } } }) };
+    } else if (view === "pace") {
+        const by = kitUnits(g, mStart, mEnd, r => r.day), days = [], act = [], pace = [];
+        let cum = 0, passed = 0;
+        const last = mk === todayMk ? localISO(today) : mEnd;
+        for (let d = 1; d <= new Date(y, mo, 0).getDate(); d++) {
+            const iso = mk + "-" + String(d).padStart(2, "0");
+            if (isSellingDay(new Date(y, mo - 1, d))) passed++;
+            cum += by.get(iso) || 0;
+            days.push(String(d)); act.push(iso <= last ? cum : null); pace.push(sd.total ? g.target * passed / sd.total : 0);
+        }
+        cfg = { type: "line",
+            data: { labels: days, datasets: [
+                { label: "Units sold, running total · " + monthLbl, data: act, borderColor: colour(0), backgroundColor: colour(0), tension: 0.15, pointRadius: 2, borderWidth: 2.5 },
+                { label: "Target pace (" + fmtInt(g.target) + " by month end)", data: pace, borderColor: "#e53935", backgroundColor: "#e53935", borderDash: [6, 4], pointRadius: 0, borderWidth: 2 } ] },
+            options: chartBase({ plugins: { tooltip: { mode: "index", intersect: false, callbacks: { title: items => items[0].label + " " + monthLbl, label: tip.callbacks.label } } }, scales: { y: wholeTicks } }) };
+    } else {
+        const names = spBudgetNames("salesperson"), brNames = spBudgetNames("branch");
+        const by = kitUnits(g, mStart, mEnd, r => view === "codes" ? r.code : view === "sp" ? r.sp : r.branch);
+        const keys = view === "codes" ? g.items.slice() : [...by.keys()].sort((a, b) => by.get(b) - by.get(a));
+        const label = k => view === "sp" ? k + (names[k] ? " · " + names[k] : "") : view === "branch" ? k + (brNames[k] ? " · " + brNames[k] : "") : k;
+        cfg = { type: "bar",
+            data: { labels: keys.map(label), datasets: [{ label: "Units sold · " + monthLbl, data: keys.map(k => by.get(k) || 0), backgroundColor: keys.map((_, i) => colour(i)), borderRadius: 4 }] },
+            options: chartBase({ plugins: { legend: { display: false }, tooltip: tip }, scales: { y: wholeTicks } }) };
+    }
+    state.charts[key] = new Chart(canvas.getContext("2d"), cfg);
 }
 function renderDailySnapshot() {
     renderFilterChips();
@@ -17128,7 +17285,7 @@ const PNL_VIEWERS = new Set(FINANCE_VIEWERS);
 const SRECON_VIEWERS = new Set(FINANCE_VIEWERS);
 // Export button + menu (export.js): four people only — Faik, Michael,
 // Daniel, Shane (Faik, 2026-11-10, after his own trial). Nobody else.
-const EXPORT_VIEWERS = new Set(FINANCE_VIEWERS);
+const EXPORT_VIEWERS = new Set([...FINANCE_VIEWERS, "coreyb@vicair.com.au"]);   // Corey added by Faik, 2026-11-11 (Export only, not the Finance tabs)
 function exportAllowed() { return EXPORT_VIEWERS.has(currentSignInName()); }
 function applyExportAccess() {
     const ok = exportAllowed();
@@ -17230,10 +17387,41 @@ async function handleSignIn() {
         document.getElementById("loadBtn").disabled = false;
         document.getElementById("signOutBtn").style.display = "inline-block";
         updateRestrictedNav();
-        // Nothing loads by itself (Faik, 2026-11-10): the user picks Fast
-        // lookup or Load sales. Until then the landing tab shows a notice.
+        // The newest snapshot opens by itself (Faik, 2026-11-11 — this
+        // replaces his "nothing loads by itself" of the day before). Fast
+        // lookup and Load sales stay available for anything else.
         if (state.tab === "dailySnapshot" && !state.invoices.length) renderDailySnapshot();
+        autoLoadLatestSnapshot();   // not awaited
     } catch (err) { alert("Sign-in failed: " + (err.message || err)); }
+}
+// Opening the tool: load the newest snapshot without a click, behind the
+// loading card. Only when this device already holds the snapshot
+// passphrase, so nobody gets a prompt just for opening the page; nothing
+// here ever raises an alert — if it cannot be done the landing tab says
+// so and the user picks Fast lookup or Load sales as before.
+let autoLoadBusy = false;
+async function autoLoadLatestSnapshot() {
+    if (autoLoadBusy || state.invoices.length) return;
+    const msg = t => { const el = document.getElementById("dsEmptyMsg"); if (el) el.textContent = t; };
+    let p = ""; try { p = localStorage.getItem("snapshotPassphrase") || ""; } catch (e) { /* storage blocked */ }
+    if (!p) { msg("No figures loaded yet. Pick a snapshot from Fast lookup (it asks for the snapshot passphrase once on this device, after that the latest snapshot opens by itself), or click Load sales for live data."); return; }
+    autoLoadBusy = true;
+    showBusy("Loading the latest snapshot", "Looking for the newest snapshot…");
+    updateBCProgress("Latest snapshot", "looking for the newest one…");
+    let ok = false;
+    try {
+        const metas = await Promise.all(SNAPSHOT_SLOTS.map(async s => {
+            try { const r = await spFetch("snapshots/" + s.slot + ".meta.json"); return r.ok ? Object.assign({ slot: s.slot }, await r.json()) : null; }
+            catch (e) { return null; }
+        }));
+        const newest = metas.filter(Boolean).sort((a, b) => String(a.fetchedAtMelbourne || "") < String(b.fetchedAtMelbourne || "") ? 1 : -1)[0];
+        if (newest && !state.invoices.length) ok = await loadSnapshot(newest.slot, { auto: true, meta: newest });
+    } catch (e) { console.warn("[Latest snapshot] " + (e.message || e)); }
+    finally {
+        autoLoadBusy = false;
+        hideBusy(); hideBCProgress();
+        if (!ok && !state.invoices.length) msg("The latest snapshot could not be opened by itself. Pick a snapshot from Fast lookup, or click Load sales for live data.");
+    }
 }
 
 // ============================================================
@@ -17299,7 +17487,7 @@ async function populateLookupMenu() {
         btn.addEventListener("click", e => {
             e.stopPropagation();
             document.getElementById("loadLookupMenu").style.display = "none";
-            loadSnapshot(btn.dataset.slot);
+            loadSnapshot(btn.dataset.slot, { meta: (rows.find(r => r.slot === btn.dataset.slot) || {}).meta });
         });
     });
 }
@@ -17322,32 +17510,60 @@ async function decryptSnapshot(buf, passphrase) {
     const stream = new Blob([gz]).stream().pipeThrough(new DecompressionStream("gzip"));
     return JSON.parse(await new Response(stream).text());
 }
-async function loadSnapshot(slot) {
+// A download that reports how far it has got (0…1). `total` comes from
+// the snapshot's meta file; without a size the bar waits for the end.
+async function readWithProgress(resp, total, onFrac) {
+    total = total || parseInt(resp.headers.get("Content-Length") || "0", 10);
+    if (!resp.body || !total) return resp.arrayBuffer();
+    const reader = resp.body.getReader(), chunks = []; let got = 0;
+    for (;;) { const { done, value } = await reader.read(); if (done) break; chunks.push(value); got += value.length; onFrac(Math.min(1, got / total)); }
+    const out = new Uint8Array(got); let o = 0;
+    for (const c of chunks) { out.set(c, o); o += c.length; }
+    return out.buffer;
+}
+// opts.meta = the slot's meta file (size and capture time for the card);
+// opts.auto = the opening-of-the-tool load: no prompt, no alert.
+// Shows the loading card with real progress — download by bytes to 60%,
+// unlocking to 75%, building the tabs to 100% — and keeps the corner
+// line going as before. Resolves true when the snapshot is on screen.
+async function loadSnapshot(slot, opts) {
+    opts = opts || {};
     const btn = document.getElementById("loadLookupBtn");
     const orig = "Fast lookup ▾";
+    const info = SNAPSHOT_SLOTS.find(s => s.slot === slot) || { label: slot }, meta = opts.meta || {};
+    const cap = String(meta.fetchedAtMelbourne || "");
+    const asOf = cap ? " · figures as of " + cap.slice(11).replace(/^24:/, "00:") + (cap.slice(0, 10) === melbourneTodayISO() ? " today" : " on " + fmtDate(cap.slice(0, 10))) : "";
+    const what = opts.auto ? "Latest snapshot" : "Fast lookup";
+    const step = (frac, text) => { setBusyProgress(frac); updateBCProgress(what, text); setBusyDetail(info.label + " snapshot" + asOf + " · " + text); return nextPaint(); };
     btn.disabled = true; btn.textContent = "Loading…";
+    showBusy(opts.auto ? "Loading the latest snapshot" : "Loading the " + info.label + " snapshot", info.label + " snapshot" + asOf);
     try {
-        updateBCProgress("Fast lookup", "downloading snapshot…");
+        await step(0.03, "downloading…");
         const resp = await spFetch("snapshots/" + slot + ".bin");
         if (!resp.ok) throw new Error("snapshot download failed (HTTP " + resp.status + ")");
-        const buf = await resp.arrayBuffer();
-        updateBCProgress("Fast lookup", "unlocking…");
+        const buf = await readWithProgress(resp, meta.bytes, f => setBusyProgress(0.03 + f * 0.57));
+        await step(0.6, "unlocking…");
         let payload = null;
-        for (let attempt = 0; attempt < 3 && !payload; attempt++) {
-            const pass = getSnapshotPassphrase(attempt > 0);
-            if (!pass) return;   // user cancelled the prompt
+        for (let attempt = 0; attempt < (opts.auto ? 1 : 3) && !payload; attempt++) {
+            const pass = opts.auto ? (localStorage.getItem("snapshotPassphrase") || "") : getSnapshotPassphrase(attempt > 0);
+            if (!pass) return false;   // user cancelled the prompt
             try { payload = await decryptSnapshot(buf, pass); }
             catch (e) {
                 localStorage.removeItem("snapshotPassphrase");
-                if (attempt < 2) alert("That passphrase didn't unlock the snapshot — try again.");
+                if (!opts.auto && attempt < 2) alert("That passphrase didn't unlock the snapshot — try again.");
             }
         }
         if (!payload) throw new Error("could not unlock snapshot (wrong passphrase?)");
-        updateBCProgress("Fast lookup", "rendering…");
+        await step(0.75, "building the tabs…");
         hydrateSnapshot(payload);
+        await finishBusy();
+        return true;
     } catch (err) {
-        alert("Fast lookup failed: " + (err.message || err));
+        if (opts.auto) console.warn("[Latest snapshot] " + (err.message || err));
+        else alert("Fast lookup failed: " + (err.message || err));
+        return false;
     } finally {
+        hideBusy();
         hideBCProgress();
         btn.disabled = false; btn.textContent = orig;
     }
