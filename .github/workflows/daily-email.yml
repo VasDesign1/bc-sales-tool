@@ -1,7 +1,10 @@
 name: daily-snapshot-email
 
-# Emails the Daily Snapshot tab (scripts/daily-email.js) to the address(es)
-# in the DAILY_EMAIL_TO secret, with DAILY_EMAIL_CC copied in.
+# The morning sales email (scripts/daily-email.js) to the address(es) in
+# the DAILY_EMAIL_TO secret, with DAILY_EMAIL_CC copied in. The script
+# picks the email for the day: Monday = last week's summary plus the
+# month so far; first working day of a month = the closed month's summary;
+# any other weekday = the Daily Snapshot.
 #
 # Schedule: fires every half hour through the Melbourne morning. The script
 # decides what a firing does — it sends ONE email per weekday, as soon as
@@ -25,6 +28,14 @@ on:
         default: false
       slot:
         description: "Snapshot slot to use (0500 / 1100 / 1700); empty = the newest"
+        required: false
+        default: ""
+      kind:
+        description: "Which email: daily / weekly / monthly / monthly+weekly (empty = what the day calls for)"
+        required: false
+        default: ""
+      as_of:
+        description: "TEST: build it as if it were this morning, YYYY-MM-DD (goes to the first address only)"
         required: false
         default: ""
 
@@ -52,7 +63,7 @@ jobs:
       - name: Install the Claude SDK
         run: npm install --no-save --no-audit --no-fund @anthropic-ai/sdk
 
-      - name: Build and send the Daily Snapshot email
+      - name: Build and send the morning email
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           BC_CLIENT_ID: ${{ secrets.BC_CLIENT_ID }}
@@ -63,4 +74,6 @@ jobs:
           DAILY_EMAIL_CC: ${{ secrets.DAILY_EMAIL_CC }}
           DRY_RUN: ${{ github.event.inputs.dry_run }}
           SLOT: ${{ github.event.inputs.slot }}
+          EMAIL_KIND: ${{ github.event.inputs.kind }}
+          EMAIL_AS_OF: ${{ github.event.inputs.as_of }}
         run: node scripts/daily-email.js
