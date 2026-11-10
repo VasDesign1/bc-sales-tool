@@ -227,6 +227,22 @@
         /* Salesperson run-rate tables: rep name beside the code */
         .rr-name { font-size: 11px; opacity: .7; margin-left: 6px; }
 
+        /* ---------- DRILL-DOWN ROW TINT ----------
+           Every drill-down tree shades its rows with the active theme's accent
+           (treeRowStyle mixes --tree-tint into the row, strongest at the top
+           level). One colour per theme; Classic keeps its blue. */
+        :root { --tree-tint: #3f51b5; }
+        html.theme-onyx { --tree-tint: #d4af7a; }
+        html.theme-linen { --tree-tint: #5b6e3f; }
+        html.theme-aurora { --tree-tint: #b57bff; }
+        html.theme-atelier { --tree-tint: #ff4400; }
+        html.theme-concierge { --tree-tint: #0e4d3f; }
+        html.theme-marble { --tree-tint: #1e3a5f; }
+        html.theme-velvet { --tree-tint: #c9a04a; }
+        html.theme-glacier { --tree-tint: #1b4f7e; }
+        html.theme-bibliotheque { --tree-tint: #7a1f2b; }
+        html.theme-pavilion { --tree-tint: #6e7d5e; }
+
         /* ---------- EXPORT MENU (export.js) ---------- */
         #exportMenu { display: none; position: fixed; z-index: 8000; width: 430px; max-width: calc(100vw - 16px); overflow-y: auto;
                       background: #fff; color: #2c2f4a; border: 1px solid #d6d8eb; border-radius: 10px; box-shadow: 0 6px 24px rgba(26,35,126,0.18); font-size: 13px; }
@@ -2277,16 +2293,16 @@
                     <div class="table-scroll">
                         <table id="dsBrTable" class="ds-table">
                             <thead><tr>
-                                <th>Branch</th>
-                                <th class="num" title="Same month last year">Sales For Month PY</th>
-                                <th class="num" title="Targets file">Sales Target</th>
-                                <th class="num">Sales For Month</th>
-                                <th class="num" title="Target ÷ selling days in month">Target Run Rate</th>
-                                <th class="num" title="Actual ÷ selling days passed">Actual Run Rate</th>
-                                <th class="num" title="Actual − target">Balance</th>
-                                <th class="num" title="Shortfall ÷ remaining selling days">Required Daily</th>
-                                <th>Status</th>
-                                <th class="num" title="Actual ÷ target">% Achieved</th>
+                                <th data-sort="entity">Branch</th>
+                                <th class="num" data-sort="pyVal" title="Same month last year">Sales For Month PY</th>
+                                <th class="num" data-sort="target" title="Targets file">Sales Target</th>
+                                <th class="num" data-sort="cyVal">Sales For Month</th>
+                                <th class="num" data-sort="targetDaily" title="Target ÷ selling days in month">Target Run Rate</th>
+                                <th class="num" data-sort="actualDaily" title="Actual ÷ selling days passed">Actual Run Rate</th>
+                                <th class="num" data-sort="balance" title="Actual − target">Balance</th>
+                                <th class="num" data-sort="requiredDaily" title="Shortfall ÷ remaining selling days">Required Daily</th>
+                                <th data-sort="status">Status</th>
+                                <th class="num" data-sort="pctAchieved" title="Actual ÷ target">% Achieved</th>
                             </tr></thead>
                             <tbody></tbody>
                         </table>
@@ -2297,16 +2313,16 @@
                     <div class="table-scroll">
                         <table id="dsSpTable" class="ds-table">
                             <thead><tr>
-                                <th>Salesperson</th>
-                                <th class="num" title="Same month last year">Sales For Month PY</th>
-                                <th class="num" title="Targets file">Sales Target</th>
-                                <th class="num">Sales For Month</th>
-                                <th class="num" title="Target ÷ selling days in month">Target Run Rate</th>
-                                <th class="num" title="Actual ÷ selling days passed">Actual Run Rate</th>
-                                <th class="num" title="Actual − target">Balance</th>
-                                <th class="num" title="Shortfall ÷ remaining selling days">Required Daily</th>
-                                <th>Status</th>
-                                <th class="num" title="Actual ÷ target">% Achieved</th>
+                                <th data-sort="entity">Salesperson</th>
+                                <th class="num" data-sort="pyVal" title="Same month last year">Sales For Month PY</th>
+                                <th class="num" data-sort="target" title="Targets file">Sales Target</th>
+                                <th class="num" data-sort="cyVal">Sales For Month</th>
+                                <th class="num" data-sort="targetDaily" title="Target ÷ selling days in month">Target Run Rate</th>
+                                <th class="num" data-sort="actualDaily" title="Actual ÷ selling days passed">Actual Run Rate</th>
+                                <th class="num" data-sort="balance" title="Actual − target">Balance</th>
+                                <th class="num" data-sort="requiredDaily" title="Shortfall ÷ remaining selling days">Required Daily</th>
+                                <th data-sort="status">Status</th>
+                                <th class="num" data-sort="pctAchieved" title="Actual ÷ target">% Achieved</th>
                             </tr></thead>
                             <tbody></tbody>
                         </table>
@@ -11816,7 +11832,7 @@ function renderQuoteCustomerTree(quotes) {
         const bg = treeRowStyle(depth);
         const statusBadge = node.status ? `<span class="badge ${quoteStatusBadgeClass(node.status)}">${escapeHtml(node.status)}</span>` : "";
         acc.push(`<tr data-key="${escapeAttr(node.key)}" data-expandable="${expandable ? 1 : 0}" style="${bg}cursor:${expandable ? "pointer" : "default"};">
-            <td>${pad}<span style="display:inline-block; width:14px; color:#3f51b5;">${arrow}</span> ${escapeHtml(node.label)}${wiiseDocLinkHtml(node.docType, node.docNo)}</td>
+            <td>${pad}<span style="display:inline-block; width:14px; color:var(--tree-tint);">${arrow}</span> ${escapeHtml(node.label)}${wiiseDocLinkHtml(node.docType, node.docNo)}</td>
             <td class="num">${node.quoteCount ? fmtInt(node.quoteCount) : ""}</td>
             <td class="num">${fmtMoneyFull(node.sales)}</td>
             <td class="num">${node.qty ? fmtQty(node.qty) : ""}</td>
@@ -12398,7 +12414,7 @@ function renderBlanketOrderCustomerTree(orders) {
         const bg = treeRowStyle(depth);
         const statusBadge = node.status ? `<span class="badge ${boStatusBadgeClass(node.status)}">${escapeHtml(node.status)}</span>` : "";
         acc.push(`<tr data-key="${escapeAttr(node.key)}" data-expandable="${expandable ? 1 : 0}" style="${bg}cursor:${expandable ? "pointer" : "default"};">
-            <td>${pad}<span style="display:inline-block; width:14px; color:#3f51b5;">${arrow}</span> ${escapeHtml(node.label)}${wiiseDocLinkHtml(node.docType, node.docNo)}</td>
+            <td>${pad}<span style="display:inline-block; width:14px; color:var(--tree-tint);">${arrow}</span> ${escapeHtml(node.label)}${wiiseDocLinkHtml(node.docType, node.docNo)}</td>
             <td class="num">${node.docCount ? fmtInt(node.docCount) : ""}</td>
             <td class="num">${fmtMoneyFull(node.sales)}</td>
             <td class="num">${node.qty ? fmtQty(node.qty) : ""}</td>
@@ -13542,17 +13558,22 @@ function wiiseDocLinkHtml(docType, docNo) {
         + ' title="Open ' + escapeAttr(docNo) + ' in Wiise" onclick="event.stopPropagation()"'
         + ' style="text-decoration:none; font-size:11px; opacity:0.7;">↗</a>';
 }
-// One shading scale for every drill-down tree in the tool, so the blue
-// tint reads as "this row expands" identically on every tab:
-// depth 0 bold blue, depth 1 semi-bold lighter, depth 2 faint, deeper plain.
+// One shading scale for every drill-down tree in the tool, so the tint
+// reads as "this row expands" identically on every tab:
+// depth 0 bold and strongest, depth 1 semi-bold lighter, then fainter.
 function treeRowStyle(depth) {
-    // One blue per level on every drill-down table (Faik 2026-09-23):
-    // six clearly-distinguishable steps, darkest at the top, and the
+    // One shade per level on every drill-down table (Faik 2026-09-23):
+    // six clearly-distinguishable steps, strongest at the top, and the
     // deepest level (item lines) gets the LIGHTEST tint rather than
     // falling back to the plain template background.
+    // The colour is the active theme's accent (--tree-tint, Faik
+    // 2026-11-10), mixed into the row at these strengths; on Classic that
+    // gives the same blues as before. The plain colour in front is only
+    // for a browser that does not know color-mix().
     const tints = ["#e4e8f8", "#eaedfa", "#f0f2fc", "#f6f7fd", "#fafbfe", "#fdfdff"];
-    const bgc = tints[Math.min(depth, tints.length - 1)];
-    return "background:" + bgc + ";"
+    const mix = [14, 11, 8, 5, 3, 1.5];
+    const i = Math.min(depth, tints.length - 1);
+    return "background:" + tints[i] + "; background:color-mix(in srgb, var(--tree-tint) " + mix[i] + "%, transparent);"
          + (depth === 0 ? " font-weight:700;" : depth === 1 ? " font-weight:600;" : "");
 }
 function decompPopulateSelects() {
@@ -13675,7 +13696,7 @@ function renderDecomposition() {
         const bg = treeRowStyle(depth);
         const wiiseLink = wiiseDocLinkHtml(node.docType, node.docNo);
         acc.push(`<tr data-decomp-key="${escapeAttr(node.key)}" data-expandable="${expandable ? 1 : 0}" style="${bg}cursor:${expandable ? "pointer" : "default"};">
-            <td>${pad}<span style="display:inline-block; width:14px; color:#3f51b5;">${arrow}</span> ${escapeHtml(node.label)}${wiiseLink}</td>
+            <td>${pad}<span style="display:inline-block; width:14px; color:var(--tree-tint);">${arrow}</span> ${escapeHtml(node.label)}${wiiseLink}</td>
             <td class="num">${fmtMoneyFull(node.sales)}</td>
             <td class="num ${node.gp >= 0 ? "pos" : "neg"}">${fmtMoneyFull(node.gp)}</td>
             <td class="num">${fmtPct(node.sales ? node.gp / node.sales : 0)}</td>
@@ -14565,6 +14586,13 @@ function dsSnapshotFigures() {
 // Same ten columns as the run-rate tabs' own tables.
 function dsPaintTable(tableId, entity, data, sd) {
     const names = spBudgetNames(entity);
+    // Click a header to sort (same helpers as the run-rate tabs); starts on
+    // Sales For Month, highest first. The Total row always stays last.
+    const sort = state.sortRunRate[tableId] || (state.sortRunRate[tableId] = { key: "cyVal", dir: "desc" });
+    const tbl = document.getElementById(tableId);
+    if (!tbl.dataset.sortWired) { attachSortHandlers("#" + tableId, sort, renderCurrentTab, new Set(["entity", "status"])); tbl.dataset.sortWired = "1"; }
+    sortRowsBy(data.rows, sort);
+    paintSortHeaders("#" + tableId, sort);
     const cells = (r, isTotal) => {
         const bal = !r.target ? '<td class="num">—</td>'
             : `<td class="num ${r.balance >= 0 ? "pos" : "neg"}">${r.balance >= 0 ? "+" : "−"}${fmtMoneyFull(Math.abs(r.balance))}</td>`;
@@ -14640,6 +14668,14 @@ function dsPaintKits(kits, loaded, sd) {
     if (!host.dataset.wired) {
         host.addEventListener("click", e => {
             if (e.target.closest("a")) return;
+            const th = e.target.closest("th[data-kit-sort]");
+            if (th) {   // header click: sort every level of that panel by the column
+                const st = state.sortKits[th.dataset.kit], key = th.dataset.kitSort;
+                if (st.key === key) st.dir = st.dir === "asc" ? "desc" : "asc";
+                else { st.key = key; st.dir = (key === "label" || key === "branches") ? "asc" : "desc"; }
+                if (state._dsKits) dsPaintKits(state._dsKits.kits, state._dsKits.loaded, state._dsKits.sd);
+                return;
+            }
             const tr = e.target.closest("tr[data-key]");
             if (!tr || tr.dataset.expandable !== "1") return;
             const k = tr.dataset.key;
@@ -14651,22 +14687,29 @@ function dsPaintKits(kits, loaded, sd) {
     state._dsKits = { kits, loaded, sd };
     const q = n => Number.isInteger(n) ? fmtInt(n) : fmtQty(n);
     const perDay = n => (Math.round(n * 10) / 10).toLocaleString("en-AU", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+    state.sortKits = state.sortKits || {};
     host.innerHTML = kits.map(k => {
+        // Until a header is clicked the codes keep the order they were given
+        // in and each level under them runs highest quantity first.
+        const sort = state.sortKits[k.key] || (state.sortKits[k.key] = { key: "", dir: "desc" });
+        const val = n => sort.key === "label" ? n.label.toLowerCase() : sort.key === "branches" ? [...n.branches].sort().join(",") : sort.key === "docs" ? n.docs.size : n[sort.key];
+        const ordered = list => !sort.key ? list : list.slice().sort((a, b) => { const x = val(a), y = val(b); return (typeof x === "number" ? x - y : String(x).localeCompare(String(y))) * (sort.dir === "asc" ? 1 : -1); });
+        const th = (key, label, num) => `<th data-kit="${k.key}" data-kit-sort="${key}" class="${num ? "num " : ""}${sort.key === key ? "sorted-" + sort.dir : ""}" style="cursor:pointer;">${label}</th>`;
         const acc = [];
         const emit = (n, depth) => {
             const expandable = n.children.length > 0, open = state.expandedMatrix.has(n.key);
             const arrow = expandable ? (open ? "▾" : "▸") : "";
             const label = escapeHtml(n.label) + (depth === 0 && n.desc ? `<span class="rr-name">${escapeHtml(n.desc)}</span>` : "") + (n.docNo ? wiiseDocLinkHtml("Posted Sales Invoice", n.docNo) : "");
             acc.push(`<tr data-key="${escapeAttr(n.key)}" data-expandable="${expandable ? 1 : 0}" style="${treeRowStyle(depth)}cursor:${expandable ? "pointer" : "default"};">
-                <td>${"&nbsp;".repeat(depth * 4)}<span style="display:inline-block; width:14px; color:#3f51b5;">${arrow}</span> ${label}</td>
+                <td>${"&nbsp;".repeat(depth * 4)}<span style="display:inline-block; width:14px; color:var(--tree-tint);">${arrow}</span> ${label}</td>
                 <td>${escapeHtml([...n.branches].sort().join(", "))}</td>
                 <td class="num">${loaded ? q(n.qty) : "—"}</td>
                 <td class="num">${loaded ? fmtMoneyFull(n.sales) : "—"}</td>
                 <td class="num">${loaded ? fmtInt(n.docs.size) : "—"}</td>
             </tr>`);
-            if (expandable && open) n.children.forEach(c => emit(c, depth + 1));
+            if (expandable && open) ordered(n.children).forEach(c => emit(c, depth + 1));
         };
-        k.rows.forEach(r => emit(r, 0));
+        ordered(k.rows).forEach(r => emit(r, 0));
         const stat = (lbl, val) => `<div class="ds-kit-stat"><span>${lbl}</span><b>${val}</b></div>`;
         const bal = !loaded ? "—" : `<i style="font-style:normal; color:${k.balance >= 0 ? "#2e7d32" : "#c62828"};">${k.balance >= 0 ? "+" : "−"}${q(Math.abs(k.balance))}</i>`;
         const bar = !loaded ? "—" : `<span class="rr-bar b${rrPctBand(k.pctAchieved)}" title="${fmtPct(k.pctAchieved)} of target"><span class="rr-fill" style="width:${Math.max(0, Math.min(100, k.pctAchieved * 100)).toFixed(1)}%;"></span><span class="rr-lbl">${fmtPct(k.pctAchieved)}</span></span>`;
@@ -14679,7 +14722,7 @@ function dsPaintKits(kits, loaded, sd) {
             </div>
             <div class="table-scroll">
                 <table id="dsKitTable_${k.key}" class="ds-table">
-                    <thead><tr><th>Item code → Salesperson → Customer → Invoice</th><th>Branch</th><th class="num">Qty</th><th class="num">Sales (excl. tax)</th><th class="num">Invoices</th></tr></thead>
+                    <thead><tr>${th("label", "Item code → Salesperson → Customer → Invoice")}${th("branches", "Branch")}${th("qty", "Qty", 1)}${th("sales", "Sales (excl. tax)", 1)}${th("docs", "Invoices", 1)}</tr></thead>
                     <tbody>${acc.join("")}<tr class="ds-total"><td>Total</td><td></td><td class="num">${loaded ? q(k.qty) : "—"}</td><td class="num">${loaded ? fmtMoneyFull(k.sales) : "—"}</td><td class="num">${loaded ? fmtInt(k.docs) : "—"}</td></tr></tbody>
                 </table>
             </div>
@@ -15061,9 +15104,9 @@ function renderDailySalesRow(node, depth) {
     const isOpen = state.expandedMatrix.has(node.key);
     const arrow = expandable ? (isOpen ? "▾" : "▸") : "·";
     const pad = "&nbsp;".repeat(depth * 4);
-    const cls = depth === 0 ? "font-weight:700; background:#f3f5fc;" : "";
+    const cls = depth === 0 ? "font-weight:700; background:#f3f5fc; background:color-mix(in srgb, var(--tree-tint) 7%, transparent);" : "";
     return `<tr data-key="${escapeAttr(node.key)}" data-expandable="${expandable ? 1 : 0}" style="${cls}cursor:${expandable ? "pointer" : "default"};">
-        <td>${pad}<span style="display:inline-block; width:14px; color:#3f51b5;">${arrow}</span> ${escapeHtml(node.label)}</td>
+        <td>${pad}<span style="display:inline-block; width:14px; color:var(--tree-tint);">${arrow}</span> ${escapeHtml(node.label)}</td>
         ${node.dow.map(v => '<td class="num">' + (v ? fmtMoney(v) : "") + '</td>').join("")}
         <td class="num" style="font-weight:600;">${fmtMoneyFull(total)}</td>
     </tr>`;
@@ -15527,7 +15570,7 @@ function renderDrillTree(roots, tableSelector) {
             ? `<td class="num">${node.unitSell ? fmtMoneyFull(node.unitSell) : ""}</td>`
             : "";
         acc.push(`<tr data-key="${escapeAttr(node.key)}" data-expandable="${expandable ? 1 : 0}" style="${bg}cursor:${expandable ? "pointer" : "default"};">
-            <td>${pad}<span style="display:inline-block; width:14px; color:#3f51b5;">${arrow}</span> ${escapeHtml(node.label)}${wiiseDocLinkHtml(node.docType, node.docNo)}</td>
+            <td>${pad}<span style="display:inline-block; width:14px; color:var(--tree-tint);">${arrow}</span> ${escapeHtml(node.label)}${wiiseDocLinkHtml(node.docType, node.docNo)}</td>
             <td class="num">${fmtMoneyFull(node.sales)}</td>
             <td class="num">${node.qty ? fmtQty(node.qty) : ""}</td>
             ${usCell}
