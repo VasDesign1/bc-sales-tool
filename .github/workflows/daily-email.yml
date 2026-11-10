@@ -1,9 +1,21 @@
 name: daily-snapshot-email
 
-# Emails the Daily Snapshot tab (scripts/daily-email.js).
-# TRIAL: manual runs only, to the address(es) in the DAILY_EMAIL_TO
-# secret. No schedule until the template is approved.
+# Emails the Daily Snapshot tab (scripts/daily-email.js) to the address(es)
+# in the DAILY_EMAIL_TO secret, with DAILY_EMAIL_CC copied in.
+#
+# Schedule: fires every half hour through the Melbourne morning. The script
+# decides what a firing does — it sends ONE email per weekday, as soon as
+# today's Morning snapshot is on SharePoint; if that snapshot is still
+# missing at 7:30 AM it sends once from the newest snapshot there is
+# (normally yesterday's Evening one). Every other firing ends in seconds.
+# The hours are UTC and cover 5–11 AM Melbourne in both summer and winter
+# time; :25/:55 sits a few minutes after the snapshot robot's own :13/:43.
+#
+# Run workflow (by hand): always sends, from the newest snapshot or the
+# slot typed in, and does not count as the day's email.
 on:
+  schedule:
+    - cron: "25,55 17-23,0 * * *"
   workflow_dispatch:
     inputs:
       dry_run:
@@ -35,8 +47,8 @@ jobs:
         with:
           node-version: 22
 
-      # Only needed for the AI commentary paragraph; without the
-      # ANTHROPIC_API_KEY secret the email simply goes out without it.
+      # Only needed for the AI commentary; without the ANTHROPIC_API_KEY
+      # secret the email simply goes out without it.
       - name: Install the Claude SDK
         run: npm install --no-save --no-audit --no-fund @anthropic-ai/sdk
 
@@ -48,6 +60,7 @@ jobs:
           BC_REFRESH_TOKEN: ${{ secrets.BC_REFRESH_TOKEN }}
           SNAPSHOT_PASSPHRASE: ${{ secrets.SNAPSHOT_PASSPHRASE }}
           DAILY_EMAIL_TO: ${{ secrets.DAILY_EMAIL_TO }}
+          DAILY_EMAIL_CC: ${{ secrets.DAILY_EMAIL_CC }}
           DRY_RUN: ${{ github.event.inputs.dry_run }}
           SLOT: ${{ github.event.inputs.slot }}
         run: node scripts/daily-email.js

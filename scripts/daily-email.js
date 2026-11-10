@@ -66,23 +66,73 @@ async function graphJson(url) {
 }
 const enc = p => p.split("/").filter(Boolean).map(encodeURIComponent).join("/");
 
-// ---------- collect the inputs into a folder the page can read ----------
-async function collectFromSharePoint(dir) {
-    const site = await graphJson("/sites/" + SP_CONFIG.host + ":/?$select=id");
-    const drive = (await graphJson("/sites/" + site.id + "/drive?$select=id")).id;
-    const item = p => "/drives/" + drive + "/root:/" + enc(p);
-    // newest snapshot of the three slots (a forced SLOT wins)
-    let best = null;
-    for (const slot of SLOTS) {
-        const r = await graph(item(SP_CONFIG.folder + "/snapshots/" + slot + ".meta.json") + ":/content");
-        if (!r.ok) continue;
-        const meta = JSON.parse(await r.text());
-        if ((process.env.SLOT || "") === slot) { best = meta; break; }
-        if (!process.env.SLOT && (!best || String(meta.fetchedAtMelbourne) > String(best.fetchedAtMelbourne))) best = meta;
+// ---------- SharePoint: snapshots, targets, and the "sent today" note ----------
+let _drive = null;
+async function spItem(p) {
+    if (!_drive) {
+        const site = await graphJson("/sites/" + SP_CONFIG.host + ":/?$select=id");
+        _drive = (await graphJson("/sites/" + site.id + "/drive?$select=id")).id;
     }
-    if (!best) throw new Error("no snapshot found on SharePoint");
+    return "/drives/" + _drive + "/root:/" + enc(p);
+}
+async function spReadJson(p) {
+    const r = await graph(await spItem(p) + ":/content");
+    if (!r.ok) return null;
+    try { return JSON.parse(await r.text()); } catch (e) { return null; }
+}
+const SLOT_LABEL = { "0500": "Morning", "1100": "Midday", "1700": "Evening" };   // keep in step with SLOTS in snapshot.js
+const SENT_NOTE = "/snapshots/daily-email.sent.json";
+function melbourneNow() {
+    const parts = new Intl.DateTimeFormat("en-AU", { timeZone: "Australia/Melbourne", year: "numeric", month: "2-digit", day: "2-digit",
+        hour: "2-digit", minute: "2-digit", weekday: "short", hourCycle: "h23" }).formatToParts(new Date());
+    const g = t => parts.find(x => x.type === t).value;
+    return { date: g("year") + "-" + g("month") + "-" + g("day"), minutes: (parseInt(g("hour"), 10) % 24) * 60 + parseInt(g("minute"), 10), weekday: g("weekday") };
+}
+// Which snapshot goes out, and whether anything goes out at all.
+//   By hand (Run workflow): always sends, from the newest snapshot (or the
+//   forced SLOT), and leaves the "sent today" note alone.
+//   On the schedule (Faik, 2026-11-10): one email each weekday morning, as
+//   soon as today's Morning snapshot exists. If it still has not arrived by
+//   FALLBACK_AT, the email goes out once from the newest snapshot there is
+//   (normally yesterday's Evening one). A note on SharePoint records the
+//   day, so later firings — and a late Morning snapshot — send nothing more.
+const WINDOW_FROM = 5 * 60, FALLBACK_AT = 7 * 60 + 30, WINDOW_TO = 11 * 60;   // Melbourne minutes
+async function chooseSnapshot() {
+    const metas = {};
+    for (const slot of SLOTS) metas[slot] = await spReadJson(SP_CONFIG.folder + "/snapshots/" + slot + ".meta.json");
+    const newest = SLOTS.map(s => metas[s]).filter(Boolean).sort((a, b) => String(b.fetchedAtMelbourne).localeCompare(String(a.fetchedAtMelbourne)))[0] || null;
+    if (process.env.GITHUB_EVENT_NAME !== "schedule") {
+        const forced = (process.env.SLOT || "").trim();
+        const meta = forced ? metas[forced] : newest;
+        if (!meta) throw new Error("no snapshot found on SharePoint" + (forced ? " for slot " + forced : ""));
+        return { meta, mark: false };
+    }
+    const mel = melbourneNow();
+    if (mel.weekday === "Sat" || mel.weekday === "Sun") { console.log("Weekend in Melbourne — no email."); return null; }
+    if (mel.minutes < WINDOW_FROM || mel.minutes >= WINDOW_TO) { console.log("Outside the morning window — nothing to do."); return null; }
+    const note = await spReadJson(SP_CONFIG.folder + SENT_NOTE);
+    if (note && note.date === mel.date) { console.log("Today's email already went out (" + (SLOT_LABEL[note.slot] || note.slot) + " snapshot) — nothing to do."); return null; }
+    const morning = metas["0500"];
+    if (morning && String(morning.fetchedAtMelbourne).slice(0, 10) === mel.date) return { meta: morning, mark: mel.date };
+    if (mel.minutes >= FALLBACK_AT) {
+        if (!newest) throw new Error("no snapshot found on SharePoint");
+        console.log("Morning snapshot still missing — sending from the newest snapshot instead.");
+        return { meta: newest, mark: mel.date };
+    }
+    console.log("Morning snapshot not there yet — waiting for the next firing.");
+    return null;
+}
+async function markSent(date, meta) {
+    const r = await graph(await spItem(SP_CONFIG.folder + SENT_NOTE) + ":/content?@microsoft.graph.conflictBehavior=replace",
+        { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ date, slot: meta.slot, snapshot: meta.fetchedAtMelbourne, sentAtUtc: new Date().toISOString() }) });
+    if (!r.ok) console.warn("Could not record that today's email was sent (HTTP " + r.status + ") — a later firing may send it again.");
+}
+
+// ---------- collect the inputs into a folder the page can read ----------
+async function collectFromSharePoint(dir, best) {
+    const folderItem = p => spItem(SP_CONFIG.folder + p);
     console.log("Snapshot: slot " + best.slot + " captured " + best.fetchedAtMelbourne + " Melbourne");
-    const r = await graph(item(SP_CONFIG.folder + "/snapshots/" + best.slot + ".bin") + ":/content");
+    const r = await graph(await folderItem("/snapshots/" + best.slot + ".bin") + ":/content");
     if (!r.ok) throw new Error("snapshot download → HTTP " + r.status);
     const bin = Buffer.from(await r.arrayBuffer());
     const salt = bin.subarray(0, 16), iv = bin.subarray(16, 28), ct = bin.subarray(28, bin.length - 16), tag = bin.subarray(bin.length - 16);
@@ -92,12 +142,12 @@ async function collectFromSharePoint(dir) {
     fs.writeFileSync(path.join(dir, "payload.json"), json);
     console.log("  payload " + (json.length / 1048576).toFixed(1) + " MB");
     // targets workbooks, oldest first (a newer file wins where months overlap — as in the tool)
-    const list = await graphJson(item(SP_CONFIG.folder + "/" + TARGETS_FOLDER) + ":/children?$select=name,lastModifiedDateTime,file&$top=200");
+    const list = await graphJson(await folderItem("/" + TARGETS_FOLDER) + ":/children?$select=name,lastModifiedDateTime,file&$top=200");
     const files = (list.value || []).filter(f => f.file && /\.xls[xm]?$/i.test(f.name) && !/^~\$/.test(f.name))
         .sort((a, b) => (a.lastModifiedDateTime || "").localeCompare(b.lastModifiedDateTime || ""));
     const out = [];
     for (let i = 0; i < files.length; i++) {
-        const fr = await graph(item(SP_CONFIG.folder + "/" + TARGETS_FOLDER + "/" + files[i].name) + ":/content");
+        const fr = await graph(await folderItem("/" + TARGETS_FOLDER + "/" + files[i].name) + ":/content");
         if (!fr.ok) { console.warn("  targets file skipped (HTTP " + fr.status + ")"); continue; }
         fs.writeFileSync(path.join(dir, "t" + i + ".xlsx"), Buffer.from(await fr.arrayBuffer()));
         out.push({ file: "t" + i + ".xlsx", name: files[i].name, modified: files[i].lastModifiedDateTime || "" });
@@ -232,7 +282,8 @@ const COMMENTARY_SYSTEM = [
     "Write 10 to 12 dot points that walk a busy reader through where the month stands and what matters today. Cover, in roughly this order: sales so far against the month's target and against where they should be at this point of the month; goods shipped but not yet invoiced and what they add; gross profit and margin; the daily rate achieved so far and the rate now required; each branch in turn; the salespeople picture; the AirTouch kit target; the Omniflow target; and what would most help close the gap. One point per idea, each a single plain sentence of at most about 25 words, and no two points making the same observation. If the figures do not support ten distinct points, write fewer rather than padding.",
     "Use only the figures provided. Quote them as given, rounded sensibly (for example $401k, 19% of target); do not derive new totals or forecasts of your own. If something needed is missing, leave it out rather than guessing.",
     "This is read by the whole team, so name a salesperson only to recognise a result that is ahead of pace; describe shortfalls at branch or team level, not by person.",
-    "Australian English, matter-of-fact and encouraging without hype. Output format: each dot point on its own line starting with a hyphen and a space, and nothing else: no greeting, no intro line, no sign-off, no headings, no bold or other markdown, no emojis.",
+    "Australian English, matter-of-fact and encouraging without hype. Output format: each dot point on its own line starting with a hyphen and a space, and nothing else: no greeting, no intro line, no sign-off, no headings, no emojis.",
+    "So the points can be skimmed, put the one or two things that matter most in each point in bold by wrapping them in double asterisks, like **$401k** or **Dandenong** or **19% of target**: the key figure, and the branch, person or product it belongs to. Bold short phrases only, never a whole sentence, and use no other markdown.",
 ].join("\n\n");
 function commentaryInput(res) {
     const f = res.f;
@@ -291,33 +342,53 @@ function renderEmail(res, commentary, imgSrc) {
     // Layout (Faik, 2026-11-10): a bold header, a gap, the commentary as a
     // dot-point list, a gap, then the picture of the tab. Calibri 11pt.
     // The block sits centred in the message, text left-aligned and exactly
-    // as wide as the picture. The whole message takes the tab's own page
-    // colour (and its text colour), so the picture blends into the email
-    // instead of sitting on white.
-    const bg = res.shot.bg, ink = res.shot.ink;
+    // as wide as the picture.
+    // Colours come from the tab's own page colour, in three tones so the
+    // parts stay distinct (the first version used the page colour for
+    // everything and the text was hard to read): a deeper tone behind the
+    // whole message, a paler card for the header and the points, and the
+    // picture in the page colour itself.
+    const mix = (a, b, t) => "#" + [1, 3, 5].map(i => Math.round(parseInt(a.slice(i, i + 2), 16) * (1 - t) + parseInt(b.slice(i, i + 2), 16) * t).toString(16).padStart(2, "0")).join("");
+    const page = res.shot.bg, ink = res.shot.ink;
+    const light = [1, 3, 5].reduce((s, i) => s + parseInt(page.slice(i, i + 2), 16), 0) / 3 > 128;
+    const outer = mix(page, ink, 0.16);
+    const card = light ? mix(page, "#ffffff", 0.7) : mix(page, ink, 0.07);
+    const line = mix(page, ink, 0.28);
     const FONT = "font-family:Calibri,Segoe UI,Arial,sans-serif;font-size:11pt;color:" + ink + ";";
-    const header = "DAILY SALES SUMMARY · " + d.toLocaleDateString("en-AU", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }).toUpperCase();
-    const points = commentary ? commentary.split(/\n+/).map(p => p.replace(/^\s*(?:[-•*–]|\d+[.)])\s*/, "").trim()).filter(Boolean) : [];
-    const list = points.length ? '<ul style="' + FONT + 'line-height:1.45;margin:0;padding:0 0 0 30px;">'
-        + points.map(p => '<li style="' + FONT + 'margin:0 0 5px;">' + esc(p) + "</li>").join("") + "</ul>" : "";
+    // Header says which snapshot the figures come from, and its day when it is not today's.
+    const longDate = iso => new Date(iso + "T12:00:00Z").toLocaleDateString("en-AU", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+    const snap = res.snapshot || {};
+    const snapDay = String(snap.fetchedAtMelbourne || "").slice(0, 10), snapTime = String(snap.fetchedAtMelbourne || "").slice(11).replace(/^24:/, "00:");
+    const slotName = snap.slot ? (SLOT_LABEL[snap.slot] || snap.slot) : "";
+    const snapLbl = slotName ? slotName + " snapshot" + (snapDay && snapDay !== res.today ? " of " + longDate(snapDay) : "") + (snapTime ? ", taken " + snapTime : "") : "";
+    const header = "DAILY SALES SUMMARY · " + longDate(res.today).toUpperCase() + (slotName ? " · " + slotName.toUpperCase() + " SNAPSHOT" : "");
+    const points = commentary ? commentary.split(/\n+/).map(p => p.replace(/^\s*(?:[-•–]|\*(?!\*)|\d+[.)])\s*/, "").trim()).filter(Boolean) : [];
+    // **like this** in a point becomes bold; any stray asterisks are dropped.
+    const rich = p => esc(p).replace(/\*\*([^*]+)\*\*/g, '<strong style="font-weight:700;">$1</strong>').replace(/\*/g, "");
+    const list = points.length ? '<ul style="' + FONT + 'line-height:1.5;margin:0;padding:0 0 0 26px;">'
+        + points.map(p => '<li style="' + FONT + 'margin:0 0 6px;">' + rich(p) + "</li>").join("") + "</ul>" : "";
     const gap = h => '<tr><td height="' + h + '" style="height:' + h + 'px;font-size:1px;line-height:1px;">&nbsp;</td></tr>';
     const html = '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>'
-        + '<body bgcolor="' + bg + '" style="margin:0;padding:0;background-color:' + bg + ';">'
-        + '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" bgcolor="' + bg + '" style="background-color:' + bg + ';"><tr><td align="center" style="padding:18px 14px 24px;">'
+        + '<body bgcolor="' + outer + '" style="margin:0;padding:0;background-color:' + outer + ';">'
+        + '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" bgcolor="' + outer + '" style="background-color:' + outer + ';"><tr><td align="center" style="padding:22px 14px 28px;">'
         + '<table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0" width="' + SHOW_WIDTH + '" style="width:' + SHOW_WIDTH + 'px;max-width:100%;margin:0 auto;">'
-        + '<tr><td align="left" style="' + FONT + 'font-size:13pt;font-weight:700;letter-spacing:.3px;">' + esc(header) + "</td></tr>"
-        + (list ? gap(18) + '<tr><td align="left" style="' + FONT + '">' + list + "</td></tr>" : "")
-        + gap(24)
-        + '<tr><td align="left"><img src="' + imgSrc + '" width="' + SHOW_WIDTH + '" alt="' + esc(alt) + '" style="display:block;width:100%;max-width:' + SHOW_WIDTH + 'px;height:auto;border:0;margin:0 auto;"></td></tr>'
+        + '<tr><td align="left" bgcolor="' + card + '" style="background-color:' + card + ';border:1px solid ' + line + ';padding:20px 24px 18px;">'
+        +   '<div style="' + FONT + 'font-size:14pt;font-weight:700;letter-spacing:.3px;">' + esc(header) + "</div>"
+        +   (snapLbl ? '<div style="' + FONT + 'font-size:10pt;padding-top:3px;">Figures from the <strong style="font-weight:700;">' + esc(snapLbl) + "</strong></div>" : "")
+        +   (list ? '<div style="height:16px;line-height:16px;font-size:1px;">&nbsp;</div>' + list : "")
+        + "</td></tr>"
+        + gap(20)
+        + '<tr><td align="left" bgcolor="' + page + '" style="background-color:' + page + ';border:1px solid ' + line + ';"><img src="' + imgSrc + '" width="' + SHOW_WIDTH + '" alt="' + esc(alt) + '" style="display:block;width:100%;max-width:' + SHOW_WIDTH + 'px;height:auto;border:0;margin:0 auto;"></td></tr>'
         + "</table></td></tr></table></body></html>";
     return { subject, html };
 }
 
-async function sendMail(mail, png, to) {
+async function sendMail(mail, png, to, cc) {
     const message = {
         subject: mail.subject,
         body: { contentType: "HTML", content: mail.html },
         toRecipients: to.map(a => ({ emailAddress: { address: a } })),
+        ccRecipients: (cc || []).map(a => ({ emailAddress: { address: a } })),
         attachments: [{ "@odata.type": "#microsoft.graph.fileAttachment", name: "daily-snapshot.png", contentType: "image/png",
                         contentBytes: png.toString("base64"), contentId: "dailysnapshot", isInline: true }],
     };
@@ -327,16 +398,20 @@ async function sendMail(mail, png, to) {
 
 (async () => {
     const local = process.argv.indexOf("--local");
+    let chosen = null;
+    if (local < 0) {
+        for (const k of ["BC_TENANT", "BC_CLIENT_ID", "BC_REFRESH_TOKEN", "SNAPSHOT_PASSPHRASE"]) if (!process.env[k]) throw new Error("Missing env " + k);
+        chosen = await chooseSnapshot();
+        if (!chosen) return;            // scheduled firing with nothing to send
+    }
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "daily-email-"));
     try {
         if (local >= 0) {
             fs.copyFileSync(process.argv[local + 1], path.join(dir, "payload.json"));
             fs.copyFileSync(process.argv[local + 2], path.join(dir, "targets.json"));
-        } else {
-            for (const k of ["BC_TENANT", "BC_CLIENT_ID", "BC_REFRESH_TOKEN", "SNAPSHOT_PASSPHRASE"]) if (!process.env[k]) throw new Error("Missing env " + k);
-            await collectFromSharePoint(dir);
-        }
+        } else await collectFromSharePoint(dir, chosen.meta);
         const res = await figuresFromPage(dir);
+        res.snapshot = chosen ? chosen.meta : { slot: "0500", fetchedAtMelbourne: res.asOf };
         console.log("Figures for " + res.f.monthLabel + ": " + res.invoices + " invoices in the snapshot · " + res.f.branch.rows.length + " branch rows · " + res.f.salesperson.rows.length + " salesperson rows · "
             + res.targetFiles + " targets file(s)" + (res.skipped.length ? " · skipped " + res.skipped.length : "") + " · page date " + res.today
             + " · picture " + res.shot.pxWidth + "×" + res.shot.pxHeight + " px, " + (res.png.length / 1024).toFixed(0) + " KB (" + res.shot.theme + " theme)");
@@ -349,10 +424,13 @@ async function sendMail(mail, png, to) {
             return;
         }
         const mail = renderEmail(res, commentary, "cid:dailysnapshot");
-        const to = (process.env.DAILY_EMAIL_TO || "").split(/[,;\s]+/).filter(Boolean);
-        if (process.env.DRY_RUN === "1" || process.env.DRY_RUN === "true") { await graphToken(); console.log("DRY RUN — nothing sent (" + to.length + " recipient(s) configured)."); return; }
+        const addrs = v => (v || "").split(/[,;\s]+/).filter(Boolean);
+        const to = addrs(process.env.DAILY_EMAIL_TO);
+        const cc = addrs(process.env.DAILY_EMAIL_CC).filter(a => !to.some(t => t.toLowerCase() === a.toLowerCase()));
+        if (process.env.DRY_RUN === "1" || process.env.DRY_RUN === "true") { await graphToken(); console.log("DRY RUN — nothing sent (" + to.length + " to, " + cc.length + " cc configured)."); return; }
         if (!to.length) throw new Error("DAILY_EMAIL_TO is empty — no recipients");
-        await sendMail(mail, res.png, to);
-        console.log("Sent to " + to.length + " recipient(s)" + (commentary ? ", with commentary." : ", without commentary."));
+        await sendMail(mail, res.png, to, cc);
+        console.log("Sent to " + to.length + " recipient(s)" + (cc.length ? " + " + cc.length + " cc" : "") + (commentary ? ", with commentary." : ", without commentary."));
+        if (chosen.mark) await markSent(chosen.mark, chosen.meta);
     } finally { try { fs.rmSync(dir, { recursive: true, force: true }); } catch (e) { /* temp dir */ } }
 })().catch(e => { console.error("DAILY EMAIL FAILED: " + e.message); process.exit(1); });
