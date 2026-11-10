@@ -4416,6 +4416,15 @@ function setBusyProgress(frac, reset) {
     if (bar) { if (reset) { bar.style.transition = "none"; bar.style.width = "0%"; void bar.offsetWidth; bar.style.transition = ""; } else bar.style.width = pct + "%"; }
     if (lbl) lbl.textContent = pct + "%";
 }
+// Last step of a job: fill the bar and hold the card until the fill has
+// been seen, so the card never disappears with the bar part-way
+// (the bar takes 0.2 s to slide; Faik, 2026-11-10: "when it is 100% the
+// load is completed").
+async function finishBusy() {
+    setBusyProgress(1);
+    await nextPaint();
+    await new Promise(r => setTimeout(r, 550));
+}
 // Resolves once the browser has painted, so a progress step is seen
 // before the next block of work starts.
 function nextPaint() { return new Promise(r => afterPaint(r)); }
@@ -10790,7 +10799,7 @@ async function eomOpenWithProgress() {
     setBusyProgress(0.9); setBusyDetail("Drawing the report…"); await nextPaint();
     if (state.tab !== "eom") return;
     renderCurrentTab();
-    setBusyProgress(1); await nextPaint();
+    await finishBusy();
 }
 function eomDrillRoots() {
     const key = filterStateKey() + "|" + (state.eomGpLow ? 1 : 0) + "|" + (state.eomGpHigh ? 1 : 0);
@@ -16964,11 +16973,9 @@ const FINANCE_VIEWERS = [RESTRICTED_NAV_OWNER, "michaelc@vicair.com.au", "daniel
 const PNL_VIEWERS = new Set(FINANCE_VIEWERS);
 // Overview reconciliation rows: the same four people as the P&L tab.
 const SRECON_VIEWERS = new Set(FINANCE_VIEWERS);
-// Export button + menu (export.js). Meant for four people — Faik,
-// Michael, Daniel, Shane (Faik, 2026-11-10) — and nobody else.
-// TRIAL: owner only until Faik has tried it on real figures; to open it
-// to the other three, change the next line to new Set(FINANCE_VIEWERS).
-const EXPORT_VIEWERS = new Set([RESTRICTED_NAV_OWNER]);
+// Export button + menu (export.js): four people only — Faik, Michael,
+// Daniel, Shane (Faik, 2026-11-10, after his own trial). Nobody else.
+const EXPORT_VIEWERS = new Set(FINANCE_VIEWERS);
 function exportAllowed() { return EXPORT_VIEWERS.has(currentSignInName()); }
 function applyExportAccess() {
     const ok = exportAllowed();
@@ -17490,7 +17497,7 @@ async function handleLoad() {
         applyLoadedData({ locs, items, customers, invoices, iles, creditMemos, shipments, returnReceipts,
                          quotes, quoteExtras, blanketOrders, valueEntries, salesOrders, salesOrderOutstanding,
                          from, to });
-        setBusyProgress(1); await nextPaint();
+        await finishBusy();
         // The reconciliation rows' ledger slice and its links come in the
         // background once the sales figures are on screen — only for the
         // people who can see those rows.

@@ -329,7 +329,7 @@
                 const bin = atob(pic.url.split(",")[1]), bytes = new Uint8Array(bin.length);
                 for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
                 save(new Blob([bytes], { type: "image/png" }), fileBase(found.title, job.name) + ".png");
-                await step(1, job.name);
+                if (card) await finishBusy();
                 return;
             }
             await step(0.05, "Getting the Excel writer…");
@@ -369,7 +369,7 @@
             if (job.kind === "tab") { const ws = wb.getWorksheet("About"); contents.forEach(c => ws.addRow(c)); }
             if (!wb.worksheets.length) { alert("Nothing could be exported from this pane."); return; }
             await writeBook(wb, fileBase(found.title, job.kind === "tab" ? "" : job.name));
-            await step(1, "Done");
+            if (card) { setBusyDetail("Done"); await finishBusy(); }
         } catch (e) {
             alert("Export failed: " + ((e && e.message) || e));
         } finally {
