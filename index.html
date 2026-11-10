@@ -94,6 +94,9 @@
            its bottom edge; lift the filters beside it by the same amount so
            every box lines up on one row. */
         .toolbar > .field { padding-bottom: 11.5px; }
+        /* Build tree / Update forecast sit beside lifted fields: same lift and
+           the same 36px height as the boxes, so they share one line. */
+        #decompApply, #fcRerun { margin-bottom: 11.5px; height: 36px; box-sizing: border-box; padding-top: 0; padding-bottom: 0; }
         .period-frame > legend label { font-size: 11px; letter-spacing: 0.08em; }
         .period-frame .field label { font-size: 9.5px; font-weight: 600; text-transform: none; letter-spacing: 0.2px; }
         .toolbar label { font-size: 10px; font-weight: 700; color: #6e72a6; text-transform: uppercase; letter-spacing: 0.5px; }
@@ -221,6 +224,13 @@
         /* Salesperson run-rate tabs: table and comparison chart side by side */
         /* Salesperson run-rate tables: rep name beside the code */
         .rr-name { font-size: 11px; opacity: .7; margin-left: 6px; }
+
+        /* EOM Report header: items packed left, wider search box, the two GP
+           buttons close together, Export to Excel at the right edge. */
+        #eomPanel .panel-header { justify-content: flex-start; }
+        #eomPanel .panel-header input.search { min-width: 360px; width: 360px; }
+        #eomPanel .panel-header .gp-filter-btn.high { margin-left: -4px; }
+        #eomPanel .panel-header .more-btn { margin-left: auto; }
 
         /* ---------- DAILY SNAPSHOT (landing tab) ---------- */
         /* Colours inherit from .kpi so all themes carry over; the two
