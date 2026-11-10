@@ -144,7 +144,11 @@ const CAPTURE_SCRIPT = `(async () => {
     if (document.fonts && document.fonts.ready) await document.fonts.ready;
     await new Promise(r => setTimeout(r, 400));
     const c = document.querySelector(".container").getBoundingClientRect();
-    return JSON.stringify({ x: 0, y: Math.max(0, Math.floor(c.top + window.scrollY)), width: Math.ceil(document.documentElement.clientWidth), height: Math.ceil(c.height) });
+    // The page's own background and text colour, so the email around the picture can match the theme.
+    let bg = "rgb(255, 255, 255)";
+    for (let e = document.querySelector(".container"); e; e = e.parentElement) { const b = getComputedStyle(e).backgroundColor; if (b && b !== "transparent" && b !== "rgba(0, 0, 0, 0)") { bg = b; break; } }
+    return JSON.stringify({ clip: { x: 0, y: Math.max(0, Math.floor(c.top + window.scrollY)), width: Math.ceil(document.documentElement.clientWidth), height: Math.ceil(c.height) },
+        bg, ink: getComputedStyle(document.querySelector(".container")).color });
 })()`;
 async function figuresFromPage(dataDir) {
     const mime = { ".html": "text/html", ".js": "application/javascript", ".json": "application/json" };
@@ -196,7 +200,8 @@ async function figuresFromPage(dataDir) {
         const res = JSON.parse(r.result.result.value);
         const c = await send("Runtime.evaluate", { expression: CAPTURE_SCRIPT, returnByValue: true, awaitPromise: true });
         if (!c.result || !c.result.result || typeof c.result.result.value !== "string") throw new Error("the page could not be prepared for the picture: " + JSON.stringify(c.result || c).slice(0, 400));
-        const clip = JSON.parse(c.result.result.value);
+        const prep = JSON.parse(c.result.result.value), clip = prep.clip;
+        const hex = (rgb, fallback) => { const m = /(\d+)\D+(\d+)\D+(\d+)/.exec(rgb || ""); return m ? "#" + [1, 2, 3].map(i => (+m[i]).toString(16).padStart(2, "0")).join("") : fallback; };
         // Graph takes about 3 MB of attachment in one sendMail call: step the sharpness down if a picture is too heavy.
         let png = null, scale = 2;
         for (const dsf of [2, 1.5, 1]) {
@@ -209,7 +214,8 @@ async function figuresFromPage(dataDir) {
             if (png.length <= 2.6 * 1048576) break;
         }
         res.png = png;
-        res.shot = { cssWidth: clip.width, pxWidth: Math.round(clip.width * scale), pxHeight: Math.round(clip.height * scale), theme: THEME };
+        res.shot = { cssWidth: clip.width, pxWidth: Math.round(clip.width * scale), pxHeight: Math.round(clip.height * scale), theme: THEME,
+                     bg: hex(prep.bg, "#ffffff"), ink: hex(prep.ink, "#1f2430") };
         ws.close();
         return res;
     } finally { chrome.kill(); srv.close(); }
@@ -223,7 +229,7 @@ async function figuresFromPage(dataDir) {
 const COMMENTARY_SYSTEM = [
     "You write the short opening dot points of a daily sales email at an Australian HVAC wholesaler. It goes to internal staff every morning, above a picture of the sales dashboard they already know.",
     "You are given the dashboard's own figures as JSON: month-to-date sales, goods shipped but not yet invoiced, gross profit, selling days, each branch and each salesperson against their monthly sales target, and two product quantity targets (AirTouch kits and Omniflow units).",
-    "Write 3 to 5 dot points that tell a busy reader where the month stands and what matters today: how sales compare with where they should be at this point of the month, which branch is furthest ahead or behind, what daily rate is now needed, and how the two quantity targets are tracking. One point per idea, each a single plain sentence of at most about 25 words. The reader can see every number in the picture below, so pick the few that matter rather than restating the tables.",
+    "Write 10 to 12 dot points that walk a busy reader through where the month stands and what matters today. Cover, in roughly this order: sales so far against the month's target and against where they should be at this point of the month; goods shipped but not yet invoiced and what they add; gross profit and margin; the daily rate achieved so far and the rate now required; each branch in turn; the salespeople picture; the AirTouch kit target; the Omniflow target; and what would most help close the gap. One point per idea, each a single plain sentence of at most about 25 words, and no two points making the same observation. If the figures do not support ten distinct points, write fewer rather than padding.",
     "Use only the figures provided. Quote them as given, rounded sensibly (for example $401k, 19% of target); do not derive new totals or forecasts of your own. If something needed is missing, leave it out rather than guessing.",
     "This is read by the whole team, so name a salesperson only to recognise a result that is ahead of pace; describe shortfalls at branch or team level, not by person.",
     "Australian English, matter-of-fact and encouraging without hype. Output format: each dot point on its own line starting with a hyphen and a space, and nothing else: no greeting, no intro line, no sign-off, no headings, no bold or other markdown, no emojis.",
@@ -282,19 +288,28 @@ function renderEmail(res, commentary, imgSrc) {
     const subject = "Daily Snapshot · " + d.toLocaleDateString("en-AU", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" })
         + " · " + f.monthLabel + " sales " + money0(f.sales) + (tot.pctAchieved != null ? " (" + (tot.pctAchieved * 100).toFixed(0) + "% of target)" : "");
     const alt = "Daily Snapshot for " + f.monthLabel + ": sales plus shipped not invoiced " + money0(f.total) + ", gross profit " + money0(f.gp) + " (" + (f.gpPct * 100).toFixed(2) + "%).";
-    // Calibri 11pt (Faik, 2026-11-10); the commentary is a dot-point list.
-    // The whole block sits centred in the message, the points left-aligned
-    // above the picture and exactly as wide as it. No heading line in the
-    // body: the subject already carries the date.
-    const FONT = "font-family:Calibri,Segoe UI,Arial,sans-serif;font-size:11pt;";
+    // Layout (Faik, 2026-11-10): a bold header, a gap, the commentary as a
+    // dot-point list, a gap, then the picture of the tab. Calibri 11pt.
+    // The block sits centred in the message, text left-aligned and exactly
+    // as wide as the picture. The whole message takes the tab's own page
+    // colour (and its text colour), so the picture blends into the email
+    // instead of sitting on white.
+    const bg = res.shot.bg, ink = res.shot.ink;
+    const FONT = "font-family:Calibri,Segoe UI,Arial,sans-serif;font-size:11pt;color:" + ink + ";";
+    const header = "DAILY SALES SUMMARY · " + d.toLocaleDateString("en-AU", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }).toUpperCase();
     const points = commentary ? commentary.split(/\n+/).map(p => p.replace(/^\s*(?:[-•*–]|\d+[.)])\s*/, "").trim()).filter(Boolean) : [];
-    const list = points.length ? '<ul style="' + FONT + 'line-height:1.45;color:#1f2430;margin:0 0 12px;padding:0 0 0 22px;">'
-        + points.map(p => '<li style="' + FONT + 'margin:0 0 4px;">' + esc(p) + "</li>").join("") + "</ul>" : "";
-    const html = '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head><body style="margin:0;padding:14px;">'
-        + '<table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0" width="' + SHOW_WIDTH + '" style="width:' + SHOW_WIDTH + 'px;max-width:100%;margin:0 auto;"><tr><td align="left" style="' + FONT + '">'
-        + list
-        + '<img src="' + imgSrc + '" width="' + SHOW_WIDTH + '" alt="' + esc(alt) + '" style="display:block;width:100%;max-width:' + SHOW_WIDTH + 'px;height:auto;border:0;margin:0 auto;">'
-        + "</td></tr></table></body></html>";
+    const list = points.length ? '<ul style="' + FONT + 'line-height:1.45;margin:0;padding:0 0 0 30px;">'
+        + points.map(p => '<li style="' + FONT + 'margin:0 0 5px;">' + esc(p) + "</li>").join("") + "</ul>" : "";
+    const gap = h => '<tr><td height="' + h + '" style="height:' + h + 'px;font-size:1px;line-height:1px;">&nbsp;</td></tr>';
+    const html = '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>'
+        + '<body bgcolor="' + bg + '" style="margin:0;padding:0;background-color:' + bg + ';">'
+        + '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" bgcolor="' + bg + '" style="background-color:' + bg + ';"><tr><td align="center" style="padding:18px 14px 24px;">'
+        + '<table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0" width="' + SHOW_WIDTH + '" style="width:' + SHOW_WIDTH + 'px;max-width:100%;margin:0 auto;">'
+        + '<tr><td align="left" style="' + FONT + 'font-size:13pt;font-weight:700;letter-spacing:.3px;">' + esc(header) + "</td></tr>"
+        + (list ? gap(18) + '<tr><td align="left" style="' + FONT + '">' + list + "</td></tr>" : "")
+        + gap(24)
+        + '<tr><td align="left"><img src="' + imgSrc + '" width="' + SHOW_WIDTH + '" alt="' + esc(alt) + '" style="display:block;width:100%;max-width:' + SHOW_WIDTH + 'px;height:auto;border:0;margin:0 auto;"></td></tr>'
+        + "</table></td></tr></table></body></html>";
     return { subject, html };
 }
 
