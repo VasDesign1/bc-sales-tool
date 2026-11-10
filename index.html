@@ -2236,8 +2236,7 @@
             <section data-tab-content="dailySnapshot">
                 <div class="hint rr-hint"><span><strong id="dsMonth">—</strong> so far. <span id="dsAsOf"></span></span><span class="rr-tgt"><span class="rr-tgt-lbl">Targets</span><span id="dsTgtStatus" title="Read from the Sales Budgets-Targets folder on SharePoint">not loaded</span><button type="button" class="more-btn" id="dsTgtReload" title="Re-read the targets folder on SharePoint">↻</button></span></div>
                 <div id="dsEmpty" class="ds-empty" style="display:none;">
-                    <div class="ds-empty-msg" id="dsEmptyMsg">No figures loaded yet.</div>
-                    <button type="button" class="btn btn-primary" id="dsLoadBtn">Open the latest snapshot</button>
+                    <div class="ds-empty-msg" id="dsEmptyMsg">No figures loaded yet. Pick a snapshot from <strong>Fast lookup</strong>, or click <strong>Load sales</strong> for live data.</div>
                 </div>
                 <div class="ds-top">
                     <div class="kpi k-rev ds-pane" id="dsPaneSales">
@@ -14574,10 +14573,9 @@ function renderDailySnapshot() {
     if (spTargets.status === "idle") loadSalespersonTargets();
     paintTargetsStatus("ds");
     const $ = id => document.getElementById(id);
-    if (!$("dsLoadBtn").dataset.wired) {
-        $("dsLoadBtn").addEventListener("click", () => autoLoadLatestSnapshot(true));
+    if (!$("dsEmpty").dataset.wired) {
         document.querySelectorAll("[data-ds-goto]").forEach(b => b.addEventListener("click", () => setActiveTab(b.dataset.dsGoto)));
-        $("dsLoadBtn").dataset.wired = "1";
+        $("dsEmpty").dataset.wired = "1";
     }
     const f = dsSnapshotFigures();
     $("dsMonth").textContent = f.monthLabel;
@@ -14617,38 +14615,6 @@ function renderDailySnapshot() {
     dsPaintTable("dsBrTable", "branch", f.branch, f.sd);
     dsPaintTable("dsSpTable", "salesperson", f.salesperson, f.sd);
 }
-// Landing: open the newest snapshot without a click. Silent runs (right
-// after sign-in) only go ahead when this device already holds the
-// passphrase, so nobody gets a prompt just for opening the page; the
-// tab's own button runs it with the prompt allowed.
-let dsAutoLoadBusy = false;
-async function autoLoadLatestSnapshot(interactive) {
-    if (dsAutoLoadBusy || state.invoices.length) return;
-    const msg = t => { const el = document.getElementById("dsEmptyMsg"); if (el) el.textContent = t; };
-    // Nothing is loaded yet, so setActiveTab has not painted the tab:
-    // paint it once now (shows this notice, starts the targets read).
-    if (state.tab === "dailySnapshot") renderDailySnapshot();
-    if (!interactive) {
-        let p = ""; try { p = localStorage.getItem("snapshotPassphrase") || ""; } catch (e) { /* storage blocked */ }
-        if (!p) { msg("No figures loaded yet. Open the latest snapshot (asks for the snapshot passphrase once on this device), or use Load sales for live data."); return; }
-    }
-    dsAutoLoadBusy = true;
-    msg("Opening the latest snapshot…");
-    try {
-        const metas = await Promise.all(SNAPSHOT_SLOTS.map(async s => {
-            try { const r = await spFetch("snapshots/" + s.slot + ".meta.json"); return r.ok ? { slot: s.slot, at: (await r.json()).fetchedAtMelbourne || "" } : null; }
-            catch (e) { return null; }
-        }));
-        const newest = metas.filter(Boolean).sort((a, b) => a.at < b.at ? 1 : -1)[0];
-        if (!newest) { msg("No snapshot could be reached. Use Fast lookup or Load sales."); return; }
-        if (state.invoices.length) return;   // the user loaded something meanwhile
-        await loadSnapshot(newest.slot);
-    } finally {
-        dsAutoLoadBusy = false;
-        if (!state.invoices.length) msg("No figures loaded yet. Open the latest snapshot, or use Load sales for live data.");
-    }
-}
-
 // ============================================================
 // MTD TAB
 // ============================================================
@@ -17104,7 +17070,9 @@ async function handleSignIn() {
         document.getElementById("loadBtn").disabled = false;
         document.getElementById("signOutBtn").style.display = "inline-block";
         updateRestrictedNav();
-        autoLoadLatestSnapshot(false);   // landing tab fills itself from the newest snapshot; not awaited
+        // Nothing loads by itself (Faik, 2026-11-10): the user picks Fast
+        // lookup or Load sales. Until then the landing tab shows a notice.
+        if (state.tab === "dailySnapshot" && !state.invoices.length) renderDailySnapshot();
     } catch (err) { alert("Sign-in failed: " + (err.message || err)); }
 }
 
