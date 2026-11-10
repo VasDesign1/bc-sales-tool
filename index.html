@@ -282,6 +282,13 @@
         .ds-part-val.ds-alt { font-weight: 500; font-style: italic; }
         .ds-days .kpi { padding: 12px 18px; }
         .ds-table tr.ds-total td { font-weight: 700; background: rgba(128,128,128,0.14); }   /* neutral tint: reads on light and dark themes */
+        .ds-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; }
+        .ds-pair > .panel { min-width: 0; }
+        .ds-kit-sum { display: flex; flex-wrap: wrap; gap: 8px 26px; padding: 12px 16px 14px; align-items: flex-end; }
+        .ds-kit-stat > span { display: block; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; opacity: .65; margin-bottom: 3px; }
+        .ds-kit-stat b { font-size: 17px; font-weight: 700; }
+        .ds-kit-stat b .badge, .ds-kit-stat b .rr-bar { font-size: 11px; vertical-align: middle; }
+        @media (max-width: 1400px) { .ds-pair { grid-template-columns: 1fr; } }
         .ds-empty { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; padding: 14px 16px; margin-bottom: 18px; border-radius: 8px; border: 1px dashed rgba(128,128,128,0.5); font-size: 13px; }
         @media (max-width: 1100px) { .ds-top { grid-template-columns: 1fr; } .kpi.ds-pane .value.ds-big { font-size: 34px; } }
 
@@ -2305,6 +2312,8 @@
                         </table>
                     </div>
                 </div>
+                <!-- Kit quantity targets (AirTouch, Omniflow) side by side; filled by dsPaintKits -->
+                <div class="ds-pair" id="dsKits"></div>
             </section>
 
             <!-- TAB: Overview -->
@@ -14550,7 +14559,8 @@ function dsSnapshotFigures() {
     return { mk, sd, monthLabel: m.mStart.toLocaleDateString("en-AU", { month: "long", year: "numeric" }),
              sales, sni, total, gp, gpPct, gpAll, gpAllPct: total ? gpAll / total : 0, sniGp, sniGpExact,
              invoices: m.totInv, sniOrders: pipe.sniCount, cost: sales - gp,
-             branch: table("branch"), salesperson: table("salesperson") };
+             branch: table("branch"), salesperson: table("salesperson"),
+             kits: DS_KIT_TARGETS.map(g => dsKitFigures(g, m, sd)) };
 }
 // Same ten columns as the run-rate tabs' own tables.
 function dsPaintTable(tableId, entity, data, sd) {
@@ -14576,6 +14586,105 @@ function dsPaintTable(tableId, entity, data, sd) {
     document.querySelector("#" + tableId + " tbody").innerHTML = body
         ? body + '<tr class="ds-total">' + cells(data.total, true) + "</tr>"
         : '<tr><td colspan="10" class="empty">No data this month.</td></tr>';
+}
+// ---- Kit quantity targets at the foot of the Daily Snapshot (Faik, 2026-11-10) ----
+// A combined monthly QUANTITY target over a fixed list of item codes;
+// each code is listed on its own and added up. Quantities are invoiced
+// units this month (same month-to-date window and the same salesperson /
+// customer / branch filters as the rest of the tab; the item filter is
+// ignored, it would empty the list). Every code opens into
+// salesperson → customer → invoice, so one click shows who sold it, to
+// whom, how many and from which branch.
+// To change a target or the codes, edit this list.
+const DS_KIT_TARGETS = [
+    { key: "airtouch", title: "AirTouch Kit Targets", target: 120, items: ["AT5-1-8ZNE", "AT5-9-16ZNE", "AT2-1-8ZNE", "AT2-9-16ZNE"] },
+    { key: "omniflow", title: "Omniflow Targets",     target: 150, items: ["5W50", "3W40", "4W40", "2W40", "6W50"] },
+];
+function dsKitFigures(group, m, sd) {
+    const want = new Map(group.items.map(c => [c.toUpperCase(), c]));
+    const spNames = spBudgetNames("salesperson"), fl = state.filters;
+    const node = (key, label) => ({ key, label, qty: 0, sales: 0, docs: new Set(), branches: new Set(), kids: new Map() });
+    const kid = (parent, id, label) => { if (!parent.kids.has(id)) parent.kids.set(id, node(parent.key + "|" + id, label)); return parent.kids.get(id); };
+    const items = new Map(group.items.map(c => [c, node("kit|" + group.key + "|" + c, c)]));
+    for (const inv of state.invoices) {
+        const d = new Date(inv.postingDate);
+        if (!(d >= m.mStart && d <= m.today)) continue;
+        const sp = inv.salesperson || "(unassigned)";
+        if (fl.salesperson && sp !== fl.salesperson) continue;
+        if (fl.customer && (inv.customerNumber || "") !== fl.customer) continue;
+        (inv.salesInvoiceLines || []).forEach((ln, li) => {
+            const code = want.get(String(ln.lineObjectNumber || "").trim().toUpperCase());
+            if (!code) return;
+            const branch = locationCode(ln.locationId);
+            if (fl.location && branch !== fl.location) return;
+            const qty = num(ln.quantity), sales = lineNetAmount(ln);
+            const it = items.get(code);
+            if (!it.desc && ln.description) it.desc = ln.description;
+            const spN = kid(it, sp, sp + (spNames[sp] ? " · " + spNames[sp] : ""));
+            const cuN = kid(spN, inv.customerNumber || "(unknown)", inv.customerName || inv.customerNumber || "(unknown)");
+            const leaf = kid(cuN, (inv.number || inv.id || "") + "#" + li, fmtDate(inv.postingDate) + " · " + (inv.number || ""));
+            leaf.docNo = inv.number || "";
+            for (const n of [it, spN, cuN, leaf]) { n.qty += qty; n.sales += sales; n.docs.add(inv.number || inv.id); n.branches.add(branch); }
+        });
+    }
+    const finish = n => { n.children = [...n.kids.values()].sort((a, b) => b.qty - a.qty || (a.label < b.label ? -1 : 1)); n.children.forEach(finish); return n; };
+    const rows = [...items.values()].map(finish);
+    const qty = rows.reduce((s, r) => s + r.qty, 0), sales = rows.reduce((s, r) => s + r.sales, 0);
+    const docs = new Set(); rows.forEach(r => r.docs.forEach(x => docs.add(x)));
+    const rr = computeRunRate(qty, group.target, sd.total, sd.passed, sd.remaining);
+    rr.balance = qty - group.target;   // + when over target, − when behind (as the run-rate tables)
+    return Object.assign({ key: group.key, title: group.title, target: group.target, rows, qty, sales, docs: docs.size }, rr);
+}
+function dsPaintKits(kits, loaded, sd) {
+    const host = document.getElementById("dsKits");
+    if (!host.dataset.wired) {
+        host.addEventListener("click", e => {
+            if (e.target.closest("a")) return;
+            const tr = e.target.closest("tr[data-key]");
+            if (!tr || tr.dataset.expandable !== "1") return;
+            const k = tr.dataset.key;
+            if (state.expandedMatrix.has(k)) state.expandedMatrix.delete(k); else state.expandedMatrix.add(k);
+            if (state._dsKits) dsPaintKits(state._dsKits.kits, state._dsKits.loaded, state._dsKits.sd);
+        });
+        host.dataset.wired = "1";
+    }
+    state._dsKits = { kits, loaded, sd };
+    const q = n => Number.isInteger(n) ? fmtInt(n) : fmtQty(n);
+    const perDay = n => (Math.round(n * 10) / 10).toLocaleString("en-AU", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+    host.innerHTML = kits.map(k => {
+        const acc = [];
+        const emit = (n, depth) => {
+            const expandable = n.children.length > 0, open = state.expandedMatrix.has(n.key);
+            const arrow = expandable ? (open ? "▾" : "▸") : "";
+            const label = escapeHtml(n.label) + (depth === 0 && n.desc ? `<span class="rr-name">${escapeHtml(n.desc)}</span>` : "") + (n.docNo ? wiiseDocLinkHtml("Posted Sales Invoice", n.docNo) : "");
+            acc.push(`<tr data-key="${escapeAttr(n.key)}" data-expandable="${expandable ? 1 : 0}" style="${treeRowStyle(depth)}cursor:${expandable ? "pointer" : "default"};">
+                <td>${"&nbsp;".repeat(depth * 4)}<span style="display:inline-block; width:14px; color:#3f51b5;">${arrow}</span> ${label}</td>
+                <td>${escapeHtml([...n.branches].sort().join(", "))}</td>
+                <td class="num">${loaded ? q(n.qty) : "—"}</td>
+                <td class="num">${loaded ? fmtMoneyFull(n.sales) : "—"}</td>
+                <td class="num">${loaded ? fmtInt(n.docs.size) : "—"}</td>
+            </tr>`);
+            if (expandable && open) n.children.forEach(c => emit(c, depth + 1));
+        };
+        k.rows.forEach(r => emit(r, 0));
+        const stat = (lbl, val) => `<div class="ds-kit-stat"><span>${lbl}</span><b>${val}</b></div>`;
+        const bal = !loaded ? "—" : `<i style="font-style:normal; color:${k.balance >= 0 ? "#2e7d32" : "#c62828"};">${k.balance >= 0 ? "+" : "−"}${q(Math.abs(k.balance))}</i>`;
+        const bar = !loaded ? "—" : `<span class="rr-bar b${rrPctBand(k.pctAchieved)}" title="${fmtPct(k.pctAchieved)} of target"><span class="rr-fill" style="width:${Math.max(0, Math.min(100, k.pctAchieved * 100)).toFixed(1)}%;"></span><span class="rr-lbl">${fmtPct(k.pctAchieved)}</span></span>`;
+        return `<div class="panel" id="dsKit_${k.key}">
+            <div class="panel-header"><h2>${escapeHtml(k.title)}</h2><span class="meta">target ${fmtInt(k.target)} units a month, all codes together · click a code to see who sold it</span></div>
+            <div class="ds-kit-sum">
+                ${stat("Sold this month", loaded ? q(k.qty) : "—")}${stat("Target", fmtInt(k.target))}${stat("Balance", bal)}
+                ${stat("Target a day", perDay(k.targetDaily))}${stat("Actual a day", loaded ? perDay(k.actualDaily) : "—")}${stat("Required a day", !loaded ? "—" : !sd.remaining ? "n/a" : perDay(Math.max(0, k.requiredDaily)))}
+                ${stat("Status", loaded ? statusBadgeRunRate(k.status) : "—")}${stat("% Achieved", bar)}
+            </div>
+            <div class="table-scroll">
+                <table id="dsKitTable_${k.key}" class="ds-table">
+                    <thead><tr><th>Item code → Salesperson → Customer → Invoice</th><th>Branch</th><th class="num">Qty</th><th class="num">Sales (excl. tax)</th><th class="num">Invoices</th></tr></thead>
+                    <tbody>${acc.join("")}<tr class="ds-total"><td>Total</td><td></td><td class="num">${loaded ? q(k.qty) : "—"}</td><td class="num">${loaded ? fmtMoneyFull(k.sales) : "—"}</td><td class="num">${loaded ? fmtInt(k.docs) : "—"}</td></tr></tbody>
+                </table>
+            </div>
+        </div>`;
+    }).join("");
 }
 function renderDailySnapshot() {
     renderFilterChips();
@@ -14623,6 +14732,7 @@ function renderDailySnapshot() {
 
     dsPaintTable("dsBrTable", "branch", f.branch, f.sd);
     dsPaintTable("dsSpTable", "salesperson", f.salesperson, f.sd);
+    dsPaintKits(f.kits, loaded, f.sd);
 }
 // ============================================================
 // MTD TAB
