@@ -23,7 +23,8 @@
 
     // ---- Sidebar tabs (also used by the tab strip in Tab View) ----
     const TABS = {
-        overview: B('Overview', 'The headline figures for the loaded period: sales, gross profit, quantity, the adjusted set (with returns taken off), the open pipeline, and the main charts. Everything follows the Period and the filters in the toolbar.'),
+        dailySnapshot: B('Daily Snapshot', 'The first page you see: this month so far in one view. Sales plus goods shipped but not yet invoiced, gross profit, and the sales run rate for every branch and salesperson against target. It always shows the current calendar month, whatever the Period in the toolbar says.'),
+        overview: B('Overview','The headline figures for the loaded period: sales, gross profit, quantity, the adjusted set (with returns taken off), the open pipeline, and the main charts. Everything follows the Period and the filters in the toolbar.'),
         deepInsights: B('Deep Insights', 'Nineteen visual analyses built from the same loaded invoices: sales flow, sunburst, salesperson radar, funnel, treemap, heatmaps, RFM segments, cohorts, geography and more. Good for spotting patterns rather than reading exact numbers.'),
         branch: B('Branch Sales', 'Sales, gross profit and volume by branch. The branch is the Wiise location on each invoice line, so one invoice can be split across branches. Monthly trend, top branches, GP, volume, a fiscal-year by month table and a drill-down tree.'),
         salesperson: B('Salesperson Sales', 'Sales, gross profit and volume by salesperson. The salesperson is the code on the invoice header. Monthly trend, top salespeople, GP, volume, a fiscal-year by month table and a drill-down tree.'),
@@ -83,6 +84,10 @@
         includeRentalsKnob: B('Rentals', 'Rental income (G/L line 7005) is left out of every figure by default. Switch it on to include it, which is what Wiise and Power BI totals do.'),
         includeRentalsState: B('Rentals', 'Off: rental income excluded. On: included.'),
         filterChips: B('Active filters', 'The filters currently applied, as chips. Click the × on a chip to clear that filter.'),
+        // Daily Snapshot tab
+        dsPaneSales: B('Sales + Shipped Not Invoiced', 'The big figure is this month’s invoiced sales (excluding tax) plus goods already delivered but not yet invoiced. The two parts are shown underneath, and the thin bar shows how the total splits between them.'),
+        dsPaneGp: B('Gross Profit, month to date', 'Gross profit in dollars and as a percentage on this month’s invoiced sales, the same figures as the Month-to-Date tab. The second line adds the margin sitting in goods shipped but not yet invoiced; it is marked as an estimate when the order lines carry no cost.'),
+        dsLoadBtn: B('Open the latest snapshot', 'Loads the most recent of the three daily snapshots so the page fills in. Asks for the snapshot passphrase the first time on this device.'),
         // Run-rate tabs
         spsrMonthSel: B('Month', 'Which budgeted month to look at. The current month shows a live run rate; a past month shows the finished result; a future month shows the target only.'),
         spmrMonthSel: B('Month', 'Which budgeted month to look at. The current month shows a live run rate; a past month shows the finished result; a future month shows the target only.'),

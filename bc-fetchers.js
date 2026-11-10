@@ -608,6 +608,10 @@ async function fetchSalesOrderOutstandingLines() {
     // for computing outstanding amount as (amount × outstandingQty / qty).
     const fLineAmount  = bcFindField(fields, [/^amount$/i, /^line.?amount$/i]);
     const fSniQty     = bcFindField(fields, [/^qty.?shipped.?not.?invoiced$/i, /qtyShippedNotInvoiced/i]);
+    // Unit cost on the order line (Sales Line "Unit Cost (LCY)"), when the
+    // web service publishes it: lets the Daily Snapshot tab put a cost on
+    // shipped-not-invoiced lines. Absent → unitCostLcy stays null.
+    const fUnitCost   = bcFindField(fields, [/^unit.?cost.?\(?lcy\)?$/i, /unitCostLcy/i, /^unit.?cost$/i]);
     // Per-line shipmentDate — PBI's "Outstanding Sales Orders" tile
     // filters on the line's Shipment Date (each line carries its own
     // expected ship date, independent of the order header). Confirmed
@@ -637,6 +641,7 @@ async function fetchSalesOrderOutstandingLines() {
         lineAmount:            fLineAmount ? num(r[fLineAmount]) : 0,
         shippedNotInvLcy:      fSniLcy ? num(r[fSniLcy]) : 0,
         shippedNotInvLcyExVat: fSniLcyNoVat ? num(r[fSniLcyNoVat]) : 0,
+        unitCostLcy:           fUnitCost ? num(r[fUnitCost]) : null,
         shipmentDate:          fShipDate ? (r[fShipDate] || "").toString().slice(0, 10) : "",
     }));
 }

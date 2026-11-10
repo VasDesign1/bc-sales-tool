@@ -222,6 +222,28 @@
         /* Salesperson run-rate tables: rep name beside the code */
         .rr-name { font-size: 11px; opacity: .7; margin-left: 6px; }
 
+        /* ---------- DAILY SNAPSHOT (landing tab) ---------- */
+        /* Colours inherit from .kpi so all themes carry over; the two
+           parts of a pane are told apart by the swatch + weight, not by a
+           text colour that could clash with a theme. */
+        .ds-top { display: grid; grid-template-columns: 3fr 2fr; gap: 14px; margin-bottom: 18px; }
+        .ds-pane { padding: 20px 24px; }
+        .kpi.ds-pane .value.ds-big { font-size: 44px; line-height: 1.1; margin-top: 8px; }
+        .ds-pct { font-size: 0.5em; font-weight: 600; margin-left: 12px; opacity: .85; white-space: nowrap; }
+        .ds-split { display: flex; height: 8px; border-radius: 4px; overflow: hidden; margin-top: 12px; background: rgba(128,128,128,0.25); }
+        .ds-seg { display: block; height: 100%; }
+        .ds-seg.s1, .ds-dot.s1 { background: #26c6da; }
+        .ds-seg.s2, .ds-dot.s2 { background: #ffb300; }
+        .ds-dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 7px; }
+        .ds-parts { display: flex; gap: 36px; flex-wrap: wrap; margin-top: 12px; }
+        .ds-part-lbl { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; opacity: .85; }
+        .ds-part-val { font-size: 22px; font-weight: 700; margin-top: 3px; letter-spacing: -0.2px; }
+        .ds-part-val.ds-alt { font-weight: 500; font-style: italic; }
+        .ds-days .kpi { padding: 12px 18px; }
+        .ds-table tr.ds-total td { font-weight: 700; background: rgba(128,128,128,0.14); }   /* neutral tint: reads on light and dark themes */
+        .ds-empty { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; padding: 14px 16px; margin-bottom: 18px; border-radius: 8px; border: 1px dashed rgba(128,128,128,0.5); font-size: 13px; }
+        @media (max-width: 1100px) { .ds-top { grid-template-columns: 1fr; } .kpi.ds-pane .value.ds-big { font-size: 34px; } }
+
         @media (max-width: 1100px) {
             .sidebar { width: 200px; }
             .kpi-row { grid-template-columns: repeat(2, 1fr); }
@@ -748,46 +770,46 @@
         .tab-strip button.stub { color: #9a9a9a; }
         .tab-strip button.stub::after { content: 'WIP'; font-size: 9px; margin-left: 6px; opacity: .8; }
         /* Per-theme tab colours: inactive = that theme's panel, active = its primary button */
-        html.theme-onyx .tab-strip button { background: #141416; border-color: #2a2820; color: #c8c4bb; box-shadow: none; }
-        html.theme-onyx .tab-strip button:hover { filter: brightness(0.96); }
-        html.theme-onyx .tab-strip .ts-row button.active { background: #d4af7a; color: #0a0a0b; border-color: transparent; }
-        html.theme-onyx .tab-strip .ts-row { border-bottom-color: #2a2820; }
-        html.theme-linen .tab-strip button { background: #ece8df; border-color: rgba(45,42,36,0.18); color: #2d2a24; box-shadow: none; }
-        html.theme-linen .tab-strip button:hover { filter: brightness(0.96); }
-        html.theme-linen .tab-strip .ts-row button.active { background: #5b6e3f; color: #f4f1eb; border-color: transparent; }
-        html.theme-linen .tab-strip .ts-row { border-bottom-color: rgba(45,42,36,0.25); }
-        html.theme-aurora .tab-strip button { background: #141423; border-color: rgba(255,255,255,0.12); color: #e8e6f5; box-shadow: none; }
-        html.theme-aurora .tab-strip button:hover { filter: brightness(0.96); }
-        html.theme-aurora .tab-strip .ts-row button.active { background: linear-gradient(135deg, #b57bff, #6be0ff); color: #08081b; border-color: transparent; }
-        html.theme-aurora .tab-strip .ts-row { border-bottom-color: rgba(255,255,255,0.14); }
-        html.theme-atelier .tab-strip button { background: #fff; border-color: #000; color: #000; box-shadow: none; }
-        html.theme-atelier .tab-strip button:hover { filter: brightness(0.96); }
-        html.theme-atelier .tab-strip .ts-row button.active { background: #ff4400; color: #fff; border-color: transparent; }
-        html.theme-atelier .tab-strip .ts-row { border-bottom-color: #000; }
-        html.theme-atelier .tab-strip button { border-radius: 0; border-width: 2px; text-transform: uppercase; }
-        html.theme-concierge .tab-strip button { background: #f3eee5; border-color: rgba(44,42,38,0.14); color: #2c2a26; box-shadow: none; }
-        html.theme-concierge .tab-strip button:hover { filter: brightness(0.96); }
-        html.theme-concierge .tab-strip .ts-row button.active { background: #0e4d3f; color: #f3eee5; border-color: transparent; }
-        html.theme-concierge .tab-strip .ts-row { border-bottom-color: rgba(44,42,38,0.22); }
-        html.theme-marble .tab-strip button { background: #ffffff; border-color: rgba(28,40,51,0.12); color: #1e3a5f; box-shadow: none; }
-        html.theme-marble .tab-strip button:hover { filter: brightness(0.96); }
-        html.theme-marble .tab-strip .ts-row button.active { background: #1e3a5f; color: #f9fafb; border-color: transparent; }
-        html.theme-marble .tab-strip .ts-row { border-bottom-color: rgba(28,40,51,0.18); }
-        html.theme-velvet .tab-strip button { background: #2a1014; border-color: rgba(201,160,74,0.22); color: #c9a04a; box-shadow: none; }
-        html.theme-velvet .tab-strip button:hover { filter: brightness(0.96); }
-        html.theme-velvet .tab-strip .ts-row button.active { background: #c9a04a; color: #1a0a0f; border-color: transparent; }
-        html.theme-velvet .tab-strip .ts-row { border-bottom-color: rgba(201,160,74,0.3); }
-        html.theme-glacier .tab-strip button { background: #f6f9fb; border-color: rgba(26,39,56,0.12); color: #1b4f7e; box-shadow: none; }
-        html.theme-glacier .tab-strip button:hover { filter: brightness(0.96); }
-        html.theme-glacier .tab-strip .ts-row button.active { background: #1b4f7e; color: #f6f9fb; border-color: transparent; }
-        html.theme-glacier .tab-strip .ts-row { border-bottom-color: rgba(26,39,56,0.18); }
-        html.theme-bibliotheque .tab-strip button { background: #f6efdd; border-color: rgba(42,28,14,0.16); color: #7a1f2b; box-shadow: none; }
-        html.theme-bibliotheque .tab-strip button:hover { filter: brightness(0.96); }
-        html.theme-bibliotheque .tab-strip .ts-row button.active { background: #7a1f2b; color: #f6efdd; border-color: transparent; }
-        html.theme-bibliotheque .tab-strip .ts-row { border-bottom-color: rgba(42,28,14,0.24); }
-        html.theme-pavilion .tab-strip button { background: #f9f5ec; border-color: rgba(46,51,41,0.14); color: #2e3329; box-shadow: none; }
-        html.theme-pavilion .tab-strip button:hover { filter: brightness(0.96); }
-        html.theme-pavilion .tab-strip .ts-row button.active { background: #6e7d5e; color: #f9f5ec; border-color: transparent; }
+        html.theme-onyx .tab-strip button { background: #141416; border-color: #2a2820; color: #c8c4bb; box-shadow: none; }
+        html.theme-onyx .tab-strip button:hover { filter: brightness(0.96); }
+        html.theme-onyx .tab-strip .ts-row button.active { background: #d4af7a; color: #0a0a0b; border-color: transparent; }
+        html.theme-onyx .tab-strip .ts-row { border-bottom-color: #2a2820; }
+        html.theme-linen .tab-strip button { background: #ece8df; border-color: rgba(45,42,36,0.18); color: #2d2a24; box-shadow: none; }
+        html.theme-linen .tab-strip button:hover { filter: brightness(0.96); }
+        html.theme-linen .tab-strip .ts-row button.active { background: #5b6e3f; color: #f4f1eb; border-color: transparent; }
+        html.theme-linen .tab-strip .ts-row { border-bottom-color: rgba(45,42,36,0.25); }
+        html.theme-aurora .tab-strip button { background: #141423; border-color: rgba(255,255,255,0.12); color: #e8e6f5; box-shadow: none; }
+        html.theme-aurora .tab-strip button:hover { filter: brightness(0.96); }
+        html.theme-aurora .tab-strip .ts-row button.active { background: linear-gradient(135deg, #b57bff, #6be0ff); color: #08081b; border-color: transparent; }
+        html.theme-aurora .tab-strip .ts-row { border-bottom-color: rgba(255,255,255,0.14); }
+        html.theme-atelier .tab-strip button { background: #fff; border-color: #000; color: #000; box-shadow: none; }
+        html.theme-atelier .tab-strip button:hover { filter: brightness(0.96); }
+        html.theme-atelier .tab-strip .ts-row button.active { background: #ff4400; color: #fff; border-color: transparent; }
+        html.theme-atelier .tab-strip .ts-row { border-bottom-color: #000; }
+        html.theme-atelier .tab-strip button { border-radius: 0; border-width: 2px; text-transform: uppercase; }
+        html.theme-concierge .tab-strip button { background: #f3eee5; border-color: rgba(44,42,38,0.14); color: #2c2a26; box-shadow: none; }
+        html.theme-concierge .tab-strip button:hover { filter: brightness(0.96); }
+        html.theme-concierge .tab-strip .ts-row button.active { background: #0e4d3f; color: #f3eee5; border-color: transparent; }
+        html.theme-concierge .tab-strip .ts-row { border-bottom-color: rgba(44,42,38,0.22); }
+        html.theme-marble .tab-strip button { background: #ffffff; border-color: rgba(28,40,51,0.12); color: #1e3a5f; box-shadow: none; }
+        html.theme-marble .tab-strip button:hover { filter: brightness(0.96); }
+        html.theme-marble .tab-strip .ts-row button.active { background: #1e3a5f; color: #f9fafb; border-color: transparent; }
+        html.theme-marble .tab-strip .ts-row { border-bottom-color: rgba(28,40,51,0.18); }
+        html.theme-velvet .tab-strip button { background: #2a1014; border-color: rgba(201,160,74,0.22); color: #c9a04a; box-shadow: none; }
+        html.theme-velvet .tab-strip button:hover { filter: brightness(0.96); }
+        html.theme-velvet .tab-strip .ts-row button.active { background: #c9a04a; color: #1a0a0f; border-color: transparent; }
+        html.theme-velvet .tab-strip .ts-row { border-bottom-color: rgba(201,160,74,0.3); }
+        html.theme-glacier .tab-strip button { background: #f6f9fb; border-color: rgba(26,39,56,0.12); color: #1b4f7e; box-shadow: none; }
+        html.theme-glacier .tab-strip button:hover { filter: brightness(0.96); }
+        html.theme-glacier .tab-strip .ts-row button.active { background: #1b4f7e; color: #f6f9fb; border-color: transparent; }
+        html.theme-glacier .tab-strip .ts-row { border-bottom-color: rgba(26,39,56,0.18); }
+        html.theme-bibliotheque .tab-strip button { background: #f6efdd; border-color: rgba(42,28,14,0.16); color: #7a1f2b; box-shadow: none; }
+        html.theme-bibliotheque .tab-strip button:hover { filter: brightness(0.96); }
+        html.theme-bibliotheque .tab-strip .ts-row button.active { background: #7a1f2b; color: #f6efdd; border-color: transparent; }
+        html.theme-bibliotheque .tab-strip .ts-row { border-bottom-color: rgba(42,28,14,0.24); }
+        html.theme-pavilion .tab-strip button { background: #f9f5ec; border-color: rgba(46,51,41,0.14); color: #2e3329; box-shadow: none; }
+        html.theme-pavilion .tab-strip button:hover { filter: brightness(0.96); }
+        html.theme-pavilion .tab-strip .ts-row button.active { background: #6e7d5e; color: #f9f5ec; border-color: transparent; }
         html.theme-pavilion .tab-strip .ts-row { border-bottom-color: rgba(46,51,41,0.22); }
         .theme-btn {
             margin-left: 16px;
@@ -1741,6 +1763,13 @@
         </div>
         <nav>
             <div class="group-label">Dashboards</div>
+            <!-- Daily Snapshot: OWNER-ONLY TRIAL (Faik, 2026-11-10). Hidden for everyone
+                 else and the owner lands on it after sign-in (see handleSignIn).
+                 To open it to everyone: drop restrictedNav + display:none here, take
+                 "dailySnapshot" out of RESTRICTED_TABS, make it the default tab
+                 (state.tab, the two section display styles, headerTitle) and drop the
+                 owner test in handleSignIn. -->
+            <a data-tab="dailySnapshot" class="restrictedNav" style="display:none;">Daily Snapshot</a>
             <a data-tab="overview" class="active">Overview</a>
             <a data-tab="deepInsights">Deep Insights</a>
             <a data-tab="branch">Branch Sales</a>
@@ -2161,6 +2190,84 @@
             </div>
 
             <!-- ====== TABS ====== -->
+
+            <!-- TAB: Daily Snapshot (landing tab). Current calendar month only:
+                 the two month-to-date panes use the Month-to-Date tab's figures,
+                 the two tables use the run-rate engine. Faik, 2026-11-10. -->
+            <section data-tab-content="dailySnapshot" style="display:none;">
+                <div class="hint rr-hint"><span><strong id="dsMonth">—</strong> so far. <span id="dsAsOf"></span></span><span class="rr-tgt"><span class="rr-tgt-lbl">Targets</span><span id="dsTgtStatus" title="Read from the Sales Budgets-Targets folder on SharePoint">not loaded</span><button type="button" class="more-btn" id="dsTgtReload" title="Re-read the targets folder on SharePoint">↻</button></span></div>
+                <div id="dsEmpty" class="ds-empty" style="display:none;">
+                    <div class="ds-empty-msg" id="dsEmptyMsg">No figures loaded yet.</div>
+                    <button type="button" class="btn btn-primary" id="dsLoadBtn">Open the latest snapshot</button>
+                </div>
+                <div class="ds-top">
+                    <div class="kpi k-rev ds-pane" id="dsPaneSales">
+                        <div class="label">Sales + Shipped Not Invoiced · month to date</div>
+                        <div class="value ds-big" id="dsTotal">—</div>
+                        <div class="ds-split" id="dsSplitBar"><span class="ds-seg s1" id="dsSegSales"></span><span class="ds-seg s2" id="dsSegSni"></span></div>
+                        <div class="ds-parts">
+                            <div class="ds-part"><div class="ds-part-lbl"><i class="ds-dot s1"></i>Sales (excl. tax)</div><div class="ds-part-val" id="dsSales">—</div><div class="sub" id="dsSalesSub">&nbsp;</div></div>
+                            <div class="ds-part"><div class="ds-part-lbl"><i class="ds-dot s2"></i>Shipped Not Invoiced</div><div class="ds-part-val ds-alt" id="dsSni">—</div><div class="sub" id="dsSniSub">&nbsp;</div></div>
+                        </div>
+                    </div>
+                    <div class="kpi k-gp ds-pane" id="dsPaneGp">
+                        <div class="label">Gross Profit · month to date</div>
+                        <div class="value ds-big"><span id="dsGp">—</span><span class="ds-pct" id="dsGpp">—</span></div>
+                        <div class="sub" id="dsGpSub">on invoiced sales</div>
+                        <div class="ds-parts">
+                            <div class="ds-part"><div class="ds-part-lbl"><i class="ds-dot s2"></i><span id="dsGpAllLbl">Including Shipped Not Invoiced</span></div><div class="ds-part-val ds-alt"><span id="dsGpAll">—</span><span class="ds-pct" id="dsGppAll">—</span></div><div class="sub" id="dsGpAllSub">&nbsp;</div></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="kpi-row ds-days">
+                    <div class="kpi k-rev"><div class="label">Total Selling Days</div><div class="value" id="dsSdTotal">—</div></div>
+                    <div class="kpi k-inv"><div class="label">Selling Days Passed</div><div class="value" id="dsSdPassed">—</div></div>
+                    <div class="kpi k-cust"><div class="label">Remaining Selling Days</div><div class="value" id="dsSdRemaining">—</div></div>
+                    <div class="kpi k-gpp"><div class="label">% Month Passed</div><div class="value" id="dsSdPct">—</div></div>
+                </div>
+                <!-- Branch table first, salesperson table under it, both full width with the
+                     run-rate tabs' ten columns (Faik, 2026-11-10). Charts left out for now. -->
+                <div class="panel">
+                    <div class="panel-header"><h2>Sales Run Rate · by Branch</h2><span class="rr-legend" title="% Achieved = actual ÷ target"><span class="b0">&lt; 50%</span><span class="b1">50–99%</span><span class="b2">100%+</span></span><button type="button" class="more-btn" data-ds-goto="branchSalesRate" title="Open the full run-rate tab, with month selector and comparison charts">Full tab →</button></div>
+                    <div class="table-scroll">
+                        <table id="dsBrTable" class="ds-table">
+                            <thead><tr>
+                                <th>Branch</th>
+                                <th class="num" title="Same month last year">Sales For Month PY</th>
+                                <th class="num" title="Targets file">Sales Target</th>
+                                <th class="num">Sales For Month</th>
+                                <th class="num" title="Target ÷ selling days in month">Target Run Rate</th>
+                                <th class="num" title="Actual ÷ selling days passed">Actual Run Rate</th>
+                                <th class="num" title="Actual − target">Balance</th>
+                                <th class="num" title="Shortfall ÷ remaining selling days">Required Daily</th>
+                                <th>Status</th>
+                                <th class="num" title="Actual ÷ target">% Achieved</th>
+                            </tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="panel">
+                    <div class="panel-header"><h2>Sales Run Rate · by Salesperson</h2><span class="rr-legend" title="% Achieved = actual ÷ target"><span class="b0">&lt; 50%</span><span class="b1">50–99%</span><span class="b2">100%+</span></span><button type="button" class="more-btn" data-ds-goto="salespersonSalesRate" title="Open the full run-rate tab, with month selector and comparison charts">Full tab →</button></div>
+                    <div class="table-scroll">
+                        <table id="dsSpTable" class="ds-table">
+                            <thead><tr>
+                                <th>Salesperson</th>
+                                <th class="num" title="Same month last year">Sales For Month PY</th>
+                                <th class="num" title="Targets file">Sales Target</th>
+                                <th class="num">Sales For Month</th>
+                                <th class="num" title="Target ÷ selling days in month">Target Run Rate</th>
+                                <th class="num" title="Actual ÷ selling days passed">Actual Run Rate</th>
+                                <th class="num" title="Actual − target">Balance</th>
+                                <th class="num" title="Shortfall ÷ remaining selling days">Required Daily</th>
+                                <th>Status</th>
+                                <th class="num" title="Actual ÷ target">% Achieved</th>
+                            </tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
 
             <!-- TAB: Overview -->
             <section data-tab-content="overview">
@@ -4347,6 +4454,7 @@ const state = {
 };
 
 const TAB_TITLES = {
+    dailySnapshot: "Daily Snapshot",
     overview: "Overview",
     branch: "Branch Sales",
     salesperson: "Salesperson Sales",
@@ -5594,6 +5702,7 @@ function closeDrill() {
 
 function renderCurrentTab() {
     switch (state.tab) {
+        case "dailySnapshot": renderDailySnapshot(); break;
         case "overview":    renderOverview(); break;
         case "deepInsights": renderDeepInsights(); break;
         case "branch":      renderBranch();   break;
@@ -5970,6 +6079,11 @@ function computePipelineOrders(inRange) {
         return 0;
     };
     let openCount = 0, openAmt = 0, sniCount = 0, sniAmt = 0;
+    // Cost of the shipped-not-invoiced lines (qty × the order line's unit
+    // cost). sniCostKnown stays false when any such line has no unit cost
+    // (older snapshot, or the field is not published) — Daily Snapshot
+    // then falls back to an estimate.
+    let sniCost = 0, sniCostKnown = false, sniCostMissing = false;
     if (state.salesOrderOutstandingLines && state.salesOrderOutstandingLines.length) {
         // EX-GST basis. Outstanding and SNI both filter by the line's
         // shipmentDate against the toolbar range — consistent with
@@ -5987,6 +6101,8 @@ function computePipelineOrders(inRange) {
             }
             if (ln.qtyShippedNotInvoiced > 0) {
                 sniAmt += ln.shippedNotInvLcyExVat;
+                if (ln.unitCostLcy != null) { sniCost += ln.qtyShippedNotInvoiced * ln.unitCostLcy; sniCostKnown = true; }
+                else sniCostMissing = true;
                 if (ln.documentNumber) sniDocs.add(ln.documentNumber);
             }
         }
@@ -6012,7 +6128,7 @@ function computePipelineOrders(inRange) {
             if (sniLines)  { sniCount++; sniAmt  += soSni; }
         }
     }
-    return { openCount, openAmt, sniCount, sniAmt };
+    return { openCount, openAmt, sniCount, sniAmt, sniCost, sniCostKnown: sniCostKnown && !sniCostMissing };
 }
 
 function paintPipelineKpis() {
@@ -12311,48 +12427,13 @@ function renderReturns() {
 // ============================================================
 // RUN-RATE TABS (4 tabs share this engine)
 // ============================================================
-function renderRunRateTab(opts) {
-    // opts: { metric: "sales"|"margin", entity: "branch"|"salesperson", prefix, budget }
-    // budget = true → targets come from the SharePoint targets workbook
-    // (spTargets; read-only cells, month selector); otherwise manual
-    // localStorage targets for the current month, exactly as before.
-    renderFilterChips();
-    const today = new Date();
-    const todayMk = localISO(today).slice(0, 7);
-    let mk = todayMk;
-    if (opts.budget) {
-        if (spTargets.status === "idle") loadSalespersonTargets();
-        paintTargetsStatus(opts.prefix);
-        const sel = document.getElementById(opts.prefix + "MonthSel");
-        const months = spBudgetMonths(opts.entity).length ? spBudgetMonths(opts.entity) : [todayMk];
-        const sig = months.join(",");
-        if (!months.includes(state.runRateMonth[opts.prefix] || "")) {
-            // default: today's month if budgeted, else the latest budgeted month not after today, else the first
-            const past = months.filter(m => m <= todayMk);
-            state.runRateMonth[opts.prefix] = months.includes(todayMk) ? todayMk : (past.length ? past[past.length - 1] : months[0]);
-        }
-        mk = state.runRateMonth[opts.prefix];
-        if (sel && sel.dataset.sig !== sig) {
-            sel.innerHTML = months.map(m => '<option value="' + m + '">' + escapeHtml(monthLabelFromKey(m)) + (m === todayMk ? " (current)" : "") + '</option>').join("");
-            sel.dataset.sig = sig;
-        }
-        if (sel && !sel.dataset.wired) {
-            sel.addEventListener("change", () => { state.runRateMonth[opts.prefix] = sel.value; renderCurrentTab(); });
-            sel.dataset.wired = "1";
-        }
-        if (sel) sel.value = mk;
-    }
+// Rows behind a run-rate table for one month: actuals per branch /
+// salesperson, target, run rates, status. No DOM — shared by the four
+// run-rate tabs and the Daily Snapshot tab so they can never disagree.
+// opts: { metric, entity, budget }; sd = selling-day position for mk.
+function runRateRows(opts, mk, sd) {
     const [selY, selM] = mk.split("-").map(Number);
-    const sd = opts.budget ? sellingDaysForMonthKey(mk, today) : sellingDaysForMonth(today);
     const fy = fiscalYear(mk + "-01");
-    const monthLbl = new Date(selY, selM - 1, 1).toLocaleDateString("en-AU", { month: "long", year: "numeric" });
-
-    document.getElementById(opts.prefix + "Month").textContent = monthLbl;
-    document.getElementById(opts.prefix + "SdTotal").textContent = fmtInt(sd.total);
-    document.getElementById(opts.prefix + "SdPassed").textContent = fmtInt(sd.passed);
-    document.getElementById(opts.prefix + "SdRemaining").textContent = fmtInt(sd.remaining);
-    document.getElementById(opts.prefix + "SdPct").textContent = sd.total ? fmtPct(sd.passed / sd.total) : "—";
-
     const inMonth = (inv, yearOffset) => {
         const d = new Date(inv.postingDate);
         return d.getFullYear() === selY - yearOffset && d.getMonth() === selM - 1;
@@ -12412,6 +12493,52 @@ function renderRunRateTab(opts) {
         if (opts.budget) rr.balance = cyVal - target;
         return { entity: ent, cyVal, pyVal, target, metricKey, ...rr };
     }).sort((a, b) => b.cyVal - a.cyVal);
+    return rows;
+}
+function renderRunRateTab(opts) {
+    // opts: { metric: "sales"|"margin", entity: "branch"|"salesperson", prefix, budget }
+    // budget = true → targets come from the SharePoint targets workbook
+    // (spTargets; read-only cells, month selector); otherwise manual
+    // localStorage targets for the current month, exactly as before.
+    renderFilterChips();
+    const today = new Date();
+    const todayMk = localISO(today).slice(0, 7);
+    let mk = todayMk;
+    if (opts.budget) {
+        if (spTargets.status === "idle") loadSalespersonTargets();
+        paintTargetsStatus(opts.prefix);
+        const sel = document.getElementById(opts.prefix + "MonthSel");
+        const months = spBudgetMonths(opts.entity).length ? spBudgetMonths(opts.entity) : [todayMk];
+        const sig = months.join(",");
+        if (!months.includes(state.runRateMonth[opts.prefix] || "")) {
+            // default: today's month if budgeted, else the latest budgeted month not after today, else the first
+            const past = months.filter(m => m <= todayMk);
+            state.runRateMonth[opts.prefix] = months.includes(todayMk) ? todayMk : (past.length ? past[past.length - 1] : months[0]);
+        }
+        mk = state.runRateMonth[opts.prefix];
+        if (sel && sel.dataset.sig !== sig) {
+            sel.innerHTML = months.map(m => '<option value="' + m + '">' + escapeHtml(monthLabelFromKey(m)) + (m === todayMk ? " (current)" : "") + '</option>').join("");
+            sel.dataset.sig = sig;
+        }
+        if (sel && !sel.dataset.wired) {
+            sel.addEventListener("change", () => { state.runRateMonth[opts.prefix] = sel.value; renderCurrentTab(); });
+            sel.dataset.wired = "1";
+        }
+        if (sel) sel.value = mk;
+    }
+    const [selY, selM] = mk.split("-").map(Number);
+    const sd = opts.budget ? sellingDaysForMonthKey(mk, today) : sellingDaysForMonth(today);
+    const fy = fiscalYear(mk + "-01");
+    const monthLbl = new Date(selY, selM - 1, 1).toLocaleDateString("en-AU", { month: "long", year: "numeric" });
+
+    document.getElementById(opts.prefix + "Month").textContent = monthLbl;
+    document.getElementById(opts.prefix + "SdTotal").textContent = fmtInt(sd.total);
+    document.getElementById(opts.prefix + "SdPassed").textContent = fmtInt(sd.passed);
+    document.getElementById(opts.prefix + "SdRemaining").textContent = fmtInt(sd.remaining);
+    document.getElementById(opts.prefix + "SdPct").textContent = sd.total ? fmtPct(sd.passed / sd.total) : "—";
+
+    const rows = runRateRows(opts, mk, sd);
+    const closedStatus = (actual, target) => target > 0 ? (actual >= target ? "TARGET MET" : "TARGET MISSED") : "NO PLAN";
     if (opts.budget) {
         const tbl = document.getElementById(opts.prefix + "Table");
         if (tbl && !tbl.dataset.sortWired) { attachSortHandlers("#" + opts.prefix + "Table", state.sortRunRate[opts.prefix], renderCurrentTab, new Set(["entity", "status"])); tbl.dataset.sortWired = "1"; }
@@ -14004,7 +14131,7 @@ function statusBadgeRunRate(status) {
 const SP_TARGETS_FOLDER = "Sales Budgets-Targets";
 const spTargets = { status: "idle", error: "", files: [], months: [], names: {}, sales: {}, margin: {},
                     branch: { months: [], names: {}, sales: {}, margin: {} } };
-const TARGET_TABS = new Set(["salespersonSalesRate", "salespersonMarginRate", "branchSalesRate", "branchTarget"]);
+const TARGET_TABS = new Set(["salespersonSalesRate", "salespersonMarginRate", "branchSalesRate", "branchTarget", "dailySnapshot"]);
 // entity: "salesperson" (default) or "branch"
 function spBudgetMonths(entity)        { return entity === "branch" ? spTargets.branch.months : spTargets.months; }
 function spBudgetNames(entity)         { return entity === "branch" ? spTargets.branch.names : spTargets.names; }
@@ -14217,7 +14344,7 @@ function openTargetsPicker(anchor) {
 }
 // Status text in both tabs' hint strips + the Reload link (wired once).
 function paintTargetsStatus(prefix) {
-    for (const px of ["spsr", "spmr", "brsr", "bt"]) {
+    for (const px of ["spsr", "spmr", "brsr", "bt", "ds"]) {
         const el = document.getElementById(px + "TgtStatus");
         if (el) {
             let t;
@@ -14262,10 +14389,152 @@ function sellingDaysForMonthKey(mk, today) {
 }
 
 // ============================================================
+// DAILY SNAPSHOT (landing tab; Faik, 2026-11-10)
+// Current calendar month only, whatever the toolbar Period says.
+//   • top panes  → mtdTotals() + this month's Shipped Not Invoiced,
+//                  i.e. the Month-to-Date tab's own figures
+//   • two tables → runRateRows(), the run-rate tabs' own rows
+// Nothing is calculated differently here; it is a summary view.
+// The morning email mirrors this tab — keep the two in step.
+// ============================================================
+function dsSnapshotFigures() {
+    const m = mtdTotals();
+    const mEndISO = m.fmtLocalYMD(new Date(m.today.getFullYear(), m.today.getMonth() + 1, 0));
+    const inMonth = iso => { if (!iso) return false; const k = String(iso).substring(0, 10); return k >= m.mStartISO && k <= mEndISO; };
+    const pipe = computePipelineOrders(inMonth);
+    const sales = m.totSales, sni = pipe.sniAmt, gp = m.totGp;
+    const gpPct = sales ? gp / sales : 0;
+    // Margin sitting in shipped-not-invoiced: order-line cost when the
+    // snapshot carries it, otherwise assume this month's invoiced margin.
+    const sniGpExact = pipe.sniCostKnown;
+    const sniGp = sniGpExact ? sni - pipe.sniCost : sni * gpPct;
+    const total = sales + sni, gpAll = gp + sniGp;
+    const mk = localISO(m.today).slice(0, 7);
+    const sd = sellingDaysForMonthKey(mk, m.today);
+    const table = entity => {
+        const rows = runRateRows({ metric: "sales", entity, budget: true }, mk, sd);
+        let cy = 0, py = 0, target = 0;
+        for (const r of rows) { cy += r.cyVal; py += r.pyVal; target += r.target; }
+        const t = computeRunRate(cy, target, sd.total, sd.passed, sd.remaining);
+        t.balance = cy - target; t.target = target; t.cyVal = cy; t.pyVal = py; t.entity = "Total";
+        return { rows, total: t };
+    };
+    return { mk, sd, monthLabel: m.mStart.toLocaleDateString("en-AU", { month: "long", year: "numeric" }),
+             sales, sni, total, gp, gpPct, gpAll, gpAllPct: total ? gpAll / total : 0, sniGp, sniGpExact,
+             invoices: m.totInv, sniOrders: pipe.sniCount, cost: sales - gp,
+             branch: table("branch"), salesperson: table("salesperson") };
+}
+// Same ten columns as the run-rate tabs' own tables.
+function dsPaintTable(tableId, entity, data, sd) {
+    const names = spBudgetNames(entity);
+    const cells = (r, isTotal) => {
+        const bal = !r.target ? '<td class="num">—</td>'
+            : `<td class="num ${r.balance >= 0 ? "pos" : "neg"}">${r.balance >= 0 ? "+" : "−"}${fmtMoneyFull(Math.abs(r.balance))}</td>`;
+        const pct = r.pctAchieved == null ? '<td class="num">—</td>'
+            : `<td class="num"><span class="rr-bar b${rrPctBand(r.pctAchieved)}" title="${fmtPct(r.pctAchieved)} of target"><span class="rr-fill" style="width:${Math.max(0, Math.min(100, r.pctAchieved * 100)).toFixed(1)}%;"></span><span class="rr-lbl">${fmtPct(r.pctAchieved)}</span></span></td>`;
+        const name = !isTotal && names[r.entity] ? `<span class="rr-name">${escapeHtml(names[r.entity])}</span>` : "";
+        return `<td>${escapeHtml(r.entity)}${name}</td>
+            <td class="num">${r.pyVal ? fmtMoneyFull(r.pyVal) : "—"}</td>
+            <td class="num">${r.target ? fmtMoneyFull(r.target) : "—"}</td>
+            <td class="num">${r.cyVal || isTotal ? fmtMoneyFull(r.cyVal) : "—"}</td>
+            <td class="num">${r.target ? fmtMoneyFull(r.targetDaily) : "—"}</td>
+            <td class="num">${r.actualDaily ? fmtMoneyFull(r.actualDaily) : "—"}</td>
+            ${bal}
+            <td class="num">${!r.target ? "—" : !sd.remaining ? "n/a" : fmtMoneyFull(r.requiredDaily)}</td>
+            <td>${statusBadgeRunRate(r.status)}</td>
+            ${pct}`;
+    };
+    const body = data.rows.map(r => "<tr>" + cells(r, false) + "</tr>").join("");
+    document.querySelector("#" + tableId + " tbody").innerHTML = body
+        ? body + '<tr class="ds-total">' + cells(data.total, true) + "</tr>"
+        : '<tr><td colspan="10" class="empty">No data this month.</td></tr>';
+}
+function renderDailySnapshot() {
+    renderFilterChips();
+    if (spTargets.status === "idle") loadSalespersonTargets();
+    paintTargetsStatus("ds");
+    const $ = id => document.getElementById(id);
+    if (!$("dsLoadBtn").dataset.wired) {
+        $("dsLoadBtn").addEventListener("click", () => autoLoadLatestSnapshot(true));
+        document.querySelectorAll("[data-ds-goto]").forEach(b => b.addEventListener("click", () => setActiveTab(b.dataset.dsGoto)));
+        $("dsLoadBtn").dataset.wired = "1";
+    }
+    const f = dsSnapshotFigures();
+    $("dsMonth").textContent = f.monthLabel;
+    const loaded = state.invoices.length > 0;
+    $("dsEmpty").style.display = loaded ? "none" : "";
+    let asOf = "";
+    if (loaded) {
+        if (state.dataAsOf) asOf = "Figures as of " + state.dataAsOf.slice(11).replace(/^24:/, "00:") + " on " + fmtDate(state.dataAsOf.slice(0, 10)) + " (snapshot).";
+        else asOf = "Live figures from Wiise.";
+        if (state.loadedTo && state.loadedTo < f.mk + "-01") asOf += " The loaded period ends before this month, so the month is empty — use Fast lookup or reload.";
+    }
+    $("dsAsOf").textContent = asOf;
+
+    $("dsTotal").textContent = loaded ? fmtMoneyFull(f.total) : "—";
+    $("dsSales").textContent = loaded ? fmtMoneyFull(f.sales) : "—";
+    $("dsSni").textContent   = loaded ? fmtMoneyFull(f.sni) : "—";
+    $("dsSalesSub").textContent = loaded ? fmtInt(f.invoices) + " invoices" : " ";
+    $("dsSniSub").textContent   = loaded ? f.sniOrders + " orders · delivered, awaiting invoice" : " ";
+    const pos = Math.max(0, f.sales) + Math.max(0, f.sni);
+    $("dsSegSales").style.width = (pos ? Math.max(0, f.sales) / pos * 100 : 0).toFixed(2) + "%";
+    $("dsSegSni").style.width   = (pos ? Math.max(0, f.sni) / pos * 100 : 0).toFixed(2) + "%";
+    $("dsGp").textContent  = loaded ? fmtMoneyFull(f.gp) : "—";
+    $("dsGpp").textContent = loaded ? fmtPct(f.gpPct) : "";
+    $("dsGpSub").textContent = loaded ? "on invoiced sales · cost " + fmtMoneyFull(f.cost) : "on invoiced sales";
+    $("dsGpAllLbl").textContent = "Including Shipped Not Invoiced" + (f.sniGpExact ? "" : " (estimate)");
+    $("dsGpAll").textContent  = loaded ? fmtMoneyFull(f.gpAll) : "—";
+    $("dsGppAll").textContent = loaded ? fmtPct(f.gpAllPct) : "";
+    $("dsGpAllSub").textContent = !loaded ? " "
+        : f.sniGpExact ? "adds " + fmtMoneyFull(f.sniGp) + " margin on shipped goods, at order-line cost"
+        : "adds " + fmtMoneyFull(f.sniGp) + ", assuming shipped goods earn the same margin";
+
+    $("dsSdTotal").textContent = fmtInt(f.sd.total);
+    $("dsSdPassed").textContent = fmtInt(f.sd.passed);
+    $("dsSdRemaining").textContent = fmtInt(f.sd.remaining);
+    $("dsSdPct").textContent = f.sd.total ? fmtPct(f.sd.passed / f.sd.total) : "—";
+
+    dsPaintTable("dsBrTable", "branch", f.branch, f.sd);
+    dsPaintTable("dsSpTable", "salesperson", f.salesperson, f.sd);
+}
+// Landing: open the newest snapshot without a click. Silent runs (right
+// after sign-in) only go ahead when this device already holds the
+// passphrase, so nobody gets a prompt just for opening the page; the
+// tab's own button runs it with the prompt allowed.
+let dsAutoLoadBusy = false;
+async function autoLoadLatestSnapshot(interactive) {
+    if (dsAutoLoadBusy || state.invoices.length) return;
+    const msg = t => { const el = document.getElementById("dsEmptyMsg"); if (el) el.textContent = t; };
+    // Nothing is loaded yet, so setActiveTab has not painted the tab:
+    // paint it once now (shows this notice, starts the targets read).
+    if (state.tab === "dailySnapshot") renderDailySnapshot();
+    if (!interactive) {
+        let p = ""; try { p = localStorage.getItem("snapshotPassphrase") || ""; } catch (e) { /* storage blocked */ }
+        if (!p) { msg("No figures loaded yet. Open the latest snapshot (asks for the snapshot passphrase once on this device), or use Load sales for live data."); return; }
+    }
+    dsAutoLoadBusy = true;
+    msg("Opening the latest snapshot…");
+    try {
+        const metas = await Promise.all(SNAPSHOT_SLOTS.map(async s => {
+            try { const r = await spFetch("snapshots/" + s.slot + ".meta.json"); return r.ok ? { slot: s.slot, at: (await r.json()).fetchedAtMelbourne || "" } : null; }
+            catch (e) { return null; }
+        }));
+        const newest = metas.filter(Boolean).sort((a, b) => a.at < b.at ? 1 : -1)[0];
+        if (!newest) { msg("No snapshot could be reached. Use Fast lookup or Load sales."); return; }
+        if (state.invoices.length) return;   // the user loaded something meanwhile
+        await loadSnapshot(newest.slot);
+    } finally {
+        dsAutoLoadBusy = false;
+        if (!state.invoices.length) msg("No figures loaded yet. Open the latest snapshot, or use Load sales for live data.");
+    }
+}
+
+// ============================================================
 // MTD TAB
 // ============================================================
-function renderMTD() {
-    renderFilterChips();
+// Month-to-date figures (1st of this month → now), no DOM: shared by the
+// Month-to-Date tab and the Daily Snapshot tab so they always agree.
+function mtdTotals() {
     const today = new Date();
     const mStart = startOfMonth(today);
     // MTD owns its own date scope — 1st of this month → now — so the
@@ -14351,6 +14620,11 @@ function renderMTD() {
     } else {
         for (const inv of rows) totQty += invoiceQty(inv);
     }
+    return { today, mStart, mStartISO, todayISO, fmtLocalYMD, rows, daily, labels, cumLine, dailyBar, tblRows, totSales, totGp, totInv, totQty };
+}
+function renderMTD() {
+    renderFilterChips();
+    const { today, mStart, mStartISO, fmtLocalYMD, daily, labels, cumLine, dailyBar, tblRows, totSales, totGp, totInv, totQty } = mtdTotals();
     document.getElementById("mtdSales").textContent = fmtMoneyFull(totSales);
     document.getElementById("mtdSalesSub").textContent = fmtInt(totInv) + " invoices · " + mStart.toLocaleDateString("en-AU", { month: "long", year: "numeric" });
     document.getElementById("mtdGp").textContent  = fmtMoneyFull(totGp);
@@ -16596,7 +16870,7 @@ const RESTRICTED_NAV_OWNER = "faiko@vicair.com.au";
 // The budget-driven tabs are open to everyone: salespersonSalesRate /
 // salespersonMarginRate (Faik, 2026-10-13), branchTarget / branchSalesRate
 // (Faik, 2026-10-14). Branch Margin Run Rate + Lists stay owner-only.
-const RESTRICTED_TABS = new Set(["branchMarginRate", "keyCustomers", "ordersPastDel"]);
+const RESTRICTED_TABS = new Set(["branchMarginRate", "keyCustomers", "ordersPastDel", "dailySnapshot"]);   // dailySnapshot: owner-only trial
 // The Finance group (P&L tab) has its own allow-list (Faik 2026-09-23).
 // Finance view (P&L tab + Overview reconciliation rows): Faik, Michael,
 // Daniel and Shane — approved by Faik 2026-10-03. Nobody else.
@@ -16699,6 +16973,12 @@ async function handleSignIn() {
         document.getElementById("loadBtn").disabled = false;
         document.getElementById("signOutBtn").style.display = "inline-block";
         updateRestrictedNav();
+        // Daily Snapshot trial: the owner lands on it and it fills itself
+        // from the newest snapshot. Everyone else stays on Overview, as before.
+        if (currentSignInName() === RESTRICTED_NAV_OWNER && !state.invoices.length) {
+            if (state.tab === "overview") setActiveTab("dailySnapshot");
+            autoLoadLatestSnapshot(false);   // not awaited
+        }
     } catch (err) { alert("Sign-in failed: " + (err.message || err)); }
 }
 
@@ -16837,7 +17117,7 @@ function hydrateSnapshot(payload) {
     document.getElementById("toDate").value = payload.meta.to;
     const qr = document.getElementById("quickRange"); if (qr) qr.value = "";
     const mp = document.getElementById("monthPicker"); if (mp) mp.value = "";
-    applyLoadedData({ ...d, from: payload.meta.from, to: payload.meta.to });
+    applyLoadedData({ ...d, from: payload.meta.from, to: payload.meta.to, asOf: payload.meta.fetchedAtMelbourne || "" });
     const sb = document.getElementById("snapshotBadge");
     if (sb) sb.innerHTML = '<span style="color:#ffca28;">figures as of ' + escapeHtml(payload.meta.fetchedAtMelbourne || "") + " (snapshot)</span>";
 }
@@ -16849,6 +17129,8 @@ function applyLoadedData(d) {
     const { locs, items, customers, invoices, iles, creditMemos, shipments, returnReceipts,
             quotes, quoteExtras, blanketOrders, valueEntries, salesOrders, salesOrderOutstanding,
             glRecon, glAccounts, glFull, glAccountsFull, from, to } = d;
+        // Capture time when the figures come from a snapshot; "" = live load.
+        state.dataAsOf = d.asOf || "";
         // A snapshot from today on carries the full ledger; older ones carry
         // only the reconciliation slice.
         if (glFull) hydrateGlFull(glFull, glAccountsFull, from, to);
