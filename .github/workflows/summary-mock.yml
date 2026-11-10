@@ -1,0 +1,47 @@
+name: summary-mock-emails
+
+# MOCK-UP only (scripts/summary-mock.js): sends three test emails to the
+# address in DAILY_EMAIL_TO, built from a month that is already closed —
+# the daily picture at month end, a weekly summary and a monthly summary.
+# Run by hand only; there is no schedule. The script refuses to send if
+# DAILY_EMAIL_TO holds more than one address.
+on:
+  workflow_dispatch:
+    inputs:
+      month:
+        description: "Month to show, YYYY-MM (empty = last month)"
+        required: false
+        default: ""
+      week:
+        description: "Which week of that month for the weekly summary"
+        required: false
+        default: "2"
+
+permissions:
+  contents: read
+
+jobs:
+  mock:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install the Claude SDK
+        run: npm install --no-save --no-audit --no-fund @anthropic-ai/sdk
+
+      - name: Build and send the mock-up emails
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          BC_CLIENT_ID: ${{ secrets.BC_CLIENT_ID }}
+          BC_TENANT: ${{ secrets.BC_TENANT }}
+          BC_REFRESH_TOKEN: ${{ secrets.BC_REFRESH_TOKEN }}
+          SNAPSHOT_PASSPHRASE: ${{ secrets.SNAPSHOT_PASSPHRASE }}
+          DAILY_EMAIL_TO: ${{ secrets.DAILY_EMAIL_TO }}
+          MOCK_MONTH: ${{ github.event.inputs.month }}
+          MOCK_WEEK: ${{ github.event.inputs.week }}
+        run: node scripts/summary-mock.js

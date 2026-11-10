@@ -396,7 +396,8 @@ async function sendMail(mail, png, to, cc) {
     if (resp.status !== 202) throw new Error("sendMail → HTTP " + resp.status + ": " + (await resp.text()).slice(0, 400));
 }
 
-(async () => {
+// Run as a script: build and send. Required from another script (summary-mock.js): only the helpers below.
+if (require.main === module) (async () => {
     const local = process.argv.indexOf("--local");
     let chosen = null;
     if (local < 0) {
@@ -434,3 +435,4 @@ async function sendMail(mail, png, to, cc) {
         if (chosen.mark) await markSent(chosen.mark, chosen.meta);
     } finally { try { fs.rmSync(dir, { recursive: true, force: true }); } catch (e) { /* temp dir */ } }
 })().catch(e => { console.error("DAILY EMAIL FAILED: " + e.message); process.exit(1); });
+module.exports = { graph, graphJson, graphToken, spReadJson, chooseSnapshot, collectFromSharePoint, writeCommentary, SLOT_LABEL };
