@@ -227,6 +227,18 @@
         /* Salesperson run-rate tables: rep name beside the code */
         .rr-name { font-size: 11px; opacity: .7; margin-left: 6px; }
 
+        /* ---------- EXPORT MENU (export.js) ---------- */
+        #exportMenu { display: none; position: fixed; z-index: 8000; width: 430px; max-width: calc(100vw - 16px); overflow-y: auto;
+                      background: #fff; color: #2c2f4a; border: 1px solid #d6d8eb; border-radius: 10px; box-shadow: 0 6px 24px rgba(26,35,126,0.18); font-size: 13px; }
+        #exportMenu .ex-title { padding: 10px 14px 8px; font-weight: 700; border-bottom: 1px solid #eef; }
+        #exportMenu .ex-head { padding: 9px 14px 3px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; opacity: .6; }
+        #exportMenu .ex-row { display: flex; align-items: center; gap: 8px; padding: 7px 14px; cursor: pointer; }
+        #exportMenu .ex-row:hover { background: #eef0fb; }
+        #exportMenu .ex-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        #exportMenu .ex-act { flex: none; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 6px; border: 1px solid #c5c9e8; color: #3f51b5; background: #fff; }
+        #exportMenu .ex-act:hover { background: #3f51b5; color: #fff; border-color: #3f51b5; }
+        #exportMenu .ex-empty { padding: 12px 14px; opacity: .7; }
+
         /* ---------- LOADING CARD (showBusy / hideBusy) ----------
            Centred card over a dimmed page for work that would otherwise look
            like a freeze: opening the EOM Report, and Load sales. The card is a
@@ -1862,6 +1874,9 @@
                         </div>
                     </div>
                 </span>
+                <!-- Export: finance group only (EXPORT_VIEWERS; shown by applyExportAccess). Logic in export.js -->
+                <button class="btn btn-primary exportUi" id="exportBtn" style="display:none;"
+                    title="Export what is on this tab to Excel: the whole tab, the tiles, any table, or any chart (numbers or picture).">Export ▾</button>
             </div>
             <div class="right" style="display:flex; align-items:center; gap:14px;">
                 <div>
@@ -4266,6 +4281,7 @@
 </div>
 
 <div class="progress" id="bcProgress"><span id="bcProgressText"></span></div>
+<div id="exportMenu"></div>
 <div id="busyWrap" role="status" aria-live="polite"><div class="card busy-card"><h3 id="busyTitle">Loading…</h3><div class="busy-track"><span class="busy-bar btn-primary" id="busyBar"></span></div><div class="busy-pct" id="busyPct">0%</div><div class="busy-detail" id="busyDetail"></div></div></div>
 
 <!-- TOP N MODAL -->
@@ -16982,6 +16998,16 @@ const FINANCE_VIEWERS = [RESTRICTED_NAV_OWNER, "michaelc@vicair.com.au", "daniel
 const PNL_VIEWERS = new Set(FINANCE_VIEWERS);
 // Overview reconciliation rows: the same four people as the P&L tab.
 const SRECON_VIEWERS = new Set(FINANCE_VIEWERS);
+// Export button + menu (export.js). Meant for four people — Faik,
+// Michael, Daniel, Shane (Faik, 2026-11-10) — and nobody else.
+// TRIAL: owner only until Faik has tried it on real figures; to open it
+// to the other three, change the next line to new Set(FINANCE_VIEWERS).
+const EXPORT_VIEWERS = new Set([RESTRICTED_NAV_OWNER]);
+function exportAllowed() { return EXPORT_VIEWERS.has(currentSignInName()); }
+function applyExportAccess() {
+    const ok = exportAllowed();
+    document.querySelectorAll(".exportUi").forEach(el => { el.style.display = ok ? "" : "none"; });
+}
 // Guest accounts sign in as "name_domain.com#EXT#@VicAirPtyLtd.onmicrosoft.com";
 // fold that back to the plain email so the allow-list can use real addresses.
 function normalizeSignInName(u) {
@@ -17065,6 +17091,7 @@ function updateRestrictedNav() {
     if (!showPnl && state.tab === "pnl") setActiveTab("overview");
     const showSrecon = SRECON_VIEWERS.has(user);
     document.querySelectorAll(".sreconWrap").forEach(el => { el.style.display = showSrecon ? "" : "none"; });
+    applyExportAccess();
 }
 
 async function handleSignIn() {
@@ -18452,6 +18479,7 @@ else showThemePicker(false);
 })();
 </script>
 <script src="help.js"></script>
+<script src="export.js"></script>
 
 </body>
 </html>

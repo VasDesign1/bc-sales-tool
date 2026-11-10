@@ -88,6 +88,7 @@
         dsPaneSales: B('Sales + Shipped Not Invoiced', 'The big figure is this month’s invoiced sales (excluding tax) plus goods already delivered but not yet invoiced. The two parts are shown underneath, and the thin bar shows how the total splits between them.'),
         dsPaneGp: B('Gross Profit, month to date', 'Gross profit in dollars and as a percentage on this month’s invoiced sales, the same figures as the Month-to-Date tab. The second line adds the margin sitting in goods shipped but not yet invoiced; it is marked as an estimate when the order lines carry no cost.'),
         dsLoadBtn: B('Open the latest snapshot', 'Loads the most recent of the three daily snapshots so the page fills in. Asks for the snapshot passphrase the first time on this device.'),
+        exportBtn: B('Export', 'Exports what is on this tab to Excel. Pick the whole tab (every pane on its own sheet), the tiles, any one table, or any one chart as numbers or as a picture. Drill-down tables keep their levels: use the + buttons at the left edge in Excel.'),
         // Run-rate tabs
         spsrMonthSel: B('Month', 'Which budgeted month to look at. The current month shows a live run rate; a past month shows the finished result; a future month shows the target only.'),
         spmrMonthSel: B('Month', 'Which budgeted month to look at. The current month shows a live run rate; a past month shows the finished result; a future month shows the target only.'),
