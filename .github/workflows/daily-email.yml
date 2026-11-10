@@ -35,8 +35,14 @@ jobs:
         with:
           node-version: 22
 
+      # Only needed for the AI commentary paragraph; without the
+      # ANTHROPIC_API_KEY secret the email simply goes out without it.
+      - name: Install the Claude SDK
+        run: npm install --no-save --no-audit --no-fund @anthropic-ai/sdk
+
       - name: Build and send the Daily Snapshot email
         env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           BC_CLIENT_ID: ${{ secrets.BC_CLIENT_ID }}
           BC_TENANT: ${{ secrets.BC_TENANT }}
           BC_REFRESH_TOKEN: ${{ secrets.BC_REFRESH_TOKEN }}

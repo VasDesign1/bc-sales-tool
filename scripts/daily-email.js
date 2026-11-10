@@ -4,9 +4,11 @@
 // The figures are NOT recalculated here. The robot opens the tool's own
 // index.html in headless Chrome, pours the newest snapshot into it the
 // same way Fast lookup does, reads the targets workbooks with the page's
-// own parser, and asks the page for dsSnapshotFigures() — the exact
-// object the Daily Snapshot tab paints. The email is that object laid
-// out as an HTML message, so tab and email can never disagree.
+// own parser, then takes a picture of the Daily Snapshot tab as the tool
+// draws it. That picture is the email, so tab and email can never
+// disagree in figures or in looks. dsSnapshotFigures() — the object the
+// tab paints — is read as well, for the subject line and for the
+// optional AI commentary above the picture.
 //
 // Runs in GitHub Actions on Node 22 (needs the built-in WebSocket).
 // Env:
@@ -14,6 +16,9 @@
 //                                               Files.ReadWrite.All + Mail.Send, delegated)
 //   SNAPSHOT_PASSPHRASE                         opens the snapshot
 //   DAILY_EMAIL_TO                              recipients, comma separated
+//   ANTHROPIC_API_KEY                           optional: adds the commentary paragraph
+//                                               (needs `npm install @anthropic-ai/sdk`)
+//   EMAIL_THEME                                 optional: tool theme for the picture (default linen)
 //   DRY_RUN=1                                   build everything, send nothing
 //   CHROME_PATH                                 optional, default google-chrome
 // Local layout test (no Microsoft sign-in, nothing sent):
@@ -29,6 +34,9 @@ const GRAPH = "https://graph.microsoft.com/v1.0";
 const TOOL_URL = "https://vasdesign1.github.io/bc-sales-tool/";
 const TARGETS_FOLDER = "Sales Budgets-Targets";      // keep in step with SP_TARGETS_FOLDER in index.html
 const SLOTS = ["0500", "1100", "1700"];
+const THEME = (process.env.EMAIL_THEME || "linen").toLowerCase().replace(/[^a-z]/g, "") || "linen";
+const SHOT_WIDTH = 1560;      // CSS px the tab is laid out at for the picture: wide enough for all ten columns and the two kit panels side by side
+const SHOW_WIDTH = 1200;      // px the email shows the picture at (it is taken at 2x, so it stays sharp)
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // ---------- Microsoft Graph ----------
@@ -117,10 +125,26 @@ const PAGE_SCRIPT = `(async () => {
         }
         applyTargetsSelection();
     }
+    setActiveTab("dailySnapshot");          // paints the tab with the targets now in place
     const f = dsSnapshotFigures();
     return JSON.stringify({ f, names: { branch: spBudgetNames("branch"), salesperson: spBudgetNames("salesperson") },
         asOf: state.dataAsOf || "", invoices: state.invoices.length, targetFiles: (spTargets.files || []).length, skipped: spTargets.skipped || [],
         today: localISO(new Date()) });
+})()`;
+// Strips the page down to the tab itself for the picture: no sidebar,
+// header or filter bar, and none of the tab's own controls that mean
+// nothing in an email (targets-file picker, "Full tab" buttons).
+const CAPTURE_SCRIPT = `(async () => {
+    const st = document.createElement("style");
+    st.textContent = ".sidebar, .header, .toolbar, #tabStrip, #filterChips, .filter-chips, #themePicker, .progress, #busyWrap, #exportMenu, #helpTip { display: none !important; }"
+        + " .app { display: block !important; } .main { margin: 0 !important; width: auto !important; } .container { padding: 18px 20px !important; max-width: none !important; }"
+        + " section[data-tab-content='dailySnapshot'] .rr-tgt, section[data-tab-content='dailySnapshot'] [data-ds-goto], #dsEmpty, #dsKits .panel-header .meta { display: none !important; }";
+    document.head.appendChild(st);
+    window.scrollTo(0, 0);
+    if (document.fonts && document.fonts.ready) await document.fonts.ready;
+    await new Promise(r => setTimeout(r, 400));
+    const c = document.querySelector(".container").getBoundingClientRect();
+    return JSON.stringify({ x: 0, y: Math.max(0, Math.floor(c.top + window.scrollY)), width: Math.ceil(document.documentElement.clientWidth), height: Math.ceil(c.height) });
 })()`;
 async function figuresFromPage(dataDir) {
     const mime = { ".html": "text/html", ".js": "application/javascript", ".json": "application/json" };
@@ -138,7 +162,7 @@ async function figuresFromPage(dataDir) {
     const port = srv.address().port, dbg = 9400 + Math.floor(Math.random() * 400);
     const chromePath = process.env.CHROME_PATH || (process.platform === "win32" ? "C:/Program Files/Google/Chrome/Application/chrome.exe" : "google-chrome");
     const chrome = spawn(chromePath, ["--headless=new", "--no-sandbox", "--disable-gpu", "--remote-debugging-port=" + dbg,
-        "--user-data-dir=" + path.join(dataDir, "chrome"), "--window-size=1600,1200", "about:blank"], { stdio: "ignore" });
+        "--user-data-dir=" + path.join(dataDir, "chrome"), "--window-size=" + SHOT_WIDTH + ",1200", "--hide-scrollbars", "about:blank"], { stdio: "ignore" });
     try {
         let tabs;
         for (let i = 0; i < 80 && !tabs; i++) { try { tabs = await (await fetch("http://127.0.0.1:" + dbg + "/json")).json(); } catch (e) { await sleep(250); } }
@@ -156,6 +180,9 @@ async function figuresFromPage(dataDir) {
         await send("Runtime.enable"); await send("Page.enable");
         // The page works on the local clock: make that Melbourne, wherever the robot runs.
         await send("Emulation.setTimezoneOverride", { timezoneId: "Australia/Melbourne" });
+        // Picture settings: the chosen theme from the first paint, and two device pixels per CSS pixel so it stays sharp.
+        await send("Page.addScriptToEvaluateOnNewDocument", { source: "try{localStorage.setItem('bcSalesTheme','" + THEME + "');}catch(e){}" });
+        await send("Emulation.setDeviceMetricsOverride", { width: SHOT_WIDTH, height: 1200, deviceScaleFactor: 2, mobile: false });
         await send("Page.navigate", { url: "http://127.0.0.1:" + port + "/index.html" });
         for (let i = 0; i < 120; i++) {
             const r = await send("Runtime.evaluate", { expression: "typeof dsSnapshotFigures === 'function' && typeof hydrateSnapshot === 'function' && typeof XLSX !== 'undefined' && typeof Chart !== 'undefined'", returnByValue: true });
@@ -166,89 +193,116 @@ async function figuresFromPage(dataDir) {
         const r = await send("Runtime.evaluate", { expression: PAGE_SCRIPT, returnByValue: true, awaitPromise: true });
         if (!r.result || !r.result.result || typeof r.result.result.value !== "string") throw new Error("the page could not produce the figures: " + JSON.stringify(r.result || r).slice(0, 600) + " | page errors: " + pageErrors.slice(0, 5).join(" || "));
         if (pageErrors.length) console.warn("  page messages: " + pageErrors.slice(0, 5).join(" || "));
+        const res = JSON.parse(r.result.result.value);
+        const c = await send("Runtime.evaluate", { expression: CAPTURE_SCRIPT, returnByValue: true, awaitPromise: true });
+        if (!c.result || !c.result.result || typeof c.result.result.value !== "string") throw new Error("the page could not be prepared for the picture: " + JSON.stringify(c.result || c).slice(0, 400));
+        const clip = JSON.parse(c.result.result.value);
+        // Graph takes about 3 MB of attachment in one sendMail call: step the sharpness down if a picture is too heavy.
+        let png = null, scale = 2;
+        for (const dsf of [2, 1.5, 1]) {
+            scale = dsf;
+            await send("Emulation.setDeviceMetricsOverride", { width: SHOT_WIDTH, height: 1200, deviceScaleFactor: dsf, mobile: false });
+            await sleep(300);
+            const shot = await send("Page.captureScreenshot", { format: "png", captureBeyondViewport: true, clip: Object.assign({ scale: 1 }, clip) });
+            if (!shot.result || !shot.result.data) throw new Error("screenshot failed: " + JSON.stringify(shot).slice(0, 300));
+            png = Buffer.from(shot.result.data, "base64");
+            if (png.length <= 2.6 * 1048576) break;
+        }
+        res.png = png;
+        res.shot = { cssWidth: clip.width, pxWidth: Math.round(clip.width * scale), pxHeight: Math.round(clip.height * scale), theme: THEME };
         ws.close();
-        return JSON.parse(r.result.result.value);
+        return res;
     } finally { chrome.kill(); srv.close(); }
 }
 
-// ---------- the email ----------
-const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-const money = n => (n == null || isNaN(n)) ? "—" : (n < 0 ? "−" : "") + "$" + Math.abs(n).toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const pct = n => (n == null || isNaN(n)) ? "—" : (n * 100).toFixed(2) + "%";
-const INK = "#1f2430", MUTED = "#6b7280", LINE = "#e5e7eb", FONT = "font-family:Segoe UI,Arial,Helvetica,sans-serif;";
-const BAND = ["#e53935", "#fb8c00", "#43a047"];
-const band = p => (p >= 1 ? 2 : p >= 0.5 ? 1 : 0);
-function statusCell(s) {
-    const good = /ON TRACK|MET$/.test(s) && !/MISSED/.test(s), none = /NO PLAN|NOT STARTED/.test(s);
-    const bg = none ? "#eceff1" : good ? "#c8e6c9" : "#ffcdd2", fg = none ? "#546e7a" : good ? "#1b5e20" : "#b71c1c";
-    return '<td style="padding:7px 6px;border-bottom:1px solid ' + LINE + ';"><span style="' + FONT + 'font-size:9.5px;font-weight:700;background:' + bg + ';color:' + fg + ';padding:3px 6px;white-space:nowrap;">' + esc(s === "NO PLAN" ? "No Plan" : s) + "</span></td>";
-}
-function runRateTable(title, firstCol, data, names, sd) {
-    const th = (t, right) => '<th style="' + FONT + 'font-size:9.5px;letter-spacing:.3px;text-transform:uppercase;color:' + MUTED + ';text-align:' + (right ? "right" : "left") + ';padding:8px 6px;border-bottom:2px solid ' + LINE + ';white-space:nowrap;">' + t + "</th>";
-    const td = (t, o) => '<td style="' + FONT + "font-size:12px;color:" + ((o && o.color) || INK) + ";text-align:" + (o && o.left ? "left" : "right") + ";padding:7px 6px;border-bottom:1px solid " + LINE + ";white-space:nowrap;" + (o && o.bold ? "font-weight:700;" : "") + '">' + t + "</td>";
-    const row = (r, total) => {
-        const o = { bold: total };
-        const name = !total && names[r.entity] ? ' <span style="font-size:11px;color:' + MUTED + ';">' + esc(names[r.entity]) + "</span>" : "";
-        const bal = !r.target ? td("—", o) : td((r.balance >= 0 ? "+" : "−") + money(Math.abs(r.balance)), { bold: total, color: r.balance >= 0 ? "#1b5e20" : "#b71c1c" });
-        const ach = r.pctAchieved == null ? td("—", o)
-            : '<td style="padding:7px 6px;border-bottom:1px solid ' + LINE + ';text-align:right;white-space:nowrap;"><span style="' + FONT + "font-size:12.5px;font-weight:700;color:" + BAND[band(r.pctAchieved)] + ';">' + pct(r.pctAchieved) + "</span></td>";
-        return '<tr' + (total ? ' style="background:#f3f4f6;"' : "") + ">" + td(esc(r.entity) + name, { left: true, bold: total })
-            + td(r.pyVal ? money(r.pyVal) : "—", o) + td(r.target ? money(r.target) : "—", o) + td(r.cyVal || total ? money(r.cyVal) : "—", o)
-            + td(r.target ? money(r.targetDaily) : "—", o) + td(r.actualDaily ? money(r.actualDaily) : "—", o) + bal
-            + td(!r.target ? "—" : !sd.remaining ? "n/a" : money(r.requiredDaily), o) + statusCell(r.status) + ach + "</tr>";
+// ---------- AI commentary (optional) ----------
+// A short paragraph above the picture. The model is handed the figures
+// the tab already shows and only describes them; it calculates nothing
+// that lands in the email. Skipped quietly when there is no API key, or
+// when the call fails or is declined: the email must still go out.
+const COMMENTARY_SYSTEM = [
+    "You write the short opening paragraph of a daily sales email at an Australian HVAC wholesaler. It goes to internal staff every morning, above a picture of the sales dashboard they already know.",
+    "You are given the dashboard's own figures as JSON: month-to-date sales, goods shipped but not yet invoiced, gross profit, selling days, each branch and each salesperson against their monthly sales target, and two product quantity targets (AirTouch kits and Omniflow units).",
+    "Write 3 to 5 plain sentences that tell a busy reader where the month stands and what matters today: how sales compare with where they should be at this point of the month, which branch is furthest ahead or behind, what daily rate is now needed, and how the two quantity targets are tracking. The reader can see every number in the picture below, so pick the few that matter rather than restating the tables.",
+    "Use only the figures provided. Quote them as given, rounded sensibly (for example $401k, 19% of target); do not derive new totals or forecasts of your own. If something needed is missing, leave it out rather than guessing.",
+    "This is read by the whole team, so name a salesperson only to recognise a result that is ahead of pace; describe shortfalls at branch or team level, not by person.",
+    "Australian English, matter-of-fact and encouraging without hype. Plain text only: no greeting, no sign-off, no headings, no bullet points, no markdown, no emojis.",
+].join("\n\n");
+function commentaryInput(res) {
+    const f = res.f;
+    const rows = (t, names) => t.rows.filter(r => r.target > 0).map(r => ({ code: r.entity, name: names[r.entity] || undefined, target: Math.round(r.target), sales_so_far: Math.round(r.cyVal),
+        pct_of_target: +(r.pctAchieved * 100).toFixed(1), status: r.status, required_daily: Math.round(r.requiredDaily) }));
+    const tot = t => ({ target: Math.round(t.total.target), sales_so_far: Math.round(t.total.cyVal), pct_of_target: t.total.pctAchieved == null ? null : +(t.total.pctAchieved * 100).toFixed(1),
+        status: t.total.status, target_per_day: Math.round(t.total.targetDaily), actual_per_day: Math.round(t.total.actualDaily), required_per_day: Math.round(t.total.requiredDaily) });
+    return {
+        date: res.today, month: f.monthLabel, figures_as_of: res.asOf,
+        selling_days: { total: f.sd.total, passed: f.sd.passed, remaining: f.sd.remaining, pct_of_month_passed: f.sd.total ? +(f.sd.passed / f.sd.total * 100).toFixed(1) : null },
+        month_to_date: { sales_excl_tax: Math.round(f.sales), shipped_not_invoiced: Math.round(f.sni), sales_plus_shipped_not_invoiced: Math.round(f.total),
+                         gross_profit: Math.round(f.gp), gross_profit_pct: +(f.gpPct * 100).toFixed(2), invoices: f.invoices },
+        branches: { total: tot(f.branch), rows: rows(f.branch, res.names.branch || {}) },
+        salespeople: { total: tot(f.salesperson), rows: rows(f.salesperson, res.names.salesperson || {}) },
+        quantity_targets: (f.kits || []).map(k => ({ name: k.title, monthly_target_units: k.target, units_sold: k.qty, pct_of_target: +(k.pctAchieved * 100).toFixed(1), status: k.status,
+                                                    required_per_day: +Math.max(0, k.requiredDaily).toFixed(1), by_item: k.rows.map(r => ({ item: r.label, units: r.qty })) })),
     };
-    return '<p style="' + FONT + 'font-size:15px;font-weight:700;color:' + INK + ';margin:26px 0 8px;">' + esc(title) + "</p>"
-        + '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;">'
-        + "<tr>" + th(firstCol) + th("Sales For Month PY", 1) + th("Sales Target", 1) + th("Sales For Month", 1) + th("Target Run Rate", 1) + th("Actual Run Rate", 1) + th("Balance", 1) + th("Required Daily", 1) + th("Status") + th("% Achieved", 1) + "</tr>"
-        + data.rows.map(r => row(r, false)).join("") + (data.rows.length ? row(data.total, true) : "") + "</table>";
 }
-function renderEmail(res) {
-    const f = res.f, d = new Date(res.today + "T12:00:00");
-    const dateLbl = d.toLocaleDateString("en-AU", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
-    const asOf = res.asOf ? res.asOf.slice(11) + " on " + new Date(res.asOf.slice(0, 10) + "T12:00:00").toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }) : "";
+async function writeCommentary(res) {
+    if (!process.env.ANTHROPIC_API_KEY) { console.log("Commentary: no ANTHROPIC_API_KEY — email goes without it."); return ""; }
+    try {
+        const mod = require("@anthropic-ai/sdk");
+        const Anthropic = mod.default || mod;
+        const client = new Anthropic();
+        const response = await client.beta.messages.create({
+            model: "claude-opus-5-5",
+            max_tokens: 8000,
+            // If a safety classifier declines, the API re-runs the request on its default fallback model.
+            betas: ["server-side-fallback-2026-07-01"],
+            fallbacks: "default",
+            system: COMMENTARY_SYSTEM,
+            messages: [{ role: "user", content: "Today's dashboard figures:\n\n" + JSON.stringify(commentaryInput(res), null, 1) }],
+        });
+        if (response.stop_reason === "refusal") { console.warn("Commentary: request declined — email goes without it."); return ""; }
+        const text = response.content.filter(b => b.type === "text").map(b => b.text).join("\n").trim();
+        console.log("Commentary: " + text.length + " characters · model " + response.model + " · tokens in " + response.usage.input_tokens + " / out " + response.usage.output_tokens);
+        return text;
+    } catch (e) {
+        console.warn("Commentary: skipped (" + String((e && e.message) || e).slice(0, 200) + ") — email goes without it.");
+        return "";
+    }
+}
+
+// ---------- the email ----------
+// The body is a picture of the Daily Snapshot tab exactly as the tool
+// draws it (Faik, 2026-11-10: same colours, shape and format as the tool),
+// with the date and the optional commentary as real text above it.
+const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const money0 = n => "$" + Math.round(n).toLocaleString("en-AU");
+function renderEmail(res, commentary, imgSrc) {
+    const f = res.f, d = new Date(res.today + "T12:00:00Z");
     const tot = f.branch.total;
     const subject = "Daily Snapshot · " + d.toLocaleDateString("en-AU", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" })
-        + " · " + f.monthLabel + " sales " + money(Math.round(f.sales)).replace(/\.00$/, "") + (tot.pctAchieved != null ? " (" + (tot.pctAchieved * 100).toFixed(0) + "% of target)" : "");
-    const lbl = t => '<div style="' + FONT + 'font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:' + MUTED + ';">' + t + "</div>";
-    const part = (dot, t, v, sub, italic) => '<td valign="top" style="padding:10px 26px 0 0;">' + '<div style="' + FONT + 'font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:' + MUTED + ';"><span style="color:' + dot + ';">&#9632;</span> ' + t + "</div>"
-        + '<div style="' + FONT + "font-size:19px;font-weight:" + (italic ? "500;font-style:italic" : "700") + ";color:" + INK + ';padding-top:2px;">' + v + "</div>"
-        + '<div style="' + FONT + 'font-size:11px;color:' + MUTED + ';">' + sub + "</div></td>";
-    const share = f.total > 0 ? Math.max(1, Math.min(99, Math.round(Math.max(0, f.sales) / f.total * 100))) : 100;
-    const pane1 = lbl("Sales + Shipped Not Invoiced · month to date")
-        + '<div style="' + FONT + 'font-size:34px;font-weight:700;color:' + INK + ';padding:4px 0 8px;">' + money(f.total) + "</div>"
-        + '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"><tr><td width="' + share + '%" height="7" style="background:#26c6da;font-size:1px;line-height:1px;">&nbsp;</td><td height="7" style="background:#ffb300;font-size:1px;line-height:1px;">&nbsp;</td></tr></table>'
-        + '<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>'
-        + part("#26c6da", "Sales (excl. tax)", money(f.sales), f.invoices.toLocaleString("en-AU") + " invoices")
-        + part("#ffb300", "Shipped Not Invoiced", money(f.sni), f.sniOrders + " orders · delivered, awaiting invoice", true) + "</tr></table>";
-    const pane2 = lbl("Gross Profit · month to date")
-        + '<div style="' + FONT + 'font-size:34px;font-weight:700;color:' + INK + ';padding:4px 0 2px;">' + money(f.gp) + ' <span style="font-size:17px;font-weight:600;color:' + MUTED + ';">' + pct(f.gpPct) + "</span></div>"
-        + '<div style="' + FONT + 'font-size:11px;color:' + MUTED + ';">on invoiced sales · cost ' + money(f.cost) + "</div>"
-        + '<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>'
-        + part("#ffb300", "Including Shipped Not Invoiced" + (f.sniGpExact ? "" : " (estimate)"), money(f.gpAll) + ' <span style="font-size:12px;">' + pct(f.gpAllPct) + "</span>",
-               f.sniGpExact ? "adds " + money(f.sniGp) + " margin on shipped goods, at order-line cost" : "adds " + money(f.sniGp) + ", assuming shipped goods earn the same margin", true) + "</tr></table>";
-    const day = (t, v) => '<td width="25%" valign="top" style="padding:12px 14px;border:1px solid ' + LINE + ';">' + lbl(t) + '<div style="' + FONT + 'font-size:22px;font-weight:700;color:' + INK + ';padding-top:3px;">' + v + "</div></td>";
-    const html = '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>'
-        + '<body style="margin:0;padding:0;background:#f4f1eb;">'
-        + '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#f4f1eb;"><tr><td align="center" style="padding:18px 10px;">'
-        + '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="1080" style="width:1080px;max-width:100%;background:#ffffff;border:1px solid ' + LINE + ';"><tr><td style="padding:24px 28px 28px;">'
-        + '<div style="' + FONT + 'font-size:22px;font-weight:700;color:' + INK + ';">Daily Snapshot</div>'
-        + '<div style="' + FONT + 'font-size:13px;color:' + MUTED + ';padding:3px 0 18px;">' + esc(dateLbl) + " · <strong>" + esc(f.monthLabel) + "</strong> so far" + (asOf ? " · figures as of " + esc(asOf) : "") + "</div>"
-        + '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"><tr>'
-        + '<td width="58%" valign="top" style="padding:16px 18px;border:1px solid ' + LINE + ';">' + pane1 + '</td><td width="12" style="font-size:1px;">&nbsp;</td>'
-        + '<td valign="top" style="padding:16px 18px;border:1px solid ' + LINE + ';">' + pane2 + "</td></tr></table>"
-        + '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin-top:12px;border-collapse:collapse;"><tr>'
-        + day("Total selling days", f.sd.total) + day("Selling days passed", f.sd.passed) + day("Remaining selling days", f.sd.remaining) + day("% month passed", f.sd.total ? pct(f.sd.passed / f.sd.total) : "—") + "</tr></table>"
-        + runRateTable("Sales Run Rate · by Branch", "Branch", f.branch, res.names.branch || {}, f.sd)
-        + runRateTable("Sales Run Rate · by Salesperson", "Salesperson", f.salesperson, res.names.salesperson || {}, f.sd)
-        + '<div style="' + FONT + 'font-size:12px;color:' + MUTED + ';padding-top:22px;">% Achieved: <span style="color:' + BAND[0] + ';font-weight:700;">under 50%</span> · <span style="color:' + BAND[1] + ';font-weight:700;">50–99%</span> · <span style="color:' + BAND[2] + ';font-weight:700;">100%+</span>. Selling days = Mon–Fri minus Vic public holidays. Rental income is excluded.</div>'
-        + '<div style="' + FONT + 'font-size:12px;color:' + MUTED + ';padding-top:10px;">Same figures as the Daily Snapshot tab of the Sales Analytics tool: <a href="' + TOOL_URL + '" style="color:#3f51b5;">open the tool</a>. Sent automatically each morning.</div>'
-        + "</td></tr></table></td></tr></table></body></html>";
+        + " · " + f.monthLabel + " sales " + money0(f.sales) + (tot.pctAchieved != null ? " (" + (tot.pctAchieved * 100).toFixed(0) + "% of target)" : "");
+    const alt = "Daily Snapshot for " + f.monthLabel + ": sales plus shipped not invoiced " + money0(f.total) + ", gross profit " + money0(f.gp) + " (" + (f.gpPct * 100).toFixed(2) + "%).";
+    const FONT = "font-family:Segoe UI,Arial,Helvetica,sans-serif;";
+    const paras = commentary ? commentary.split(/\n\s*\n|\n/).map(p => p.trim()).filter(Boolean)
+        .map(p => '<p style="' + FONT + 'font-size:14px;line-height:1.55;color:#1f2430;margin:0 0 10px;max-width:900px;">' + esc(p) + "</p>").join("") : "";
+    const html = '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head><body style="margin:0;padding:14px;">'
+        + '<div style="' + FONT + 'font-size:18px;font-weight:700;color:#1f2430;margin:0 0 ' + (paras ? "10" : "12") + 'px;">Daily Snapshot · '
+        + esc(d.toLocaleDateString("en-AU", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC" })) + "</div>"
+        + paras
+        + '<img src="' + imgSrc + '" width="' + SHOW_WIDTH + '" alt="' + esc(alt) + '" style="display:block;width:100%;max-width:' + SHOW_WIDTH + 'px;height:auto;border:0;margin-top:6px;">'
+        + "</body></html>";
     return { subject, html };
 }
 
-async function sendMail(mail, to) {
-    const resp = await graph("/me/sendMail", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: { subject: mail.subject, body: { contentType: "HTML", content: mail.html }, toRecipients: to.map(a => ({ emailAddress: { address: a } })) }, saveToSentItems: true }) });
+async function sendMail(mail, png, to) {
+    const message = {
+        subject: mail.subject,
+        body: { contentType: "HTML", content: mail.html },
+        toRecipients: to.map(a => ({ emailAddress: { address: a } })),
+        attachments: [{ "@odata.type": "#microsoft.graph.fileAttachment", name: "daily-snapshot.png", contentType: "image/png",
+                        contentBytes: png.toString("base64"), contentId: "dailysnapshot", isInline: true }],
+    };
+    const resp = await graph("/me/sendMail", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message, saveToSentItems: true }) });
     if (resp.status !== 202) throw new Error("sendMail → HTTP " + resp.status + ": " + (await resp.text()).slice(0, 400));
 }
 
@@ -265,14 +319,21 @@ async function sendMail(mail, to) {
         }
         const res = await figuresFromPage(dir);
         console.log("Figures for " + res.f.monthLabel + ": " + res.invoices + " invoices in the snapshot · " + res.f.branch.rows.length + " branch rows · " + res.f.salesperson.rows.length + " salesperson rows · "
-            + res.targetFiles + " targets file(s)" + (res.skipped.length ? " · skipped " + res.skipped.length : "") + " · page date " + res.today);
-        const mail = renderEmail(res);
-        console.log("Email built: " + (mail.html.length / 1024).toFixed(1) + " KB");
-        if (local >= 0) { fs.writeFileSync(process.argv[local + 3], mail.html); console.log("Wrote " + process.argv[local + 3] + " · subject: " + mail.subject); return; }
+            + res.targetFiles + " targets file(s)" + (res.skipped.length ? " · skipped " + res.skipped.length : "") + " · page date " + res.today
+            + " · picture " + res.shot.pxWidth + "×" + res.shot.pxHeight + " px, " + (res.png.length / 1024).toFixed(0) + " KB (" + res.shot.theme + " theme)");
+        const commentary = await writeCommentary(res);
+        if (local >= 0) {
+            const outHtml = process.argv[local + 3], outPng = outHtml.replace(/\.html?$/i, "") + ".png";
+            fs.writeFileSync(outPng, res.png);
+            fs.writeFileSync(outHtml, renderEmail(res, commentary, path.basename(outPng)).html);
+            console.log("Wrote " + outHtml + " + picture");
+            return;
+        }
+        const mail = renderEmail(res, commentary, "cid:dailysnapshot");
         const to = (process.env.DAILY_EMAIL_TO || "").split(/[,;\s]+/).filter(Boolean);
         if (process.env.DRY_RUN === "1" || process.env.DRY_RUN === "true") { await graphToken(); console.log("DRY RUN — nothing sent (" + to.length + " recipient(s) configured)."); return; }
         if (!to.length) throw new Error("DAILY_EMAIL_TO is empty — no recipients");
-        await sendMail(mail, to);
-        console.log("Sent to " + to.length + " recipient(s).");
+        await sendMail(mail, res.png, to);
+        console.log("Sent to " + to.length + " recipient(s)" + (commentary ? ", with commentary." : ", without commentary."));
     } finally { try { fs.rmSync(dir, { recursive: true, force: true }); } catch (e) { /* temp dir */ } }
 })().catch(e => { console.error("DAILY EMAIL FAILED: " + e.message); process.exit(1); });
