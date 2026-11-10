@@ -1763,14 +1763,9 @@
         </div>
         <nav>
             <div class="group-label">Dashboards</div>
-            <!-- Daily Snapshot: OWNER-ONLY TRIAL (Faik, 2026-11-10). Hidden for everyone
-                 else and the owner lands on it after sign-in (see handleSignIn).
-                 To open it to everyone: drop restrictedNav + display:none here, take
-                 "dailySnapshot" out of RESTRICTED_TABS, make it the default tab
-                 (state.tab, the two section display styles, headerTitle) and drop the
-                 owner test in handleSignIn. -->
-            <a data-tab="dailySnapshot" class="restrictedNav" style="display:none;">Daily Snapshot</a>
-            <a data-tab="overview" class="active">Overview</a>
+            <!-- Daily Snapshot: the landing tab, open to everyone (Faik, 2026-11-10) -->
+            <a data-tab="dailySnapshot" class="active">Daily Snapshot</a>
+            <a data-tab="overview">Overview</a>
             <a data-tab="deepInsights">Deep Insights</a>
             <a data-tab="branch">Branch Sales</a>
             <a data-tab="salesperson">Salesperson Sales</a>
@@ -1822,7 +1817,7 @@
         <div class="header">
             <div style="display:flex; align-items:center; gap:18px;">
                 <div style="display:flex; flex-direction:column; gap:5px;">
-                    <h2 id="headerTitle">Overview</h2>
+                    <h2 id="headerTitle">Daily Snapshot</h2>
                     <!-- Owner-only trial (ownerUi): shown by updateRestrictedNav for the owner account only -->
                     <span id="tabViewWrap" class="ws-wrap ownerUi" style="display:none;" title="Tab view: sidebar off, tabs across the top"><span class="ws-switch" id="tabViewSwitch"><span class="ws-knob"></span></span>TAB VIEW</span>
                 </div>
@@ -2194,7 +2189,7 @@
             <!-- TAB: Daily Snapshot (landing tab). Current calendar month only:
                  the two month-to-date panes use the Month-to-Date tab's figures,
                  the two tables use the run-rate engine. Faik, 2026-11-10. -->
-            <section data-tab-content="dailySnapshot" style="display:none;">
+            <section data-tab-content="dailySnapshot">
                 <div class="hint rr-hint"><span><strong id="dsMonth">—</strong> so far. <span id="dsAsOf"></span></span><span class="rr-tgt"><span class="rr-tgt-lbl">Targets</span><span id="dsTgtStatus" title="Read from the Sales Budgets-Targets folder on SharePoint">not loaded</span><button type="button" class="more-btn" id="dsTgtReload" title="Re-read the targets folder on SharePoint">↻</button></span></div>
                 <div id="dsEmpty" class="ds-empty" style="display:none;">
                     <div class="ds-empty-msg" id="dsEmptyMsg">No figures loaded yet.</div>
@@ -2270,7 +2265,7 @@
             </section>
 
             <!-- TAB: Overview -->
-            <section data-tab-content="overview">
+            <section data-tab-content="overview" style="display:none;">
                 <div class="kpi-row">
                     <div class="kpi k-rev"><div class="label">Sales (excl. tax)</div><div class="value" id="kpiRevenue">—</div><div class="sub" id="kpiRevenueSub">&nbsp;</div></div>
                     <div class="kpi k-gp"><div class="label">Gross Profit $</div><div class="value" id="kpiGp">—</div><div class="sub" id="kpiGpSub">&nbsp;</div></div>
@@ -4448,7 +4443,7 @@ const state = {
         chartTypes: { sp: "stackH", topItems: "barH", topCustomers: "barH", trend: "line" },
     },
     charts: {},
-    tab: "overview",
+    tab: "dailySnapshot",
     drill: null, // null | "customer" | "invoice" | "item"
     sourceTab: "overview",
 };
@@ -16870,7 +16865,7 @@ const RESTRICTED_NAV_OWNER = "faiko@vicair.com.au";
 // The budget-driven tabs are open to everyone: salespersonSalesRate /
 // salespersonMarginRate (Faik, 2026-10-13), branchTarget / branchSalesRate
 // (Faik, 2026-10-14). Branch Margin Run Rate + Lists stay owner-only.
-const RESTRICTED_TABS = new Set(["branchMarginRate", "keyCustomers", "ordersPastDel", "dailySnapshot"]);   // dailySnapshot: owner-only trial
+const RESTRICTED_TABS = new Set(["branchMarginRate", "keyCustomers", "ordersPastDel"]);
 // The Finance group (P&L tab) has its own allow-list (Faik 2026-09-23).
 // Finance view (P&L tab + Overview reconciliation rows): Faik, Michael,
 // Daniel and Shane — approved by Faik 2026-10-03. Nobody else.
@@ -16973,12 +16968,7 @@ async function handleSignIn() {
         document.getElementById("loadBtn").disabled = false;
         document.getElementById("signOutBtn").style.display = "inline-block";
         updateRestrictedNav();
-        // Daily Snapshot trial: the owner lands on it and it fills itself
-        // from the newest snapshot. Everyone else stays on Overview, as before.
-        if (currentSignInName() === RESTRICTED_NAV_OWNER && !state.invoices.length) {
-            if (state.tab === "overview") setActiveTab("dailySnapshot");
-            autoLoadLatestSnapshot(false);   // not awaited
-        }
+        autoLoadLatestSnapshot(false);   // landing tab fills itself from the newest snapshot; not awaited
     } catch (err) { alert("Sign-in failed: " + (err.message || err)); }
 }
 
