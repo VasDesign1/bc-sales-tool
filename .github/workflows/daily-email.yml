@@ -1,0 +1,47 @@
+name: daily-snapshot-email
+
+# Emails the Daily Snapshot tab (scripts/daily-email.js).
+# TRIAL: manual runs only, to the address(es) in the DAILY_EMAIL_TO
+# secret. No schedule until the template is approved.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Build the email but do not send it"
+        type: boolean
+        required: false
+        default: false
+      slot:
+        description: "Snapshot slot to use (0500 / 1100 / 1700); empty = the newest"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: daily-snapshot-email
+  cancel-in-progress: false
+
+jobs:
+  email:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      # Node 22: the script drives headless Chrome over the built-in WebSocket.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build and send the Daily Snapshot email
+        env:
+          BC_CLIENT_ID: ${{ secrets.BC_CLIENT_ID }}
+          BC_TENANT: ${{ secrets.BC_TENANT }}
+          BC_REFRESH_TOKEN: ${{ secrets.BC_REFRESH_TOKEN }}
+          SNAPSHOT_PASSPHRASE: ${{ secrets.SNAPSHOT_PASSPHRASE }}
+          DAILY_EMAIL_TO: ${{ secrets.DAILY_EMAIL_TO }}
+          DRY_RUN: ${{ github.event.inputs.dry_run }}
+          SLOT: ${{ github.event.inputs.slot }}
+        run: node scripts/daily-email.js
