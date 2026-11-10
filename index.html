@@ -231,16 +231,18 @@
            Centred card over a dimmed page for work that would otherwise look
            like a freeze: opening the EOM Report, and Load sales. The card is a
            .card and the bar a .btn-primary, so both take the active theme. The
-           bar moves by transform only, which keeps animating while the page
-           itself is busy. */
+           bar is real progress, 0% at the start and 100% when the work is done
+           (setBusyProgress); it never loops. */
         #busyWrap { position: fixed; inset: 0; z-index: 9000; display: none; align-items: center; justify-content: center; background: rgba(20,22,30,0.38); }
         #busyWrap.on { display: flex; }
         #busyWrap .busy-card { width: 400px; max-width: calc(100vw - 48px); padding: 24px 28px; text-align: center; display: block; box-shadow: 0 18px 50px rgba(0,0,0,0.30); }
         #busyWrap .busy-card h3 { font-size: 16px; margin: 0; }
         #busyWrap .busy-track { height: 10px; border-radius: 6px; overflow: hidden; margin: 14px 0 10px; background: rgba(128,128,128,0.22); }
-        #busyWrap .busy-bar { display: block; height: 100%; width: 40%; border-radius: 6px; padding: 0; box-shadow: none; will-change: transform; animation: busySlide 1.3s ease-in-out infinite; }
+        #busyWrap .busy-bar { display: block; height: 100%; width: 0%; border-radius: 6px; padding: 0; box-shadow: none; transition: width 0.2s linear; }
+        #busyWrap .busy-pct { font-size: 13px; font-weight: 700; margin-bottom: 4px; }
         #busyWrap .busy-detail { font-size: 12.5px; opacity: .75; line-height: 1.45; min-height: 18px; }
-        @keyframes busySlide { 0% { transform: translateX(-100%); } 100% { transform: translateX(250%); } }
+        /* the corner progress line stays readable above the dimmed page */
+        #bcProgress { z-index: 9100; }
 
         /* EOM Report header: items packed left, wider search box, the two GP
            buttons close together, Export to Excel at the right edge. */
@@ -4264,7 +4266,7 @@
 </div>
 
 <div class="progress" id="bcProgress"><span id="bcProgressText"></span></div>
-<div id="busyWrap" role="status" aria-live="polite"><div class="card busy-card"><h3 id="busyTitle">Loading…</h3><div class="busy-track"><span class="busy-bar btn-primary"></span></div><div class="busy-detail" id="busyDetail"></div></div></div>
+<div id="busyWrap" role="status" aria-live="polite"><div class="card busy-card"><h3 id="busyTitle">Loading…</h3><div class="busy-track"><span class="busy-bar btn-primary" id="busyBar"></span></div><div class="busy-pct" id="busyPct">0%</div><div class="busy-detail" id="busyDetail"></div></div></div>
 
 <!-- TOP N MODAL -->
 <div class="modal-overlay" id="topNModal" style="display:none;">
@@ -4366,9 +4368,9 @@ async function spFetch(name) {
     return resp;
 }
 function updateBCProgress(label, detail) {
-    // While the loading card is up it carries the progress line itself,
-    // so there is no second message in the corner.
-    if (busyIsOn()) { setBusyDetail(label + ": " + detail); return; }
+    // The corner line shows as it always has; while the loading card is
+    // up the same line is repeated on the card.
+    if (busyIsOn()) setBusyDetail(label + ": " + detail);
     const el = document.getElementById("bcProgressText");
     const wrap = document.getElementById("bcProgress");
     if (el && wrap) { el.textContent = label + ": " + detail; wrap.style.display = "block"; }
@@ -4380,6 +4382,7 @@ function showBusy(title, detail) {
     const w = document.getElementById("busyWrap"); if (!w) return;
     document.getElementById("busyTitle").textContent = title || "Loading…";
     setBusyDetail(detail);
+    setBusyProgress(0, true);
     w.classList.add("on");
     // Some themes draw .card with no fill (Linen): give the card the page
     // colour so the page underneath does not show through it.
@@ -4388,13 +4391,26 @@ function showBusy(title, detail) {
     if (/^(transparent|rgba\(.*,\s*0\))$/.test(getComputedStyle(card).backgroundColor)) card.style.backgroundColor = getComputedStyle(document.body).backgroundColor;
 }
 function hideBusy() { const w = document.getElementById("busyWrap"); if (w) w.classList.remove("on"); }
+// Real progress on the card: frac 0…1. It only ever moves forward within
+// one showBusy (reset = true starts again from 0%).
+let busyFrac = 0;
+function setBusyProgress(frac, reset) {
+    busyFrac = reset ? 0 : Math.max(busyFrac, Math.min(1, frac || 0));
+    const pct = Math.round(busyFrac * 100);
+    const bar = document.getElementById("busyBar"), lbl = document.getElementById("busyPct");
+    if (bar) { if (reset) { bar.style.transition = "none"; bar.style.width = "0%"; void bar.offsetWidth; bar.style.transition = ""; } else bar.style.width = pct + "%"; }
+    if (lbl) lbl.textContent = pct + "%";
+}
+// Resolves once the browser has painted, so a progress step is seen
+// before the next block of work starts.
+function nextPaint() { return new Promise(r => afterPaint(r)); }
 // Run fn once the browser has had a chance to paint (so the card is on
 // screen before heavy work blocks the page). The timer covers a
 // background tab, where animation frames do not fire.
 function afterPaint(fn) {
     let done = false;
     const go = () => { if (done) return; done = true; fn(); };
-    requestAnimationFrame(() => setTimeout(go, 30));
+    requestAnimationFrame(() => setTimeout(go, 0));
     setTimeout(go, 250);
 }
 function hideBCProgress() {
@@ -5736,11 +5752,12 @@ function setActiveTab(name) {
     // The EOM Report builds every invoice line the first time it opens for
     // a filter state, which blocks the page for a few seconds: show the
     // loading card, let it paint, then build. Already-built rows open at once.
-    const eomCold = name === "eom" && state.invoices.length &&
-        !(state._eomRows && state._eomRows.key === filterStateKey() + "|" + state.sortEom.key + "|" + state.sortEom.dir);
+    const eomCold = name === "eom" && state.invoices.length && !(state._eomRows && state._eomRows.key === eomRowsKey());
     if (eomCold) {
         showBusy("Loading the EOM Report", "Building the line-level detail…");
-        afterPaint(() => { try { if (state.tab === "eom") renderCurrentTab(); } finally { hideBusy(); } });
+        nextPaint().then(eomOpenWithProgress)
+            .catch(e => { console.warn("[EOM] staged build failed, plain render instead:", e); if (state.tab === "eom") renderCurrentTab(); })
+            .finally(hideBusy);
     } else if (state.invoices.length || name === "pnl") renderCurrentTab();
     window.scrollTo({ top: 0, behavior: "smooth" });
 }
@@ -10722,14 +10739,43 @@ function downloadXLSX(rows, sheetName, baseName, opts) {
 // order and kept; the search box and the GP toggles only filter the
 // kept rows. The customer drill tree below the table is likewise kept
 // per filter state + GP toggles (search text does not feed it).
+function eomRowsKey() { return filterStateKey() + "|" + state.sortEom.key + "|" + state.sortEom.dir; }
+function eomSearchText(r) { return (r.customer + " " + r.invoiceNumber + " " + r.salesperson + " " + r.itemNumber + " " + r.description + " " + r.branch + " " + r.itemCategory).toLowerCase(); }
 function eomBaseRows() {
-    const key = filterStateKey() + "|" + state.sortEom.key + "|" + state.sortEom.dir;
+    const key = eomRowsKey();
     if (state._eomRows && state._eomRows.key === key) return state._eomRows.rows;
     const rows = buildEOMRows(state.filtered);
-    for (const r of rows) r._search = (r.customer + " " + r.invoiceNumber + " " + r.salesperson + " " + r.itemNumber + " " + r.description + " " + r.branch + " " + r.itemCategory).toLowerCase();
+    for (const r of rows) r._search = eomSearchText(r);
     sortRowsBy(rows, state.sortEom);
     state._eomRows = { key, rows };
     return rows;
+}
+// Opening the EOM Report cold: the same build as eomBaseRows + the drill
+// tree, done in slices with a pause for the screen between them, so the
+// loading card shows true progress. Shares: lines 0–70%, sort 75%, drill
+// tree 90%, table on screen 100%. The result lands in the same caches, so
+// renderEOM() afterwards is the ordinary render.
+async function eomOpenWithProgress() {
+    const key = eomRowsKey(), invs = state.filtered, rows = [];
+    let last = performance.now();
+    for (let i = 0; i < invs.length; i += 150) {
+        for (const r of buildEOMRows(invs.slice(i, i + 150))) { r._search = eomSearchText(r); rows.push(r); }
+        if (performance.now() - last > 80) {
+            setBusyProgress(0.7 * Math.min(1, (i + 150) / invs.length));
+            await nextPaint(); last = performance.now();
+            if (state.tab !== "eom" || eomRowsKey() !== key) return;   // user moved on or changed a filter
+        }
+    }
+    setBusyProgress(0.7); setBusyDetail("Sorting " + fmtInt(rows.length) + " lines…"); await nextPaint();
+    sortRowsBy(rows, state.sortEom);
+    if (state.tab !== "eom" || eomRowsKey() !== key) return;
+    state._eomRows = { key, rows };
+    setBusyProgress(0.75); setBusyDetail("Building the drill-down…"); await nextPaint();
+    eomDrillRoots();
+    setBusyProgress(0.9); setBusyDetail("Drawing the report…"); await nextPaint();
+    if (state.tab !== "eom") return;
+    renderCurrentTab();
+    setBusyProgress(1); await nextPaint();
 }
 function eomDrillRoots() {
     const key = filterStateKey() + "|" + (state.eomGpLow ? 1 : 0) + "|" + (state.eomGpHigh ? 1 : 0);
@@ -17423,7 +17469,11 @@ async function handleLoad() {
     btn.textContent = "Loading…";
     showBusy("Loading sales from Wiise", "Connecting…");
     try {
-        const [locs, items, customers, invoices, iles, creditMemos, shipments, returnReceipts, quotes, quoteExtras, blanketOrders, valueEntries, salesOrders, salesOrderOutstanding, _residentialLookup, _quoteArchive] = await Promise.all([
+        // Card progress: each of the sixteen sources that finishes moves the
+        // bar on (together 0–90%); building the dashboards is the last 10%.
+        let srcDone = 0;
+        const tracked = list => list.map(pr => Promise.resolve(pr).then(v => { srcDone++; setBusyProgress(0.9 * srcDone / list.length); return v; }));
+        const [locs, items, customers, invoices, iles, creditMemos, shipments, returnReceipts, quotes, quoteExtras, blanketOrders, valueEntries, salesOrders, salesOrderOutstanding, _residentialLookup, _quoteArchive] = await Promise.all(tracked([
             fetchLocations(),
             fetchItems(),
             fetchCustomers(),
@@ -17440,10 +17490,12 @@ async function handleLoad() {
             fetchSalesOrderOutstandingLines(),
             fetchResidentialDocLookup(),
             fetchSalesQuoteArchive(from, to),
-        ]);
+        ]));
+        setBusyDetail("Building the dashboards…"); await nextPaint();
         applyLoadedData({ locs, items, customers, invoices, iles, creditMemos, shipments, returnReceipts,
                          quotes, quoteExtras, blanketOrders, valueEntries, salesOrders, salesOrderOutstanding,
                          from, to });
+        setBusyProgress(1); await nextPaint();
         // The reconciliation rows' ledger slice and its links come in the
         // background once the sales figures are on screen — only for the
         // people who can see those rows.
