@@ -298,6 +298,7 @@
         .ds-seg.s2 { color: #4a3200; }
         .ds-seg.s3 { flex: 1 1 0; min-width: 0; background: transparent; font-weight: 600; }
         .ds-seg.s3 b { font-weight: 800; }
+        .ds-seg-sep { margin: 0 10px; opacity: .55; }
         .ds-split:not(.ds-thick) .ds-seg { font-size: 0; }
         .ds-dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 7px; }
         .ds-parts { display: flex; gap: 36px; flex-wrap: wrap; margin-top: 12px; }
@@ -15022,12 +15023,15 @@ function renderDailySnapshot() {
         const txt = { s: fmtPct(f.sales / tgt), n: f.sni > 0 ? fmtPct(f.sni / tgt) : "",
             b: bal > 0 ? "Balance to target <b>" + fmtMoneyFull(bal) + "</b>" : "Over target by <b>" + fmtMoneyFull(-bal) + "</b>",
             bShort: "<b>" + fmtMoneyFull(Math.abs(bal)) + "</b>" };
+        // Everything on the one visual: both colours together as a % of target, the balance, and the balance as a % of target.
+        txt.bFull = "Total achieved <b>" + fmtPct(f.total / tgt) + "</b><span class=\"ds-seg-sep\">·</span>" + txt.b + (bal > 0 ? "<span class=\"ds-seg-sep\">·</span><b>" + fmtPct(bal / tgt) + "</b> left" : "");
         // A label that does not fit its part is left out (the tooltip still has every figure).
         const fit = () => {
             segS.textContent = txt.s; if (segS.scrollWidth > segS.clientWidth) segS.textContent = "";
             segN.textContent = txt.n; segN.style.fontSize = ""; if (segN.scrollWidth > segN.clientWidth) segN.style.fontSize = "10px";   // a narrow part: smaller figures before none
             if (segN.scrollWidth > segN.clientWidth) segN.textContent = "";
-            segB.innerHTML = txt.b;   if (segB.scrollWidth > segB.clientWidth) segB.innerHTML = txt.bShort;
+            segB.innerHTML = txt.bFull; if (segB.scrollWidth > segB.clientWidth) segB.innerHTML = txt.b;
+            if (segB.scrollWidth > segB.clientWidth) segB.innerHTML = txt.bShort;
             if (segB.scrollWidth > segB.clientWidth) segB.innerHTML = "";
         };
         fit();
