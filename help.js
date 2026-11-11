@@ -147,7 +147,7 @@
         [/^gp\$$/i, B('GP $', 'Sales less item cost for this customer in the period.')],
         [/^invoices$/i, B('Invoices', 'Number of posted invoices in the period.')],
         [/^total selling days$/i, B('Total Selling Days', 'Working days in the month: Monday to Friday, less Victorian public holidays.')],
-        [/^selling days passed$/i, B('Selling Days Passed', 'Working days from the 1st up to and including today. For a past month it equals the total.')],
+        [/^selling days passed$/i, B('Selling Days Passed', 'Working days from the 1st up to the last day the figures cover: today once today’s sales are in, otherwise yesterday (a morning snapshot holds nothing for today yet). The line underneath says which day the count stops at. For a past month it equals the total.')],
         [/^remaining selling days$/i, B('Remaining Selling Days', 'Working days left after today in the month.')],
         [/^% month passed$/i, B('% Month Passed', 'Selling days passed divided by total selling days.')],
         [/^universe size$/i, B('Universe size', 'How many customer-and-item pairs are in scope for the chosen view and filters.')],

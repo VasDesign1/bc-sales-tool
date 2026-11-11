@@ -304,7 +304,12 @@
         #ktPair > div { min-width: 0; }
         #ktPair .panel-header .meta { display: none; }
         .ds-pair > .panel { min-width: 0; }
-        .ds-kit-sum { display: flex; flex-wrap: wrap; gap: 8px 26px; padding: 12px 16px 14px; align-items: flex-end; }
+        .ds-kit-sum { display: flex; flex-wrap: wrap; gap: 8px 26px; padding: 12px 16px 14px; align-items: flex-start; }
+        /* Required a day, then % Achieved with Status under it: kept together whatever the width (Faik, 2026-11-11) */
+        .ds-kit-grp { display: inline-flex; gap: 26px; align-items: flex-start; flex-wrap: nowrap; }
+        .ds-kit-stat > span.ds-kit-under { margin-top: 9px; }
+        .ds-kit-stat b { display: block; }
+        .kpi .sub.sd-note { opacity: .85; }
         .ds-kit-stat > span { display: block; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; opacity: .65; margin-bottom: 3px; }
         .ds-kit-stat b { font-size: 17px; font-weight: 700; }
         .ds-kit-stat b .badge, .ds-kit-stat b .rr-bar { font-size: 11px; vertical-align: middle; }
@@ -12663,7 +12668,7 @@ function runRateRows(opts, mk, sd) {
         const target = opts.budget ? (salespersonBudgetTarget(opts.metric, mk, ent, opts.entity) || 0) : (getTarget(metricKey, fy, mk, ent) || 0);
         const rr = computeRunRate(cyVal, target, sd.total, sd.passed, sd.remaining);
         if (opts.budget && sd.isPast)   rr.status = closedStatus(cyVal, target);
-        if (opts.budget && sd.isFuture) rr.status = target > 0 ? "NOT STARTED" : "NO PLAN";
+        if (opts.budget && (sd.isFuture || !sd.passed)) rr.status = target > 0 ? "NOT STARTED" : "NO PLAN";   // also the first morning of a month: no selling day in the figures yet
         // Budget tabs read balance as actual − target: + when ahead of
         // (or over) target, − when behind. Branch tabs keep target − actual.
         if (opts.budget) rr.balance = cyVal - target;
@@ -12703,13 +12708,13 @@ function renderRunRateTab(opts) {
         if (sel) sel.value = mk;
     }
     const [selY, selM] = mk.split("-").map(Number);
-    const sd = opts.budget ? sellingDaysForMonthKey(mk, today) : sellingDaysForMonth(today);
+    const sd = opts.budget ? sellingDaysForMonthKey(mk, figuresDay()) : sellingDaysForMonth(figuresDay());   // counted to the last day the figures cover
     const fy = fiscalYear(mk + "-01");
     const monthLbl = new Date(selY, selM - 1, 1).toLocaleDateString("en-AU", { month: "long", year: "numeric" });
 
     document.getElementById(opts.prefix + "Month").textContent = monthLbl;
     document.getElementById(opts.prefix + "SdTotal").textContent = fmtInt(sd.total);
-    document.getElementById(opts.prefix + "SdPassed").textContent = fmtInt(sd.passed);
+    paintSdPassed(document.getElementById(opts.prefix + "SdPassed"), sd, mk);
     document.getElementById(opts.prefix + "SdRemaining").textContent = fmtInt(sd.remaining);
     document.getElementById(opts.prefix + "SdPct").textContent = sd.total ? fmtPct(sd.passed / sd.total) : "—";
 
@@ -14236,6 +14241,56 @@ function sellingDaysInRange(start, end) {
     while (d <= e) { if (isSellingDay(d)) c++; d.setDate(d.getDate() + 1); }
     return c;
 }
+// The last day the loaded figures cover (Faik, 2026-11-11). Selling days
+// are counted up to here, not to the calendar's today: a snapshot taken
+// before the day's trading holds nothing for that day, so counting it as
+// "passed" made every run rate read one day too low in the morning.
+//   - a snapshot: its capture day, a live load: today
+//   - but only when the figures hold at least one invoice dated that day;
+//     otherwise the day before (nothing of that day is in yet).
+// Nothing loaded: the calendar's today.
+function figuresDay() {
+    const now = new Date();
+    let cap = now;
+    if (state.dataAsOf) {
+        const a = String(state.dataAsOf).slice(0, 10).split("-").map(Number);
+        if (a.length === 3 && a[0]) { const c = new Date(a[0], a[1] - 1, a[2], 12); if (c < now) cap = c; }
+    }
+    if (!state.invoices.length) return cap;
+    const iso = localISO(cap), memo = figuresDay._memo;
+    let has;
+    if (memo && memo.list === state.invoices && memo.iso === iso) has = memo.has;
+    else { has = state.invoices.some(i => String(i.postingDate || "").slice(0, 10) === iso); figuresDay._memo = { list: state.invoices, iso, has }; }
+    if (has) return cap;
+    const d = new Date(cap.getFullYear(), cap.getMonth(), cap.getDate() - 1, 12);
+    return d;
+}
+// The "Selling Days Passed" tile: the count, and under it which day the
+// count stops at, so nobody has to guess whether today is in it.
+function paintSdPassed(el, sd, mk) {
+    if (!el) return;
+    el.textContent = fmtInt(sd.passed);
+    let note = el.parentElement.querySelector(".sd-note");
+    if (!note) { note = document.createElement("div"); note.className = "sub sd-note"; el.parentElement.appendChild(note); }
+    const now = new Date(), todayISO = localISO(now), lbl = d => d.toLocaleDateString("en-AU", { weekday: "short", day: "numeric", month: "short" }).replace(",", "");
+    let text = "";
+    if (!state.invoices.length) text = "";
+    else if (sd.isPast || mk < todayISO.slice(0, 7)) text = "(month finished)";
+    else if (mk > todayISO.slice(0, 7)) text = "";
+    else {
+        const fd = figuresDay(), todaySells = isSellingDay(now);
+        if (localISO(fd) === todayISO) text = todaySells ? "(including today, " + lbl(now) + ")" : "(to " + lbl(fd) + ")";
+        else {
+            // last selling day of this month the figures reach
+            const last = new Date(fd.getFullYear(), fd.getMonth(), fd.getDate());
+            while (localISO(last).slice(0, 7) === mk && !isSellingDay(last)) last.setDate(last.getDate() - 1);
+            const reached = localISO(last).slice(0, 7) === mk && sd.passed > 0;
+            text = "(" + (reached ? "to " + lbl(last) : "no selling day completed yet") + (todaySells ? "; today not counted, no sales in yet" : "") + ")";
+        }
+    }
+    note.textContent = text;
+    note.style.display = text ? "" : "none";
+}
 function sellingDaysForMonth(today) {
     const start = new Date(today.getFullYear(), today.getMonth(), 1);
     const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
@@ -14591,13 +14646,14 @@ function dsSnapshotFigures() {
     const sniGp = sniGpExact ? sni - pipe.sniCost : sni * gpPct;
     const total = sales + sni, gpAll = gp + sniGp;
     const mk = localISO(m.today).slice(0, 7);
-    const sd = sellingDaysForMonthKey(mk, m.today);
+    const sd = sellingDaysForMonthKey(mk, figuresDay());   // counted to the last day the figures cover
     const table = entity => {
         const rows = runRateRows({ metric: "sales", entity, budget: true }, mk, sd);
         let cy = 0, py = 0, target = 0;
         for (const r of rows) { cy += r.cyVal; py += r.pyVal; target += r.target; }
         const t = computeRunRate(cy, target, sd.total, sd.passed, sd.remaining);
         t.balance = cy - target; t.target = target; t.cyVal = cy; t.pyVal = py; t.entity = "Total";
+        if (!sd.passed && target > 0) t.status = "NOT STARTED";
         return { rows, total: t };
     };
     return { mk, sd, monthLabel: m.mStart.toLocaleDateString("en-AU", { month: "long", year: "numeric" }),
@@ -14657,9 +14713,10 @@ function dsKitFigures(group, m, sd) {
     const node = (key, label) => ({ key, label, qty: 0, sales: 0, docs: new Set(), branches: new Set(), kids: new Map() });
     const kid = (parent, id, label) => { if (!parent.kids.has(id)) parent.kids.set(id, node(parent.key + "|" + id, label)); return parent.kids.get(id); };
     const items = new Map(group.items.map(c => [c, node("kit|" + group.key + "|" + c, c)]));
+    const kitLo = localISO(m.mStart), kitHi = localISO(m.today);
     for (const inv of state.invoices) {
-        const d = new Date(inv.postingDate);
-        if (!(d >= m.mStart && d <= m.today)) continue;
+        const day = String(inv.postingDate || "").slice(0, 10);          // calendar days, as mtdTotals
+        if (!(day >= kitLo && day <= kitHi)) continue;
         const sp = inv.salesperson || "(unassigned)";
         if (fl.salesperson && sp !== fl.salesperson) continue;
         if (fl.customer && (inv.customerNumber || "") !== fl.customer) continue;
@@ -14685,6 +14742,7 @@ function dsKitFigures(group, m, sd) {
     const rr = computeRunRate(qty, group.target, sd.total, sd.passed, sd.remaining);
     rr.balance = qty - group.target;   // + when over target, − when behind (as the run-rate tables)
     if (sd.isPast) rr.status = qty >= group.target ? "TARGET MET" : "TARGET MISSED";   // a finished month (AirTouch & Omniflow Targets tab)
+    if (sd.isFuture || !sd.passed) rr.status = "NOT STARTED";                                        // no selling day of the month is in the figures yet
     return Object.assign({ key: group.key, title: group.title, target: group.target, rows, qty, sales, docs: docs.size }, rr);
 }
 // hostId: where the panels go — the Daily Snapshot's #dsKits by default,
@@ -14697,6 +14755,8 @@ function dsPaintKits(kits, loaded, sd, hostId) {
     if (!host.dataset.wired) {
         host.addEventListener("click", e => {
             if (e.target.closest("a")) return;
+            const go = e.target.closest("[data-ds-goto]");
+            if (go) { setActiveTab(go.dataset.dsGoto); return; }
             const th = e.target.closest("th[data-kit-sort]");
             if (th) {   // header click: sort every level of that panel by the column
                 const st = state.sortKits[th.dataset.kit], key = th.dataset.kitSort;
@@ -14743,11 +14803,12 @@ function dsPaintKits(kits, loaded, sd, hostId) {
         const bal = !loaded ? "—" : `<i style="font-style:normal; color:${k.balance >= 0 ? "#2e7d32" : "#c62828"};">${k.balance >= 0 ? "+" : "−"}${q(Math.abs(k.balance))}</i>`;
         const bar = !loaded ? "—" : `<span class="rr-bar b${rrPctBand(k.pctAchieved)}" title="${fmtPct(k.pctAchieved)} of target"><span class="rr-fill" style="width:${Math.max(0, Math.min(100, k.pctAchieved * 100)).toFixed(1)}%;"></span><span class="rr-lbl">${fmtPct(k.pctAchieved)}</span></span>`;
         return `<div class="panel" id="${idp}_${k.key}">
-            <div class="panel-header"><h2>${escapeHtml(k.title)}</h2><span class="meta">target ${fmtInt(k.target)} units a month, all codes together · click a code to see who sold it</span></div>
+            <div class="panel-header"><h2>${escapeHtml(k.title)}</h2><span class="meta">target ${fmtInt(k.target)} units a month, all codes together · click a code to see who sold it</span>${hostId === "dsKits" ? '<button type="button" class="more-btn" data-ds-goto="kitTargets" title="Open the AirTouch & Omniflow Targets tab, with month selector and charts">Full tab →</button>' : ""}</div>
             <div class="ds-kit-sum">
                 ${stat(sd.isPast ? "Sold in the month" : "Sold this month", loaded ? q(k.qty) : "—")}${stat("Target", fmtInt(k.target))}${stat("Balance", bal)}
-                ${stat("Target a day", perDay(k.targetDaily))}${stat("Actual a day", loaded ? perDay(k.actualDaily) : "—")}${stat("Required a day", !loaded ? "—" : !sd.remaining ? "n/a" : perDay(Math.max(0, k.requiredDaily)))}
-                ${stat("Status", loaded ? statusBadgeRunRate(k.status) : "—")}${stat("% Achieved", bar)}
+                ${stat("Target a day", perDay(k.targetDaily))}${stat("Actual a day", loaded ? perDay(k.actualDaily) : "—")}
+                <div class="ds-kit-grp">${stat("Required a day", !loaded ? "—" : !sd.remaining ? "n/a" : perDay(Math.max(0, k.requiredDaily)))}
+                    <div class="ds-kit-stat"><span>% Achieved</span><b>${bar}</b><span class="ds-kit-under">Status</span><b>${loaded ? statusBadgeRunRate(k.status) : "—"}</b></div></div>
             </div>
             <div class="table-scroll">
                 <table id="${idp}Table_${k.key}" class="ds-table">
@@ -14785,6 +14846,7 @@ function kitUnits(group, from, to, keyFn) {
     return out;
 }
 const KIT_CHART_VIEWS = [
+    ["tva",    "Target vs actual — selected month"],
     ["fy",     "Units by month — whole financial year, against the target"],
     ["pace",   "Selected month — day by day against the target pace"],
     ["codes",  "Selected month — units by item code"],
@@ -14811,17 +14873,18 @@ function renderKitTargets() {
     if (!sel.dataset.wired) { sel.addEventListener("change", () => { state.kitMonth = sel.value; renderCurrentTab(); }); sel.dataset.wired = "1"; }
     sel.value = mk;
     const [y, mo] = mk.split("-").map(Number);
-    const sd = sellingDaysForMonthKey(mk, today);
+    const sd = sellingDaysForMonthKey(mk, figuresDay());   // counted to the last day the figures cover
     // The month's window in the shape dsKitFigures reads: 1st → today, or → month end once the month is over.
     const win = { mStart: new Date(y, mo - 1, 1), today: mk === todayMk ? today : new Date(y, mo, 0, 23, 59, 59) };
     $("ktMonth").textContent = new Date(y, mo - 1, 1).toLocaleDateString("en-AU", { month: "long", year: "numeric" });
     $("ktSdTotal").textContent = fmtInt(sd.total);
-    $("ktSdPassed").textContent = fmtInt(sd.passed);
+    paintSdPassed($("ktSdPassed"), sd, mk);
     $("ktSdRemaining").textContent = fmtInt(sd.remaining);
     $("ktSdPct").textContent = sd.total ? fmtPct(sd.passed / sd.total) : "—";
     const pair = $("ktPair"), loaded = state.invoices.length > 0;
     if (!pair.dataset.built) {      // one column per kit group: its panel, then its chart
-        pair.innerHTML = DS_KIT_TARGETS.map(g => `<div><div id="ktKit_${g.key}"></div>
+        // Row 1: the two panels; row 2: the two charts, so the charts start on the same line whatever the panels' heights.
+        pair.innerHTML = DS_KIT_TARGETS.map(g => `<div id="ktKit_${g.key}"></div>`).join("") + DS_KIT_TARGETS.map(g => `<div>
             <div class="panel"><div class="panel-header"><h2>${escapeHtml(g.title.replace(/ Targets$/, ""))} · charts</h2>
                 <select id="ktCmp_${g.key}" class="mini-select" title="Chart">${KIT_CHART_VIEWS.map(v => '<option value="' + v[0] + '">' + v[1] + "</option>").join("")}</select></div>
                 <div class="chart-wrap" style="position:relative; min-height:340px; height:340px; padding:10px 14px 14px;"><canvas id="ktChart_${g.key}"></canvas></div></div></div>`).join("");
@@ -14834,7 +14897,7 @@ function renderKitTargets() {
     });
 }
 function renderKitChart(g, mk, sd, today) {
-    const view = state.kitChart[g.key] || (state.kitChart[g.key] = "fy");
+    const view = state.kitChart[g.key] || (state.kitChart[g.key] = "tva");
     const sel = document.getElementById("ktCmp_" + g.key), canvas = document.getElementById("ktChart_" + g.key), key = "ktChart_" + g.key;
     if (!sel || !canvas) return;
     sel.value = view;
@@ -14846,7 +14909,18 @@ function renderKitChart(g, mk, sd, today) {
     const tip = { callbacks: { label: c => c.dataset.label + ": " + (c.parsed.y == null ? "—" : units(c.parsed.y)) } };
     const wholeTicks = { beginAtZero: true, ticks: { precision: 0 } };
     let cfg;
-    if (view === "fy") {
+    if (view === "tva") {
+        // As the run-rate tabs' "Target vs actual": the month's target beside what was sold, the sold bar split by item code.
+        const by = kitUnits(g, mStart, mEnd, r => r.code), sold = g.items.reduce((s, c) => s + (by.get(c) || 0), 0);
+        const toDate = sd.total ? g.target * sd.passed / sd.total : 0;
+        const labels = ["Target · " + monthLbl, "Target to date", "Actual · " + monthLbl];
+        cfg = { type: "bar",
+            data: { labels, datasets: [{ label: "Target (" + fmtInt(g.target) + " a month)", stack: "u", data: [g.target, toDate, null], backgroundColor: ["rgba(120,120,120,0.45)", "rgba(120,120,120,0.25)", "rgba(0,0,0,0)"], borderRadius: 4 }]
+                .concat(g.items.map((c, i) => ({ label: c, stack: "u", data: [null, null, by.get(c) || 0], backgroundColor: colour(i), borderRadius: 3 }))) },
+            options: chartBase({ plugins: { tooltip: { callbacks: { label: c => c.parsed.y == null ? null : c.dataset.label + ": " + units(Math.round(c.parsed.y * 10) / 10),
+                    footer: items => items[0].dataIndex === 2 ? "All codes: " + units(sold) + " · " + (g.target ? (sold / g.target * 100).toFixed(1) : "0") + "% of target" : "" } } },
+                scales: { x: { stacked: true }, y: Object.assign({ stacked: true }, wholeTicks) } }) };
+    } else if (view === "fy") {
         // The financial year (July → June) holding the selected month; one stacked bar a month, a slice per code.
         const fy0 = mo >= 7 ? y : y - 1, fyMonths = [];
         for (let i = 0; i < 12; i++) fyMonths.push(localISO(new Date(fy0, 6 + i, 1)).slice(0, 7));
@@ -14926,7 +15000,7 @@ function renderDailySnapshot() {
         : "adds " + fmtMoneyFull(f.sniGp) + ", assuming shipped goods earn the same margin";
 
     $("dsSdTotal").textContent = fmtInt(f.sd.total);
-    $("dsSdPassed").textContent = fmtInt(f.sd.passed);
+    paintSdPassed($("dsSdPassed"), f.sd, f.mk);
     $("dsSdRemaining").textContent = fmtInt(f.sd.remaining);
     $("dsSdPct").textContent = f.sd.total ? fmtPct(f.sd.passed / f.sd.total) : "—";
 
@@ -14947,9 +15021,13 @@ function mtdTotals() {
     // non-date filters (salesperson / customer / location / item /
     // status) because those are user-applied filters the user expects
     // to apply everywhere, not date-range scope.
+    // Compared as calendar days (YYYY-MM-DD). A posting date has no time of
+    // day and parses as 11 AM Melbourne, so "date <= now" used to leave
+    // today's invoices out until 11 AM (fixed 2026-11-11).
+    const dayLo = localISO(mStart), dayHi = localISO(today);
     const rows = state.invoices.filter(inv => {
-        const d = new Date(inv.postingDate);
-        if (!(d >= mStart && d <= today)) return false;
+        const day = String(inv.postingDate || "").slice(0, 10);
+        if (!(day >= dayLo && day <= dayHi)) return false;
         return invoiceMatchesFilters(inv);
     });
     // VE totals scoped to the MTD window — NOT the toolbar From/To,
@@ -15042,8 +15120,8 @@ function renderMTD() {
     // month don't get netted into the tiles.
     const mtdAdjPredicate = postingDate => {
         if (!postingDate) return false;
-        const d = new Date(postingDate);
-        return d >= mStart && d <= today;
+        const day = String(postingDate).slice(0, 10);          // calendar days, as mtdTotals
+        return day >= localISO(mStart) && day <= localISO(today);
     };
     paintAdjustedKpis("mtdKpi", totSales, totGp, mtdAdjPredicate);
 
