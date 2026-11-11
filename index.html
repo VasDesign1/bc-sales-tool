@@ -306,19 +306,19 @@
         .ds-pair > .panel { min-width: 0; }
         .ds-kit-sum { display: flex; flex-wrap: wrap; gap: 8px 26px; padding: 12px 16px 14px; align-items: flex-start; }
         /* Kit panels (Faik, 2026-11-11): eight figures on ONE row with one tight even gap — six numbers, then
-           % Achieved and Status at the right end. Status is a short word (BEHIND / AHEAD / TARGET MET) so it fits.
+           % Achieved and Status, all eight following each other with the same gap (no pushing to the right edge). Status is a short word (BEHIND / AHEAD / TARGET MET) so it fits.
            The bar gives way first when the pane is tight; only a pane under 745px falls back to a second row. */
         .ds-kit-sum { column-gap: 12px; }
         .ds-kit-stat { flex: 0 0 auto; }
         .ds-kit-stat b { display: block; }
         .ds-kit-stat .badge { font-size: 10px; white-space: nowrap; }
         .ds-kit-pct { flex: 0 0 130px; min-width: 60px; }
-        .ds-kit-grp { display: inline-flex; gap: 12px; margin-left: auto; align-items: flex-start; }   /* tight pane: % Achieved and Status move down together */
+        .ds-kit-grp { display: inline-flex; gap: 12px; align-items: flex-start; }   /* tight pane: % Achieved and Status move down together */
         .ds-kit-pct .rr-bar { width: 100%; }
         .kpi .sub.sd-note { opacity: .85; }
         .ds-kit-panel { container-type: inline-size; }
         .ds-kit-panel .panel-header .rr-legend { margin-right: 0; }
-        @container (min-width: 745px) { .ds-kit-sum { flex-wrap: nowrap; } .ds-kit-grp { display: contents; } .ds-kit-pct { margin-left: auto; flex-shrink: 1; } }
+        @container (min-width: 745px) { .ds-kit-sum { flex-wrap: nowrap; } .ds-kit-grp { display: contents; } .ds-kit-pct { flex-shrink: 1; } }
         .kpi .sub.sd-note { opacity: .85; }
         .ds-kit-stat > span { display: block; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; opacity: .65; margin-bottom: 3px; }
         .ds-kit-stat b { font-size: 17px; font-weight: 700; }
