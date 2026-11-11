@@ -291,6 +291,7 @@
         .ds-seg { display: block; height: 100%; }
         .ds-seg.s1, .ds-dot.s1 { background: #26c6da; }
         .ds-seg.s2, .ds-dot.s2 { background: #ffb300; }
+        .ds-dot.s3 { background: rgba(128,128,128,0.35); }
         .ds-dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 7px; }
         .ds-parts { display: flex; gap: 36px; flex-wrap: wrap; margin-top: 12px; }
         .ds-part-lbl { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; opacity: .85; }
@@ -2296,6 +2297,7 @@
                         <div class="ds-parts">
                             <div class="ds-part"><div class="ds-part-lbl"><i class="ds-dot s1"></i>Sales (excl. tax)</div><div class="ds-part-val" id="dsSales">—</div><div class="sub" id="dsSalesSub">&nbsp;</div></div>
                             <div class="ds-part"><div class="ds-part-lbl"><i class="ds-dot s2"></i>Shipped Not Invoiced</div><div class="ds-part-val ds-alt" id="dsSni">—</div><div class="sub" id="dsSniSub">&nbsp;</div></div>
+                            <div class="ds-part" id="dsBalPart" style="display:none;"><div class="ds-part-lbl"><i class="ds-dot s3"></i><span id="dsBalLbl">Balance to target</span></div><div class="ds-part-val" id="dsBal">—</div><div class="sub" id="dsBalSub">&nbsp;</div></div>
                         </div>
                     </div>
                     <div class="kpi k-gp ds-pane" id="dsPaneGp">
@@ -14998,9 +15000,24 @@ function renderDailySnapshot() {
     $("dsSni").textContent   = loaded ? fmtMoneyFull(f.sni) : "—";
     $("dsSalesSub").textContent = loaded ? fmtInt(f.invoices) + " invoices" : " ";
     $("dsSniSub").textContent   = loaded ? f.sniOrders + " orders · delivered, awaiting invoice" : " ";
+    // The bar is the month's total branch sales target (the Total row of the
+    // branch table below): sales fill it, then shipped not invoiced, and the
+    // empty rest is what is still to sell (Faik, 2026-11-11). With no target
+    // loaded it falls back to the plain sales / shipped split.
     const pos = Math.max(0, f.sales) + Math.max(0, f.sni);
-    $("dsSegSales").style.width = (pos ? Math.max(0, f.sales) / pos * 100 : 0).toFixed(2) + "%";
-    $("dsSegSni").style.width   = (pos ? Math.max(0, f.sni) / pos * 100 : 0).toFixed(2) + "%";
+    const tgt = loaded ? f.branch.total.target : 0;
+    const full = tgt > 0 ? Math.max(tgt, pos) : pos;
+    $("dsSegSales").style.width = (full ? Math.max(0, f.sales) / full * 100 : 0).toFixed(2) + "%";
+    $("dsSegSni").style.width   = (full ? Math.max(0, f.sni) / full * 100 : 0).toFixed(2) + "%";
+    $("dsBalPart").style.display = tgt > 0 ? "" : "none";
+    if (tgt > 0) {
+        const bal = tgt - f.sales, balAll = tgt - f.total;     // as the table's Balance: on invoiced sales
+        $("dsBalLbl").textContent = bal > 0 ? "Balance to target" : "Over target";
+        $("dsBal").textContent = fmtMoneyFull(Math.abs(bal));
+        $("dsBalSub").textContent = "target " + fmtMoneyFull(tgt) + " · " + fmtPct(f.sales / tgt) + " achieved"
+            + (f.sni > 0 && bal > 0 ? " · " + (balAll > 0 ? fmtMoneyFull(balAll) + " left" : "target met") + " once shipped goods are invoiced" : "");
+        $("dsSplitBar").title = "Whole bar = sales target " + fmtMoneyFull(tgt) + " (all branches). Filled: sales " + fmtMoneyFull(f.sales) + " + shipped not invoiced " + fmtMoneyFull(f.sni) + ".";
+    } else $("dsSplitBar").removeAttribute("title");
     $("dsGp").textContent  = loaded ? fmtMoneyFull(f.gp) : "—";
     $("dsGpp").textContent = loaded ? fmtPct(f.gpPct) : "";
     $("dsGpSub").textContent = loaded ? "on invoiced sales · cost " + fmtMoneyFull(f.cost) : "on invoiced sales";
