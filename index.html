@@ -291,7 +291,14 @@
         .ds-seg { display: block; height: 100%; }
         .ds-seg.s1, .ds-dot.s1 { background: #26c6da; }
         .ds-seg.s2, .ds-dot.s2 { background: #ffb300; }
-        .ds-dot.s3 { background: rgba(128,128,128,0.35); }
+        /* With a target loaded the bar is a thick "% achieved" bar: each filled part carries its % of target, the empty part the balance (Faik, 2026-11-11) */
+        .ds-split.ds-thick { height: 30px; border-radius: 7px; }
+        .ds-seg { overflow: hidden; white-space: nowrap; text-align: center; font-size: 12.5px; font-weight: 700; line-height: 30px; }
+        .ds-seg.s1 { color: #06363d; }
+        .ds-seg.s2 { color: #4a3200; }
+        .ds-seg.s3 { flex: 1 1 0; min-width: 0; background: transparent; font-weight: 600; }
+        .ds-seg.s3 b { font-weight: 800; }
+        .ds-split:not(.ds-thick) .ds-seg { font-size: 0; }
         .ds-dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 7px; }
         .ds-parts { display: flex; gap: 36px; flex-wrap: wrap; margin-top: 12px; }
         .ds-part-lbl { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; opacity: .85; }
@@ -2293,11 +2300,10 @@
                     <div class="kpi k-rev ds-pane" id="dsPaneSales">
                         <div class="label">Sales + Shipped Not Invoiced · month to date</div>
                         <div class="value ds-big" id="dsTotal">—</div>
-                        <div class="ds-split" id="dsSplitBar"><span class="ds-seg s1" id="dsSegSales"></span><span class="ds-seg s2" id="dsSegSni"></span></div>
+                        <div class="ds-split" id="dsSplitBar"><span class="ds-seg s1" id="dsSegSales"></span><span class="ds-seg s2" id="dsSegSni"></span><span class="ds-seg s3" id="dsSegBal"></span></div>
                         <div class="ds-parts">
                             <div class="ds-part"><div class="ds-part-lbl"><i class="ds-dot s1"></i>Sales (excl. tax)</div><div class="ds-part-val" id="dsSales">—</div><div class="sub" id="dsSalesSub">&nbsp;</div></div>
                             <div class="ds-part"><div class="ds-part-lbl"><i class="ds-dot s2"></i>Shipped Not Invoiced</div><div class="ds-part-val ds-alt" id="dsSni">—</div><div class="sub" id="dsSniSub">&nbsp;</div></div>
-                            <div class="ds-part" id="dsBalPart" style="display:none;"><div class="ds-part-lbl"><i class="ds-dot s3"></i><span id="dsBalLbl">Balance to target</span></div><div class="ds-part-val" id="dsBal">—</div><div class="sub" id="dsBalSub">&nbsp;</div></div>
                         </div>
                     </div>
                     <div class="kpi k-gp ds-pane" id="dsPaneGp">
@@ -15007,17 +15013,36 @@ function renderDailySnapshot() {
     const pos = Math.max(0, f.sales) + Math.max(0, f.sni);
     const tgt = loaded ? f.branch.total.target : 0;
     const full = tgt > 0 ? Math.max(tgt, pos) : pos;
-    $("dsSegSales").style.width = (full ? Math.max(0, f.sales) / full * 100 : 0).toFixed(2) + "%";
-    $("dsSegSni").style.width   = (full ? Math.max(0, f.sni) / full * 100 : 0).toFixed(2) + "%";
-    $("dsBalPart").style.display = tgt > 0 ? "" : "none";
+    const segS = $("dsSegSales"), segN = $("dsSegSni"), segB = $("dsSegBal"), bar = $("dsSplitBar");
+    segS.style.width = (full ? Math.max(0, f.sales) / full * 100 : 0).toFixed(2) + "%";
+    segN.style.width = (full ? Math.max(0, f.sni) / full * 100 : 0).toFixed(2) + "%";
+    bar.classList.toggle("ds-thick", tgt > 0);
     if (tgt > 0) {
-        const bal = tgt - f.sales, balAll = tgt - f.total;     // as the table's Balance: on invoiced sales
-        $("dsBalLbl").textContent = bal > 0 ? "Balance to target" : "Over target";
-        $("dsBal").textContent = fmtMoneyFull(Math.abs(bal));
-        $("dsBalSub").textContent = "target " + fmtMoneyFull(tgt) + " · " + fmtPct(f.sales / tgt) + " achieved"
-            + (f.sni > 0 && bal > 0 ? " · " + (balAll > 0 ? fmtMoneyFull(balAll) + " left" : "target met") + " once shipped goods are invoiced" : "");
-        $("dsSplitBar").title = "Whole bar = sales target " + fmtMoneyFull(tgt) + " (all branches). Filled: sales " + fmtMoneyFull(f.sales) + " + shipped not invoiced " + fmtMoneyFull(f.sni) + ".";
-    } else $("dsSplitBar").removeAttribute("title");
+        const bal = tgt - f.sales;                              // as the table's Balance: on invoiced sales
+        const txt = { s: fmtPct(f.sales / tgt), n: f.sni > 0 ? fmtPct(f.sni / tgt) : "",
+            b: bal > 0 ? "Balance to target <b>" + fmtMoneyFull(bal) + "</b>" : "Over target by <b>" + fmtMoneyFull(-bal) + "</b>",
+            bShort: "<b>" + fmtMoneyFull(Math.abs(bal)) + "</b>" };
+        // A label that does not fit its part is left out (the tooltip still has every figure).
+        const fit = () => {
+            segS.textContent = txt.s; if (segS.scrollWidth > segS.clientWidth) segS.textContent = "";
+            segN.textContent = txt.n; segN.style.fontSize = ""; if (segN.scrollWidth > segN.clientWidth) segN.style.fontSize = "10px";   // a narrow part: smaller figures before none
+            if (segN.scrollWidth > segN.clientWidth) segN.textContent = "";
+            segB.innerHTML = txt.b;   if (segB.scrollWidth > segB.clientWidth) segB.innerHTML = txt.bShort;
+            if (segB.scrollWidth > segB.clientWidth) segB.innerHTML = "";
+        };
+        fit();
+        if (bar._fit) window.removeEventListener("resize", bar._fit);
+        bar._fit = fit; window.addEventListener("resize", fit);
+        bar.title = "Whole bar = sales target " + fmtMoneyFull(tgt) + " (all branches)\n"
+            + "Sales " + fmtMoneyFull(f.sales) + " = " + txt.s + " of target\n"
+            + "Shipped not invoiced " + fmtMoneyFull(f.sni) + " = " + fmtPct(f.sni / tgt) + "\n"
+            + "Both together " + fmtMoneyFull(f.total) + " = " + fmtPct(f.total / tgt) + "\n"
+            + (bal > 0 ? "Balance to target " + fmtMoneyFull(bal) + " (on invoiced sales, as the table below)" : "Over target by " + fmtMoneyFull(-bal));
+    } else {
+        segS.textContent = segN.textContent = segB.textContent = "";
+        if (bar._fit) { window.removeEventListener("resize", bar._fit); bar._fit = null; }
+        bar.removeAttribute("title");
+    }
     $("dsGp").textContent  = loaded ? fmtMoneyFull(f.gp) : "—";
     $("dsGpp").textContent = loaded ? fmtPct(f.gpPct) : "";
     $("dsGpSub").textContent = loaded ? "on invoiced sales · cost " + fmtMoneyFull(f.cost) : "on invoiced sales";
