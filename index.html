@@ -294,6 +294,12 @@
         /* With a target loaded the bar is a thick "% achieved" bar: each filled part carries its % of target, the empty part the balance (Faik, 2026-11-11) */
         .ds-split.ds-thick { height: 30px; border-radius: 7px; }
         .ds-seg { overflow: hidden; white-space: nowrap; text-align: center; font-size: 12.5px; font-weight: 700; line-height: 30px; }
+        .ds-split.ds-thick .ds-seg.s1, .ds-split.ds-thick .ds-seg.s2 { flex: 0 0 auto; }
+        .ds-split.ds-thick .ds-seg { cursor: default; transition: filter .12s; }
+        .ds-split.ds-thick .ds-seg:hover { filter: brightness(1.08) saturate(1.15); }
+        .ds-split.ds-thick .ds-seg.s3:hover { background: rgba(128,128,128,0.14); filter: none; }
+        .ds-tot-row { display: flex; align-items: baseline; flex-wrap: wrap; }
+        .ds-tot-row .ds-left { margin-left: auto; }
         .ds-seg.s1 { color: #06363d; }
         .ds-seg.s2 { color: #4a3200; }
         .ds-seg.s3 { flex: 1 1 0; min-width: 0; background: transparent; font-weight: 600; }
@@ -2300,7 +2306,7 @@
                 <div class="ds-top">
                     <div class="kpi k-rev ds-pane" id="dsPaneSales">
                         <div class="label">Sales + Shipped Not Invoiced · month to date</div>
-                        <div class="value ds-big" id="dsTotal">—</div>
+                        <div class="value ds-big ds-tot-row"><span id="dsTotal">—</span><span class="ds-pct" id="dsTotPct"></span><span class="ds-pct ds-left" id="dsLeftPct"></span></div>
                         <div class="ds-split" id="dsSplitBar"><span class="ds-seg s1" id="dsSegSales"></span><span class="ds-seg s2" id="dsSegSni"></span><span class="ds-seg s3" id="dsSegBal"></span></div>
                         <div class="ds-parts">
                             <div class="ds-part"><div class="ds-part-lbl"><i class="ds-dot s1"></i>Sales (excl. tax)</div><div class="ds-part-val" id="dsSales">—</div><div class="sub" id="dsSalesSub">&nbsp;</div></div>
@@ -15023,27 +15029,29 @@ function renderDailySnapshot() {
         const txt = { s: fmtPct(f.sales / tgt), n: f.sni > 0 ? fmtPct(f.sni / tgt) : "",
             b: bal > 0 ? "Balance to target <b>" + fmtMoneyFull(bal) + "</b>" : "Over target by <b>" + fmtMoneyFull(-bal) + "</b>",
             bShort: "<b>" + fmtMoneyFull(Math.abs(bal)) + "</b>" };
-        // Everything on the one visual: both colours together as a % of target, the balance, and the balance as a % of target.
-        txt.bFull = "Total achieved <b>" + fmtPct(f.total / tgt) + "</b><span class=\"ds-seg-sep\">·</span>" + txt.b + (bal > 0 ? "<span class=\"ds-seg-sep\">·</span><b>" + fmtPct(bal / tgt) + "</b> left" : "");
-        // A label that does not fit its part is left out (the tooltip still has every figure).
-        const fit = () => {
-            segS.textContent = txt.s; if (segS.scrollWidth > segS.clientWidth) segS.textContent = "";
-            segN.textContent = txt.n; segN.style.fontSize = ""; if (segN.scrollWidth > segN.clientWidth) segN.style.fontSize = "10px";   // a narrow part: smaller figures before none
-            if (segN.scrollWidth > segN.clientWidth) segN.textContent = "";
-            segB.innerHTML = txt.bFull; if (segB.scrollWidth > segB.clientWidth) segB.innerHTML = txt.b;
-            if (segB.scrollWidth > segB.clientWidth) segB.innerHTML = txt.bShort;
-            if (segB.scrollWidth > segB.clientWidth) segB.innerHTML = "";
-        };
+        // Every figure in the bar is the same size; a narrow part is given just
+        // enough room for its figure instead of smaller print.
+        segS.style.minWidth = "58px"; segN.style.minWidth = f.sni > 0 ? "52px" : "";
+        segS.textContent = txt.s; segN.textContent = txt.n;
+        const fit = () => { segB.innerHTML = txt.b; if (segB.scrollWidth > segB.clientWidth) segB.innerHTML = txt.bShort; if (segB.scrollWidth > segB.clientWidth) segB.innerHTML = ""; };
         fit();
         if (bar._fit) window.removeEventListener("resize", bar._fit);
         bar._fit = fit; window.addEventListener("resize", fit);
-        bar.title = "Whole bar = sales target " + fmtMoneyFull(tgt) + " (all branches)\n"
-            + "Sales " + fmtMoneyFull(f.sales) + " = " + txt.s + " of target\n"
-            + "Shipped not invoiced " + fmtMoneyFull(f.sni) + " = " + fmtPct(f.sni / tgt) + "\n"
-            + "Both together " + fmtMoneyFull(f.total) + " = " + fmtPct(f.total / tgt) + "\n"
-            + (bal > 0 ? "Balance to target " + fmtMoneyFull(bal) + " (on invoiced sales, as the table below)" : "Over target by " + fmtMoneyFull(-bal));
+        // Above the bar: both colours together, and what is left (Faik, 2026-11-11)
+        $("dsTotPct").textContent = fmtPct(f.total / tgt) + " of target achieved";
+        $("dsLeftPct").textContent = bal > 0 ? fmtPct(bal / tgt) + " left" : "";
+        // Hover on each part (the tool's own floating tip)
+        const whole = "\nWhole bar = sales target " + fmtMoneyFull(tgt) + " (all branches)";
+        segS.setAttribute("data-tip", "Sales (excl. tax): " + fmtMoneyFull(f.sales) + "\n" + txt.s + " of target" + whole);
+        segN.setAttribute("data-tip", "Shipped not invoiced: " + fmtMoneyFull(f.sni) + "\n" + fmtPct(f.sni / tgt) + " of target\nWith sales: " + fmtMoneyFull(f.total) + " = " + fmtPct(f.total / tgt) + whole);
+        segB.setAttribute("data-tip", (bal > 0 ? "Balance to target: " + fmtMoneyFull(bal) + "\n" + fmtPct(bal / tgt) + " of target left (on invoiced sales, as the table below)"
+            + (f.sni > 0 ? "\nOnce shipped goods are invoiced: " + (tgt - f.total > 0 ? fmtMoneyFull(tgt - f.total) + " left" : "target met") : "") : "Over target by " + fmtMoneyFull(-bal)) + whole);
+        bar.removeAttribute("title");
     } else {
         segS.textContent = segN.textContent = segB.textContent = "";
+        segS.style.minWidth = segN.style.minWidth = "";
+        $("dsTotPct").textContent = $("dsLeftPct").textContent = "";
+        for (const e of [segS, segN, segB]) e.removeAttribute("data-tip");
         if (bar._fit) { window.removeEventListener("resize", bar._fit); bar._fit = null; }
         bar.removeAttribute("title");
     }
