@@ -305,13 +305,12 @@
         #ktPair .panel-header .meta { display: none; }
         .ds-pair > .panel { min-width: 0; }
         .ds-kit-sum { display: flex; flex-wrap: wrap; gap: 8px 26px; padding: 12px 16px 14px; align-items: flex-start; }
-        /* Required a day, then % Achieved with Status under it: kept together whatever the width (Faik, 2026-11-11) */
+        /* Six figures with one even gap, then % Achieved at the right end with Status under it (Faik, 2026-11-11) */
         .ds-kit-sum { column-gap: 22px; }
-        .ds-kit-grp { display: inline-flex; gap: 22px; align-items: flex-start; flex-wrap: nowrap; margin-left: auto; }   /* pushed to the right end of the row */
         .ds-kit-stat > span.ds-kit-under { margin-top: 9px; }
         .ds-kit-stat b { display: block; }
         /* % Achieved column keeps the bar's width; Status sits under it, right-aligned (a long badge runs out to the left) */
-        .ds-kit-last { width: 130px; }
+        .ds-kit-last { width: 130px; margin-left: auto; }   /* at the right end of the row; the six figures before it keep one even gap */
         .ds-kit-last > span.ds-kit-under { text-align: right; }
         .ds-kit-last > b:last-child { display: flex; justify-content: flex-end; white-space: nowrap; }
         .kpi .sub.sd-note { opacity: .85; }
@@ -14812,8 +14811,8 @@ function dsPaintKits(kits, loaded, sd, hostId) {
             <div class="ds-kit-sum">
                 ${stat(sd.isPast ? "Sold in the month" : "Sold this month", loaded ? q(k.qty) : "—")}${stat("Target", fmtInt(k.target))}${stat("Balance", bal)}
                 ${stat("Target a day", perDay(k.targetDaily))}${stat("Actual a day", loaded ? perDay(k.actualDaily) : "—")}
-                <div class="ds-kit-grp">${stat("Required a day", !loaded ? "—" : !sd.remaining ? "n/a" : perDay(Math.max(0, k.requiredDaily)))}
-                    <div class="ds-kit-stat ds-kit-last"><span>% Achieved</span><b>${bar}</b><span class="ds-kit-under">Status</span><b>${loaded ? statusBadgeRunRate(k.status) : "—"}</b></div></div>
+                ${stat("Required a day", !loaded ? "—" : !sd.remaining ? "n/a" : perDay(Math.max(0, k.requiredDaily)))}
+                    <div class="ds-kit-stat ds-kit-last"><span>% Achieved</span><b>${bar}</b><span class="ds-kit-under">Status</span><b>${loaded ? statusBadgeRunRate(k.status) : "—"}</b></div>
             </div>
             <div class="table-scroll">
                 <table id="${idp}Table_${k.key}" class="ds-table">
@@ -14851,7 +14850,6 @@ function kitUnits(group, from, to, keyFn) {
     return out;
 }
 const KIT_CHART_VIEWS = [
-    ["tva",    "Target vs actual — selected month"],
     ["fy",     "Units by month — whole financial year, against the target"],
     ["pace",   "Selected month — day by day against the target pace"],
     ["codes",  "Selected month — units by item code"],
@@ -14902,7 +14900,7 @@ function renderKitTargets() {
     });
 }
 function renderKitChart(g, mk, sd, today) {
-    const view = state.kitChart[g.key] || (state.kitChart[g.key] = "tva");
+    const view = state.kitChart[g.key] || (state.kitChart[g.key] = "fy");
     const sel = document.getElementById("ktCmp_" + g.key), canvas = document.getElementById("ktChart_" + g.key), key = "ktChart_" + g.key;
     if (!sel || !canvas) return;
     sel.value = view;
@@ -14914,17 +14912,7 @@ function renderKitChart(g, mk, sd, today) {
     const tip = { callbacks: { label: c => c.dataset.label + ": " + (c.parsed.y == null ? "—" : units(c.parsed.y)) } };
     const wholeTicks = { beginAtZero: true, ticks: { precision: 0 } };
     let cfg;
-    if (view === "tva") {
-        // As the run-rate tabs' "Target vs actual": a grey target bar with the bar of what was sold beside it (Faik, 2026-11-11: side by side, not stacked).
-        const by = kitUnits(g, mStart, mEnd, r => r.code), sold = g.items.reduce((t, c) => t + (by.get(c) || 0), 0);
-        cfg = { type: "bar",
-            data: { labels: [g.title.replace(/ Targets$/, "") + " · " + monthLbl], datasets: [
-                { label: "Target · " + monthLbl, data: [g.target], backgroundColor: "rgba(120,120,120,0.35)", borderRadius: 4, maxBarThickness: 150 },
-                { label: "Actual · " + monthLbl, data: [sold], backgroundColor: colour(0), borderRadius: 4, maxBarThickness: 150 } ] },
-            options: chartBase({ plugins: { tooltip: { callbacks: { label: tip.callbacks.label,
-                    footer: items => items[0].datasetIndex !== 1 ? "" : [(g.target ? (sold / g.target * 100).toFixed(1) : "0") + "% of target"].concat(g.items.map(c => c + ": " + units(by.get(c) || 0))) } } },
-                scales: { y: wholeTicks } }) };
-    } else if (view === "fy") {
+    if (view === "fy") {
         // The financial year (July → June) holding the selected month; one stacked bar a month, a slice per code.
         const fy0 = mo >= 7 ? y : y - 1, fyMonths = [];
         for (let i = 0; i < 12; i++) fyMonths.push(localISO(new Date(fy0, 6 + i, 1)).slice(0, 7));
