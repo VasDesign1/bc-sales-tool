@@ -306,7 +306,9 @@
         .ds-pair > .panel { min-width: 0; }
         .ds-kit-sum { display: flex; flex-wrap: wrap; gap: 8px 26px; padding: 12px 16px 14px; align-items: flex-start; }
         /* Six figures with one even gap, then % Achieved at the right end with Status under it (Faik, 2026-11-11) */
-        .ds-kit-sum { column-gap: 22px; }
+        .ds-kit-sum { column-gap: 12px; }   /* tight, so % Achieved and the status badge under it fit on the first row beside Required a day */
+        .ds-kit-stat { flex: 0 0 auto; }
+        .ds-kit-last .badge { font-size: 10px; padding-left: 8px; padding-right: 8px; }
         .ds-kit-stat > span.ds-kit-under { margin-top: 9px; }
         .ds-kit-stat b { display: block; }
         /* % Achieved at the right end of the row with Status under it, both headings starting on the same line
