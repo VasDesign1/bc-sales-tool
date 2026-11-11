@@ -18,7 +18,8 @@ name: daily-snapshot-email
 # time; :25/:55 sits a few minutes after the snapshot robot's own :13/:43.
 #
 # Run workflow (by hand): always sends, from the newest snapshot or the
-# slot typed in, and does not count as the day's email.
+# slot typed in, and does not count as the day's email. It goes to the WHOLE
+# staff list unless owner_only is ticked or a test model / test date is given.
 on:
   schedule:
     - cron: "25,55 17-23,0 * * *"
@@ -35,6 +36,15 @@ on:
         default: ""
       kind:
         description: "Which email: daily / weekly / monthly / monthly+weekly (empty = what the day calls for)"
+        required: false
+        default: ""
+      owner_only:
+        description: "TEST: send to the owner (copy address) only, not the staff list"
+        type: boolean
+        required: false
+        default: false
+      model:
+        description: "TEST: write the dot points with another Claude model, e.g. claude-fable-5-2 (goes to the owner only)"
         required: false
         default: ""
       timer:
@@ -85,4 +95,6 @@ jobs:
           EMAIL_KIND: ${{ github.event.inputs.kind }}
           EMAIL_AS_OF: ${{ github.event.inputs.as_of }}
           FROM_TIMER: ${{ github.event.inputs.timer }}
+          EMAIL_OWNER_ONLY: ${{ github.event.inputs.owner_only }}
+          EMAIL_MODEL: ${{ github.event.inputs.model }}
         run: node scripts/daily-email.js

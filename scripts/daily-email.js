@@ -114,6 +114,11 @@ function melbourneNow() {
 //   the backup.
 const WINDOW_FROM = 6 * 60 + 30, FALLBACK_AT = 7 * 60, WINDOW_TO = 11 * 60;   // Melbourne minutes
 const BY_HAND = process.env.GITHUB_EVENT_NAME !== "schedule" && process.env.FROM_TIMER !== "true";
+// The model that writes the dot points. A run by hand may try another one (workflow input "model");
+// such a run is a test and goes to the owner only. The schedule always uses the default.
+const DEFAULT_MODEL = "claude-opus-5-5";
+const TEST_MODEL = BY_HAND && /^claude-[a-z0-9-]+$/.test((process.env.EMAIL_MODEL || "").trim()) ? process.env.EMAIL_MODEL.trim() : "";
+const OWNER_ONLY = BY_HAND && (process.env.EMAIL_OWNER_ONLY === "true" || !!TEST_MODEL);
 async function chooseSnapshot() {
     const metas = {};
     for (const slot of SLOTS) metas[slot] = await spReadJson(SP_CONFIG.folder + "/snapshots/" + slot + ".meta.json");
@@ -641,7 +646,7 @@ async function writeCommentary(system, figures, what) {
         const Anthropic = mod.default || mod;
         const client = new Anthropic();
         const response = await client.beta.messages.create({
-            model: "claude-opus-5-5",
+            model: TEST_MODEL || DEFAULT_MODEL,
             max_tokens: 8000,
             // If a safety classifier declines, the API re-runs the request on its default fallback model.
             betas: ["server-side-fallback-2026-07-01"],
@@ -816,8 +821,13 @@ if (require.main === module) (async () => {
         const cc = addrs(process.env.DAILY_EMAIL_CC).filter(a => !to.some(t => t.toLowerCase() === a.toLowerCase()));
         if (process.env.DRY_RUN === "1" || process.env.DRY_RUN === "true") { await graphToken(); console.log("DRY RUN — nothing sent (" + to.length + " to, " + cc.length + " cc configured)."); return; }
         if (!to.length) throw new Error("DAILY_EMAIL_TO is empty — no recipients");
-        // A test for another morning goes to the first address only (Faik), never to the whole list.
-        if (cfg.asOf) { await sendMail(mail, to.slice(0, 1), []); console.log("Sent the test to 1 recipient."); return; }
+        // A test (another morning, another model, or "owner only") goes to the owner alone — the copy address,
+        // since the staff list went live on 2026-11-11 — never to the whole list.
+        if (cfg.asOf || OWNER_ONLY) {
+            const owner = cc.length ? cc : to.slice(0, 1);
+            if (!cfg.asOf) mail.subject = "[TEST" + (TEST_MODEL ? " · " + TEST_MODEL : "") + "] " + mail.subject;
+            await sendMail(mail, owner, []); console.log("Sent the test to " + owner.length + " recipient(s), owner only."); return;
+        }
         await sendMail(mail, to, cc);
         console.log("Sent to " + to.length + " recipient(s)" + (cc.length ? " + " + cc.length + " cc" : "") + ".");
         if (chosen.mark) await markSent(chosen.mark, chosen.meta);
