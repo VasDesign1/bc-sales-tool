@@ -315,6 +315,16 @@
            (the column is as wide as the longer of the bar and the status badge); the six figures before it keep one even gap */
         .ds-kit-last { margin-left: auto; min-width: 130px; }
         .ds-kit-last > b:last-child { white-space: nowrap; }
+        /* One row, always (Faik, 2026-11-11): the seven figures never wrap. When the pane is too tight for the
+           long status badge on one line, the last column narrows to the bar's width and the badge takes two lines.
+           Only a pane under 700px (small laptop) falls back to a second row. */
+        .ds-kit-panel { container-type: inline-size; }
+        @container (min-width: 700px) {
+            .ds-kit-sum { flex-wrap: nowrap; }
+            .ds-kit-last { flex: 0 1 auto; }
+            .ds-kit-last > b:last-child { white-space: normal; }
+            .ds-kit-last .badge { white-space: normal; display: inline-block; line-height: 1.3; }
+        }
         .kpi .sub.sd-note { opacity: .85; }
         .ds-kit-stat > span { display: block; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; opacity: .65; margin-bottom: 3px; }
         .ds-kit-stat b { font-size: 17px; font-weight: 700; }
@@ -14808,7 +14818,7 @@ function dsPaintKits(kits, loaded, sd, hostId) {
         const stat = (lbl, val) => `<div class="ds-kit-stat"><span>${lbl}</span><b>${val}</b></div>`;
         const bal = !loaded ? "—" : `<i style="font-style:normal; color:${k.balance >= 0 ? "#2e7d32" : "#c62828"};">${k.balance >= 0 ? "+" : "−"}${q(Math.abs(k.balance))}</i>`;
         const bar = !loaded ? "—" : `<span class="rr-bar b${rrPctBand(k.pctAchieved)}" title="${fmtPct(k.pctAchieved)} of target"><span class="rr-fill" style="width:${Math.max(0, Math.min(100, k.pctAchieved * 100)).toFixed(1)}%;"></span><span class="rr-lbl">${fmtPct(k.pctAchieved)}</span></span>`;
-        return `<div class="panel" id="${idp}_${k.key}">
+        return `<div class="panel ds-kit-panel" id="${idp}_${k.key}">
             <div class="panel-header"><h2>${escapeHtml(k.title)}</h2><span class="meta">target ${fmtInt(k.target)} units a month, all codes together · click a code to see who sold it</span>${hostId === "dsKits" ? '<button type="button" class="more-btn" data-ds-goto="kitTargets" title="Open the AirTouch & Omniflow Targets tab, with month selector and charts">Full tab →</button>' : ""}</div>
             <div class="ds-kit-sum">
                 ${stat(sd.isPast ? "Sold in the month" : "Sold this month", loaded ? q(k.qty) : "—")}${stat("Target", fmtInt(k.target))}${stat("Balance", bal)}
