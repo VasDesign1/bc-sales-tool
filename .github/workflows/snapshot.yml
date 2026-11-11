@@ -17,6 +17,11 @@ on:
         description: "Force slot (0500 / 1100 / 1700); empty = refresh the most recent slot"
         required: false
         default: ""
+      timer:
+        description: "Set by the outside timer only: behave as a scheduled run (fill a missing slot, never refresh)"
+        type: boolean
+        required: false
+        default: false
       selftest:
         description: "Only test the SharePoint upload/download/delete round-trip (no snapshot)"
         type: boolean
@@ -59,4 +64,5 @@ jobs:
           BC_REFRESH_TOKEN: ${{ secrets.BC_REFRESH_TOKEN }}
           SNAPSHOT_PASSPHRASE: ${{ secrets.SNAPSHOT_PASSPHRASE }}
           SLOT: ${{ github.event.inputs.slot }}
+          FROM_TIMER: ${{ github.event.inputs.timer }}
         run: node scripts/snapshot.js

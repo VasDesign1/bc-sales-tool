@@ -37,6 +37,11 @@ const TENANT = process.env.BC_TENANT;
 const CLIENT_ID = process.env.BC_CLIENT_ID;
 const REFRESH_TOKEN = process.env.BC_REFRESH_TOKEN;
 const PASSPHRASE = process.env.SNAPSHOT_PASSPHRASE;
+// A start from the outside timer (the Cloudflare "robot-timer", which presses
+// Run workflow at fixed Melbourne times because GitHub's own schedule runs
+// hours late) is treated exactly as a scheduled firing: it only fills a slot
+// that is still missing. Only a person pressing Run workflow is "by hand".
+const BY_HAND = process.env.GITHUB_EVENT_NAME === "workflow_dispatch" && process.env.FROM_TIMER !== "true";
 if (!TENANT || !CLIENT_ID || !REFRESH_TOKEN || !PASSPHRASE) {
     console.error("Missing env: need BC_TENANT, BC_CLIENT_ID, BC_REFRESH_TOKEN, SNAPSHOT_PASSPHRASE");
     process.exit(1);
@@ -120,7 +125,7 @@ async function chooseSlot(mel) {
     if (!due.length) { console.log("Melbourne " + mel.hhmm + " — before the first slot of the day, nothing to do."); return null; }
     const current = due[due.length - 1];
     // A manual "Run workflow" always refreshes the most recent slot.
-    if (process.env.GITHUB_EVENT_NAME === "workflow_dispatch") return { s: current, reason: "manual refresh" };
+    if (BY_HAND) return { s: current, reason: "manual refresh" };
     let metas;
     try { metas = await SP.readSnapshotMetas(due.map(s => s.slot)); }
     catch (e) {
@@ -323,7 +328,7 @@ let chosen = null;   // visible to the failure handler below
     console.log("Published " + slot + " to SharePoint");
 })().catch(e => {
     const mel = melbourneNow();
-    const manual = !!(process.env.SLOT || "").trim() || process.env.GITHUB_EVENT_NAME === "workflow_dispatch";
+    const manual = !!(process.env.SLOT || "").trim() || BY_HAND;
     const late = chosen && mel.minutes >= chosen.s.deadline;
     if (!manual && chosen && !late) {
         // Quiet: the schedule fires again in 30 minutes and will retry this

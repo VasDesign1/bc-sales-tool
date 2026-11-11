@@ -7,10 +7,13 @@ name: daily-snapshot-email
 # any other weekday = the Daily Snapshot.
 #
 # Schedule: fires every half hour through the Melbourne morning. The script
-# decides what a firing does — it sends ONE email per weekday, as soon as
-# today's Morning snapshot is on SharePoint; if that snapshot is still
-# missing at 7:30 AM it sends once from the newest snapshot there is
-# (normally yesterday's Evening one). Every other firing ends in seconds.
+# decides what a firing does — it sends ONE email per weekday, from 6:30 AM,
+# built from today's Morning snapshot; if that snapshot is still missing at
+# 7:00 AM it sends once from the newest snapshot there is (normally
+# yesterday's Evening one). Every other firing ends in seconds.
+# GitHub's schedule runs hours late, so the on-time start comes from the
+# Cloudflare "robot-timer" (cloudflare/robot-timer.js), which presses Run
+# workflow with timer=true at 6:30, 6:45 and 7:00; this cron is the backup.
 # The hours are UTC and cover 5–11 AM Melbourne in both summer and winter
 # time; :25/:55 sits a few minutes after the snapshot robot's own :13/:43.
 #
@@ -34,6 +37,11 @@ on:
         description: "Which email: daily / weekly / monthly / monthly+weekly (empty = what the day calls for)"
         required: false
         default: ""
+      timer:
+        description: "Set by the outside timer only: behave as a scheduled run (one email a day, weekdays)"
+        type: boolean
+        required: false
+        default: false
       as_of:
         description: "TEST: build it as if it were this morning, YYYY-MM-DD (goes to the first address only)"
         required: false
@@ -76,4 +84,5 @@ jobs:
           SLOT: ${{ github.event.inputs.slot }}
           EMAIL_KIND: ${{ github.event.inputs.kind }}
           EMAIL_AS_OF: ${{ github.event.inputs.as_of }}
+          FROM_TIMER: ${{ github.event.inputs.timer }}
         run: node scripts/daily-email.js

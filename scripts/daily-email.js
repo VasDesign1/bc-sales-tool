@@ -103,17 +103,22 @@ function melbourneNow() {
 // Which snapshot goes out, and whether anything goes out at all.
 //   By hand (Run workflow): always sends, from the newest snapshot (or the
 //   forced SLOT), and leaves the "sent today" note alone.
-//   On the schedule (Faik, 2026-11-10): one email each weekday morning, as
-//   soon as today's Morning snapshot exists. If it still has not arrived by
-//   FALLBACK_AT, the email goes out once from the newest snapshot there is
-//   (normally yesterday's Evening one). A note on SharePoint records the
-//   day, so later firings — and a late Morning snapshot — send nothing more.
-const WINDOW_FROM = 5 * 60, FALLBACK_AT = 7 * 60 + 30, WINDOW_TO = 11 * 60;   // Melbourne minutes
+//   On the schedule: one email each weekday morning, from 6:30 AM Melbourne
+//   (Faik, 2026-11-11), built from today's Morning snapshot. If that snapshot
+//   still has not arrived by FALLBACK_AT (7:00), the email goes out once from
+//   the newest snapshot there is (normally yesterday's Evening one). A note on
+//   SharePoint records the day, so later firings — and a late Morning
+//   snapshot — send nothing more.
+//   A start from the outside timer (the Cloudflare "robot-timer": 6:30, 6:45,
+//   7:00) counts as the schedule; GitHub's own late-running schedule is only
+//   the backup.
+const WINDOW_FROM = 6 * 60 + 30, FALLBACK_AT = 7 * 60, WINDOW_TO = 11 * 60;   // Melbourne minutes
+const BY_HAND = process.env.GITHUB_EVENT_NAME !== "schedule" && process.env.FROM_TIMER !== "true";
 async function chooseSnapshot() {
     const metas = {};
     for (const slot of SLOTS) metas[slot] = await spReadJson(SP_CONFIG.folder + "/snapshots/" + slot + ".meta.json");
     const newest = SLOTS.map(s => metas[s]).filter(Boolean).sort((a, b) => String(b.fetchedAtMelbourne).localeCompare(String(a.fetchedAtMelbourne)))[0] || null;
-    if (process.env.GITHUB_EVENT_NAME !== "schedule") {
+    if (BY_HAND) {
         const forced = (process.env.SLOT || "").trim();
         const meta = forced ? metas[forced] : newest;
         if (!meta) throw new Error("no snapshot found on SharePoint" + (forced ? " for slot " + forced : ""));
@@ -777,7 +782,7 @@ if (require.main === module) (async () => {
         if (!chosen) return;            // scheduled firing with nothing to send
     }
     // A run by hand may ask for a particular email (EMAIL_KIND) or pretend to be another morning (EMAIL_AS_OF); the schedule never does.
-    const byHand = process.env.GITHUB_EVENT_NAME !== "schedule";
+    const byHand = BY_HAND;
     const kindIn = byHand ? (process.env.EMAIL_KIND || "").trim().toLowerCase() : "", asOfIn = byHand ? (process.env.EMAIL_AS_OF || "").trim() : "";
     const cfg = { kind: ["daily", "weekly", "monthly", "monthly+weekly"].includes(kindIn) ? kindIn : "auto", asOf: /^\d{4}-\d{2}-\d{2}$/.test(asOfIn) ? asOfIn : "" };
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "daily-email-"));
