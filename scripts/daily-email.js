@@ -701,6 +701,10 @@ function emailHtml(mail, src) {
                 : title(b.caption) + (pts ? space + pts : "");
             return (i ? gap(28) : "") + cardRow(head) + gap(20) + picRow(b, i);
         }).join("")
+        // Foot of the email: a named link straight to the live tool (Faik, 2026-11-11). A table cell, so Outlook draws it as a button.
+        + gap(24) + '<tr><td align="center"><table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center"><tr><td align="center" bgcolor="' + ink + '" style="background-color:' + ink + ';padding:11px 26px;">'
+        + '<a href="' + TOOL_URL + '" target="_blank" style="' + FONT + 'color:' + page + ';font-weight:700;text-decoration:none;">See it in the live Sales Analytics tool &rarr;</a></td></tr></table></td></tr>'
+        + gap(8) + '<tr><td align="center" style="' + FONT + 'font-size:9pt;color:' + mix(ink, page, 0.35) + ';">Opens the tool with the latest figures. Sign in with your Vic Air account.</td></tr>'
         + "</table></td></tr></table></body></html>";
 }
 
