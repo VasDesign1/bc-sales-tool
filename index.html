@@ -297,7 +297,10 @@
         .ds-split.ds-thick .ds-seg.s1, .ds-split.ds-thick .ds-seg.s2 { flex: 0 0 auto; }
         .ds-split.ds-thick .ds-seg { cursor: default; transition: filter .12s; }
         .ds-split.ds-thick .ds-seg:hover { filter: brightness(1.08) saturate(1.15); }
-        .ds-split.ds-thick .ds-seg.s3:hover { background: rgba(128,128,128,0.14); filter: none; }
+        /* The part still to sell: red / white stripes, "yet to be filled", with the % left on a white label (Faik, 2026-11-12) */
+        .ds-split.ds-thick .ds-seg.s3 { background: repeating-linear-gradient(135deg, #e5534b 0 8px, #fff 8px 16px); }
+        .ds-dot.s3 { background: repeating-linear-gradient(135deg, #e5534b 0 2.5px, #fff 2.5px 5px); }
+        .ds-seg-pill { display: inline-block; line-height: 20px; padding: 0 11px; border-radius: 10px; background: #fff; color: #a3211b; font-weight: 800; vertical-align: middle; position: relative; top: -1px; box-shadow: 0 0 0 1px rgba(163,33,27,.25); }
         .ds-tot-row { display: flex; align-items: baseline; flex-wrap: wrap; }
         .ds-tot-row .ds-left { margin-left: auto; }
         .ds-seg.s1 { color: #06363d; }
@@ -2306,11 +2309,12 @@
                 <div class="ds-top">
                     <div class="kpi k-rev ds-pane" id="dsPaneSales">
                         <div class="label">Sales + Shipped Not Invoiced · month to date</div>
-                        <div class="value ds-big ds-tot-row"><span id="dsTotal">—</span><span class="ds-pct" id="dsTotPct"></span><span class="ds-pct ds-left" id="dsLeftPct"></span></div>
+                        <div class="value ds-big ds-tot-row"><span id="dsTotal">—</span><span class="ds-pct" id="dsTotPct"></span></div>
                         <div class="ds-split" id="dsSplitBar"><span class="ds-seg s1" id="dsSegSales"></span><span class="ds-seg s2" id="dsSegSni"></span><span class="ds-seg s3" id="dsSegBal"></span></div>
                         <div class="ds-parts">
                             <div class="ds-part"><div class="ds-part-lbl"><i class="ds-dot s1"></i>Sales (excl. tax)</div><div class="ds-part-val" id="dsSales">—</div><div class="sub" id="dsSalesSub">&nbsp;</div></div>
                             <div class="ds-part"><div class="ds-part-lbl"><i class="ds-dot s2"></i>Shipped Not Invoiced</div><div class="ds-part-val ds-alt" id="dsSni">—</div><div class="sub" id="dsSniSub">&nbsp;</div></div>
+                            <div class="ds-part" id="dsBalPart" style="display:none"><div class="ds-part-lbl"><i class="ds-dot s3"></i><span id="dsBalLbl">Balance to target</span></div><div class="ds-part-val ds-alt" id="dsBal">—</div><div class="sub" id="dsBalSub">&nbsp;</div></div>
                         </div>
                     </div>
                     <div class="kpi k-gp ds-pane" id="dsPaneGp">
@@ -15027,19 +15031,22 @@ function renderDailySnapshot() {
     if (tgt > 0) {
         const bal = tgt - f.sales;                              // as the table's Balance: on invoiced sales
         const txt = { s: fmtPct(f.sales / tgt), n: f.sni > 0 ? fmtPct(f.sni / tgt) : "",
-            b: bal > 0 ? "Balance to target <b>" + fmtMoneyFull(bal) + "</b>" : "Over target by <b>" + fmtMoneyFull(-bal) + "</b>",
-            bShort: "<b>" + fmtMoneyFull(Math.abs(bal)) + "</b>" };
+            b: bal > 0 ? '<span class="ds-seg-pill">' + fmtPct(bal / tgt) + " left</span>" : "" };
         // Every figure in the bar is the same size; a narrow part is given just
         // enough room for its figure instead of smaller print.
         segS.style.minWidth = "58px"; segN.style.minWidth = f.sni > 0 ? "52px" : "";
         segS.textContent = txt.s; segN.textContent = txt.n;
-        const fit = () => { segB.innerHTML = txt.b; if (segB.scrollWidth > segB.clientWidth) segB.innerHTML = txt.bShort; if (segB.scrollWidth > segB.clientWidth) segB.innerHTML = ""; };
+        const fit = () => { segB.innerHTML = txt.b; if (segB.scrollWidth > segB.clientWidth) segB.innerHTML = ""; };
         fit();
         if (bar._fit) window.removeEventListener("resize", bar._fit);
         bar._fit = fit; window.addEventListener("resize", fit);
-        // Above the bar: both colours together, and what is left (Faik, 2026-11-11)
+        // Above the bar: both colours together. The balance sits under the bar
+        // beside Shipped Not Invoiced, the % left inside the striped part (Faik, 2026-11-12)
         $("dsTotPct").textContent = fmtPct(f.total / tgt) + " of target achieved";
-        $("dsLeftPct").textContent = bal > 0 ? fmtPct(bal / tgt) + " left" : "";
+        $("dsBalPart").style.display = "";
+        $("dsBalLbl").textContent = bal > 0 ? "Balance to target" : "Over target by";
+        $("dsBal").textContent = fmtMoneyFull(Math.abs(bal));
+        $("dsBalSub").textContent = "sales target " + fmtMoneyFull(tgt);
         // Hover on each part (the tool's own floating tip)
         const whole = "\nWhole bar = sales target " + fmtMoneyFull(tgt) + " (all branches)";
         segS.setAttribute("data-tip", "Sales (excl. tax): " + fmtMoneyFull(f.sales) + "\n" + txt.s + " of target" + whole);
@@ -15050,7 +15057,8 @@ function renderDailySnapshot() {
     } else {
         segS.textContent = segN.textContent = segB.textContent = "";
         segS.style.minWidth = segN.style.minWidth = "";
-        $("dsTotPct").textContent = $("dsLeftPct").textContent = "";
+        $("dsTotPct").textContent = "";
+        $("dsBalPart").style.display = "none";
         for (const e of [segS, segN, segB]) e.removeAttribute("data-tip");
         if (bar._fit) { window.removeEventListener("resize", bar._fit); bar._fit = null; }
         bar.removeAttribute("title");
