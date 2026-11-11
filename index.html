@@ -318,6 +318,13 @@
         .kpi .sub.sd-note { opacity: .85; }
         .ds-kit-panel { container-type: inline-size; }
         .ds-kit-panel .panel-header .rr-legend { margin-right: 0; }
+        /* Title with its target in brackets on the left; legend and Full tab button stay on the same line at the right */
+        .ds-kit-panel .panel-header { flex-wrap: nowrap; }
+        .ds-kit-panel .panel-header h2 { min-width: 0; }
+        .ds-kit-tgt { font-family: Inter, system-ui, sans-serif; font-size: 11px; font-weight: 400; letter-spacing: 0; opacity: .75; margin-left: 2px; }
+        .ds-kit-panel .panel-header { gap: 10px; }
+        .ds-kit-panel .panel-header .rr-legend { gap: 8px; flex: 0 0 auto; }
+        .ds-kit-panel .panel-header .more-btn { white-space: nowrap; flex: 0 0 auto; }
         @container (min-width: 745px) { .ds-kit-sum { flex-wrap: nowrap; } .ds-kit-grp { display: contents; } .ds-kit-pct { flex-shrink: 1; } }
         .kpi .sub.sd-note { opacity: .85; }
         .ds-kit-stat > span { display: block; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; opacity: .65; margin-bottom: 3px; }
@@ -14820,7 +14827,7 @@ function dsPaintKits(kits, loaded, sd, hostId) {
         const bal = !loaded ? "—" : `<i style="font-style:normal; color:${k.balance >= 0 ? "#2e7d32" : "#c62828"};">${k.balance >= 0 ? "+" : "−"}${q(Math.abs(k.balance))}</i>`;
         const bar = !loaded ? "—" : `<span class="rr-bar b${rrPctBand(k.pctAchieved)}" title="${fmtPct(k.pctAchieved)} of target"><span class="rr-fill" style="width:${Math.max(0, Math.min(100, k.pctAchieved * 100)).toFixed(1)}%;"></span><span class="rr-lbl">${fmtPct(k.pctAchieved)}</span></span>`;
         return `<div class="panel ds-kit-panel" id="${idp}_${k.key}">
-            <div class="panel-header"><h2>${escapeHtml(k.title)}</h2><span class="meta">target ${fmtInt(k.target)} units a month, all codes together · click a code to see who sold it</span><span class="rr-legend" title="% Achieved = units sold ÷ target"><span class="b0">&lt; 50%</span><span class="b1">50–99%</span><span class="b2">100%+</span></span>${hostId === "dsKits" ? '<button type="button" class="more-btn" data-ds-goto="kitTargets" title="Open the AirTouch & Omniflow Targets tab, with month selector and charts">Full tab →</button>' : ""}</div>
+            <div class="panel-header"><h2 title="Click a code in the table to see who sold it">${escapeHtml(k.title)} <span class="ds-kit-tgt">(target ${fmtInt(k.target)} units a month, all codes together)</span></h2><span class="rr-legend" title="% Achieved = units sold ÷ target"><span class="b0">&lt; 50%</span><span class="b1">50–99%</span><span class="b2">100%+</span></span>${hostId === "dsKits" ? '<button type="button" class="more-btn" data-ds-goto="kitTargets" title="Open the AirTouch & Omniflow Targets tab, with month selector and charts">Full tab →</button>' : ""}</div>
             <div class="ds-kit-sum">
                 ${stat(sd.isPast ? "Sold in the month" : "Sold this month", loaded ? q(k.qty) : "—")}${stat("Target", fmtInt(k.target))}${stat("Balance", bal)}
                 ${stat("Target a day", perDay(k.targetDaily))}${stat("Actual a day", loaded ? perDay(k.actualDaily) : "—")}
