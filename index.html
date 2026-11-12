@@ -297,10 +297,9 @@
         .ds-split.ds-thick .ds-seg.s1, .ds-split.ds-thick .ds-seg.s2 { flex: 0 0 auto; }
         .ds-split.ds-thick .ds-seg { cursor: default; transition: filter .12s; }
         .ds-split.ds-thick .ds-seg:hover { filter: brightness(1.08) saturate(1.15); }
-        /* The part still to sell: red / white stripes, "yet to be filled", with the % left on a white label (Faik, 2026-11-12) */
-        .ds-split.ds-thick .ds-seg.s3 { background: repeating-linear-gradient(135deg, #e5534b 0 8px, #fff 8px 16px); }
-        .ds-dot.s3 { background: repeating-linear-gradient(135deg, #e5534b 0 2.5px, #fff 2.5px 5px); }
-        .ds-seg-pill { display: inline-block; line-height: 20px; padding: 0 11px; border-radius: 10px; background: #fff; color: #a3211b; font-weight: 800; vertical-align: middle; position: relative; top: -1px; box-shadow: 0 0 0 1px rgba(163,33,27,.25); }
+        /* The part still to sell: soft grey stripes in the page's own tone, "yet to be filled", with the % left printed like the other parts (Faik, 2026-11-12) */
+        .ds-split.ds-thick .ds-seg.s3 { background: repeating-linear-gradient(135deg, rgba(128,128,128,0.26) 0 8px, transparent 8px 16px); font-weight: 700; }
+        .ds-dot.s3 { background: repeating-linear-gradient(135deg, rgba(128,128,128,0.75) 0 2.5px, rgba(128,128,128,0.25) 2.5px 5px); }
         .ds-tot-row { display: flex; align-items: baseline; flex-wrap: wrap; }
         .ds-tot-row .ds-left { margin-left: auto; }
         .ds-seg.s1 { color: #06363d; }
@@ -15031,7 +15030,7 @@ function renderDailySnapshot() {
     if (tgt > 0) {
         const bal = tgt - f.sales;                              // as the table's Balance: on invoiced sales
         const txt = { s: fmtPct(f.sales / tgt), n: f.sni > 0 ? fmtPct(f.sni / tgt) : "",
-            b: bal > 0 ? '<span class="ds-seg-pill">' + fmtPct(bal / tgt) + " left</span>" : "" };
+            b: bal > 0 ? fmtPct(bal / tgt) + " left" : "" };
         // Every figure in the bar is the same size; a narrow part is given just
         // enough room for its figure instead of smaller print.
         segS.style.minWidth = "58px"; segN.style.minWidth = f.sni > 0 ? "52px" : "";
