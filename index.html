@@ -14887,7 +14887,10 @@ function sniBuildLines() {
             if (v2) u.add(v2);
             add(docNo, so, v2, { lineNo: ln.lineNo, item: ln.itemNo, desc: ln.description, loc: ln.locationCode,
                 qty: ln.qtyShippedNotInvoiced, amount: ln.shippedNotInvLcyExVat || 0,
-                cost: ln.unitCostLcy != null ? ln.qtyShippedNotInvoiced * ln.unitCostLcy : null, sched: ln.shipmentDate });
+                // A unit cost of zero counts as "no cost" on this tab (Faik, 2026-11-18): the
+                // line keeps its value but is left out of the profit, so it cannot show as
+                // 100% margin. Daily Snapshot's own figure (computePipelineOrders) is unchanged.
+                cost: ln.unitCostLcy ? ln.qtyShippedNotInvoiced * ln.unitCostLcy : null, sched: ln.shipmentDate });
         }
     } else {
         // No Wiise-computed lines in the load: work it out from the order lines
@@ -15008,7 +15011,7 @@ function renderShippedNotInv() {
     }
     const gpOf = n => n.costed ? n.costed - n.cost : (n.costMissing ? null : 0);
     const gpPctOf = n => { const g = gpOf(n); return g == null || !n.costed ? null : g / n.costed; };
-    const part = n => n.costMissing && n.costed ? '<span class="sni-plan" title="Some lines here carry no cost, so the profit is worked out on the lines that do."> *</span>' : "";
+    const part = n => n.costMissing && n.costed ? '<span class="sni-plan" title="Some lines here have no unit cost in Wiise. The profit and margin are worked out on the lines that do; open the order to see which."> *</span>' : "";
     const plural = (n, w) => fmtInt(n) + " " + w + (n === 1 ? "" : "s");
     $("sniKpiAmt").textContent = loaded ? fmtMoneyFull(tot.amount) : "—";
     $("sniKpiAmtSub").textContent = loaded ? plural(tot.orders.size, "order") + " · " + plural(tot.lines, "line") : " ";
@@ -15088,7 +15091,7 @@ function renderShippedNotInv() {
             <td class="num">${sniAgeBadge(n.days)}</td>
             <td class="num">${Number.isInteger(n.qty) ? fmtInt(n.qty) : fmtQty(n.qty)}</td>
             <td class="num">${fmtMoneyFull(n.amount)}</td>
-            <td class="num">${g == null ? "—" : fmtMoneyFull(g) + part(n)}</td>
+            <td class="num">${g == null ? (n.kind === "line" ? '<span class="sni-plan" title="This order line has no unit cost in Wiise, so it is left out of the profit.">no cost</span>' : "—") : fmtMoneyFull(g) + part(n)}</td>
             <td class="num">${gpPctOf(n) == null ? "—" : fmtPct(gpPctOf(n))}</td>`;
     };
     const acc = [];
