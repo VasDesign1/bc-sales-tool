@@ -532,11 +532,23 @@
         .sni-ctl select, .sni-ctl input { margin-left: 6px; }
         #sniSearch { min-width: 210px; }
         #sniTable th[data-sni-sort] { cursor: pointer; }
+        /* All ten columns always in view (no sideways scroll): fixed column shares,
+           long text cut with … (full text on hover), headings may wrap. Below about
+           1040px the table keeps that width and the pane scrolls instead. */
+        #sniTable { table-layout: fixed; min-width: 1040px; }
+        #sniTable th, #sniTable td { padding-left: 9px; padding-right: 9px; overflow: hidden; text-overflow: ellipsis; }
+        #sniTable th { white-space: normal; vertical-align: bottom; }
+        #sniTable td.num { text-overflow: clip; }
+        #sniTable th:nth-child(1) { width: 18%; }   #sniTable th:nth-child(2) { width: 6%; }
+        #sniTable th:nth-child(3) { width: 16.5%; } #sniTable th:nth-child(4) { width: 10.5%; }
+        #sniTable th:nth-child(5) { width: 10%; }   #sniTable th:nth-child(6) { width: 7%; }
+        #sniTable th:nth-child(7) { width: 5%; }    #sniTable th:nth-child(8) { width: 10%; }
+        #sniTable th:nth-child(9) { width: 9.5%; }  #sniTable th:nth-child(10) { width: 7.5%; }
         .sni-age { display: inline-block; min-width: 34px; padding: 1px 8px; border-radius: 10px; font-weight: 700; text-align: center; }
         .sni-age.a { background: #e8f5e9; color: #1b5e20; }
         .sni-age.b { background: #ffe0b2; color: #e65100; }
         .sni-age.c { background: #ffcdd2; color: #b71c1c; }
-        .sni-plan { opacity: .6; cursor: help; }
+        .sni-plan { opacity: .6; cursor: help; font-size: 10.5px; }
         body.sni-on [data-sni-scope] { cursor: pointer; }
         body.sni-on [data-sni-scope]:hover .sub::after { content: " · click for the list"; }
         .hint  { padding: 14px 16px; background: #fff8e1; border-left: 4px solid #ffca28; border-radius: 8px; font-size: 13px; color: #5d4037; margin-bottom: 18px; }
@@ -15068,11 +15080,11 @@ function renderShippedNotInv() {
     });
     const cells = n => {
         const g = gpOf(n);
-        const date = !n.shipDate ? "—" : fmtDate(n.shipDate) + (n.planned ? ' <span class="sni-plan" title="No posted shipment for this order is in the loaded figures, so this is the planned shipment date on the order line.">planned</span>' : "");
+        const date = !n.shipDate ? "—" : fmtDate(n.shipDate) + (n.planned ? ' <span class="sni-plan" title="No posted shipment for this order is in the loaded figures, so this is the planned shipment date on the order line.">plan</span>' : "");
         const cust = n.kind === "group" ? (s.group === "customer" ? "" : plural(n.custs.size, "customer")) : escapeHtml(n.customer || "");
         const sp = n.kind === "group" ? (s.group === "salesperson" ? "" : n.sps.size === 1 ? escapeHtml([...n.sps][0]) : fmtInt(n.sps.size) + " salespeople") : escapeHtml(n.sp || "");
         return `<td>${escapeHtml([...n.branches].sort().join(", "))}</td>
-            <td>${cust}</td><td>${sp}</td><td>${date}</td>
+            <td title="${n.kind === "group" ? "" : escapeAttr(n.customer || "")}">${cust}</td><td title="${n.kind === "group" ? "" : escapeAttr(n.sp || "")}">${sp}</td><td>${date}</td>
             <td class="num">${sniAgeBadge(n.days)}</td>
             <td class="num">${Number.isInteger(n.qty) ? fmtInt(n.qty) : fmtQty(n.qty)}</td>
             <td class="num">${fmtMoneyFull(n.amount)}</td>
@@ -15087,7 +15099,7 @@ function renderShippedNotInv() {
             + (n.kind === "group" ? `<span class="rr-name">${plural(n.orders.size, "order")}</span>` : "")
             + (n.kind === "line" && n.desc ? `<span class="rr-name">${escapeHtml(n.desc)}</span>` : "");
         acc.push(`<tr data-key="${escapeAttr(n.key)}" data-expandable="${expandable ? 1 : 0}" style="${treeRowStyle(depth)}cursor:${expandable ? "pointer" : "default"};">
-            <td>${"&nbsp;".repeat(depth * 4)}<span style="display:inline-block; width:14px; color:var(--tree-tint);">${expandable ? (open ? "▾" : "▸") : ""}</span> ${label}</td>${cells(n)}</tr>`);
+            <td title="${escapeAttr(n.label + (n.extRef ? " · " + n.extRef : "") + (n.kind === "line" && n.desc ? " · " + n.desc : ""))}">${"&nbsp;".repeat(depth * 4)}<span style="display:inline-block; width:14px; color:var(--tree-tint);">${expandable ? (open ? "▾" : "▸") : ""}</span> ${label}</td>${cells(n)}</tr>`);
         if (expandable && open) ordered(n.children).forEach(c => emit(c, depth + 1));
     };
     ordered(roots).forEach(r => emit(r, 0));
