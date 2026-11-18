@@ -538,7 +538,7 @@
         .sni-age.c { background: #ffcdd2; color: #b71c1c; }
         .sni-plan { opacity: .6; cursor: help; }
         body.sni-on [data-sni-scope] { cursor: pointer; }
-        body.sni-on [data-sni-scope] .sub::after { content: " · click for the list"; }
+        body.sni-on [data-sni-scope]:hover .sub::after { content: " · click for the list"; }
         .hint  { padding: 14px 16px; background: #fff8e1; border-left: 4px solid #ffca28; border-radius: 8px; font-size: 13px; color: #5d4037; margin-bottom: 18px; }
 
         /* ---------- PLACEHOLDER TAB ---------- */
@@ -1932,8 +1932,8 @@
             <a data-tab="salespersonMarginRate">Salesperson Margin Run Rate</a>
             <a data-tab="kitTargets">AirTouch &amp; Omniflow Targets</a>
 
-            <div class="group-label restrictedNav" style="display:none;">Lists</div>
-            <a data-tab="shippedNotInv" class="restrictedNav" style="display:none;">Shipped Not Invoiced</a>
+            <div class="group-label">Lists</div>
+            <a data-tab="shippedNotInv">Shipped Not Invoiced</a>
             <a data-tab="keyCustomers" class="stub restrictedNav" style="display:none;">Key Customer Sales</a>
             <a data-tab="ordersPastDel" class="stub restrictedNav" style="display:none;">Orders past Delivery</a>
 
@@ -4252,7 +4252,7 @@
                 </div>
             </section>
 
-            <!-- TAB: Shipped Not Invoiced (owner-only trial, 2026-11-18). The chase list
+            <!-- TAB: Shipped Not Invoiced (open to everyone, 2026-11-18). The chase list
                  behind the Shipped Not Invoiced figures: one row per sales order,
                  opening into its item lines, by branch / salesperson / customer. -->
             <section data-tab-content="shippedNotInv" style="display:none;">
@@ -14778,7 +14778,7 @@ function dsSnapshotFigures() {
              kits: DS_KIT_TARGETS.map(g => dsKitFigures(g, m, sd)) };
 }
 // ============================================================
-// SHIPPED NOT INVOICED tab (owner-only trial; Faik, 2026-11-18)
+// SHIPPED NOT INVOICED tab (open to everyone; Faik, 2026-11-18)
 // The chase list behind the Shipped Not Invoiced figures. One row per
 // order line with a shipped-not-invoiced quantity, from the same source
 // and with the same amounts as computePipelineOrders(), so with "This
@@ -17829,10 +17829,9 @@ const RESTRICTED_NAV_OWNER = "faiko@vicair.com.au";
 // The budget-driven tabs are open to everyone: salespersonSalesRate /
 // salespersonMarginRate (Faik, 2026-10-13), branchTarget / branchSalesRate
 // (Faik, 2026-10-14). Branch Margin Run Rate + Lists stay owner-only.
-// shippedNotInv: owner-only trial from 2026-11-18. To open it to everyone,
-// take it out of this set and drop "restrictedNav" + display:none from its
-// sidebar link (and from the "Lists" group label above it).
-const RESTRICTED_TABS = new Set(["branchMarginRate", "keyCustomers", "ordersPastDel", "shippedNotInv"]);
+// Shipped Not Invoiced (Lists group) is open to everyone (Faik, 2026-11-18);
+// the two unbuilt Lists tabs stay owner-only.
+const RESTRICTED_TABS = new Set(["branchMarginRate", "keyCustomers", "ordersPastDel"]);
 // The Finance group (P&L tab) has its own allow-list (Faik 2026-09-23).
 // Finance view (P&L tab + Overview reconciliation rows): Faik, Michael,
 // Daniel and Shane — approved by Faik 2026-10-03. Nobody else.
@@ -17924,8 +17923,8 @@ function updateRestrictedNav() {
     if (!show && RESTRICTED_TABS.has(state.tab)) setActiveTab("overview");
     // Owner-only trial UI: Help (?) and Tab View
     document.querySelectorAll(".ownerUi").forEach(el => { el.style.display = show ? "" : "none"; });
-    // Shipped Not Invoiced figures become links to the tab for whoever may open it.
-    document.body.classList.toggle("sni-on", show);
+    // Shipped Not Invoiced figures are links to the tab, for everyone (Faik, 2026-11-18).
+    document.body.classList.add("sni-on");
     tabViewAllowed = show;
     applyTabView();
     const showPnl = PNL_VIEWERS.has(user);

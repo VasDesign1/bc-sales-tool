@@ -17,7 +17,7 @@
         'Dashboards': B('Dashboards', 'The day-to-day views: overall figures, branch and salesperson results, items, customers, quotes, blanket orders and returns. All of them follow the toolbar period and filters.'),
         'Time Analytics': B('Time Analytics', 'Views that look at how sales move over time: month to date, rolling 12 months, month on month, daily pattern, customer retention, forecasting, Pareto and the decomposition tree.'),
         'Targets & Run Rate': B('Targets & Run Rate', 'Actual sales and margin against the budget. Targets come from the Excel in the Sales Budgets-Targets folder on SharePoint, read with your own sign-in; nothing is typed into the tool.'),
-        'Lists': B('Lists', 'Working lists still being built.'),
+        'Lists': B('Lists', 'Working lists to act on, such as goods shipped but not yet invoiced.'),
         'Finance': B('Finance', 'The general ledger view. Visible to the finance group only; the figures come straight from the Wiise ledger, not from the sales documents.'),
     };
 
