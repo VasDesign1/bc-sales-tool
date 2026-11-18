@@ -517,6 +517,28 @@
         .badge-other { background: #f3e5f5; color: #6a1b9a; }
 
         .empty { padding: 40px; text-align: center; color: #888; font-size: 14px; }
+        /* Shipped Not Invoiced tab (2026-11-18) */
+        .sni-br-lbl { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; opacity: .75; margin: 0 2px 8px; }
+        .sni-br-lbl span { font-weight: 400; text-transform: none; letter-spacing: 0; margin-left: 8px; }
+        .kpi-row.sni-br { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+        .sni-br .kpi { padding: 12px 18px; cursor: pointer; transition: opacity .15s, transform .15s; }
+        .sni-br .kpi .value { font-size: 21px; }
+        .sni-br.has-pick .kpi:not(.active) { opacity: .45; }
+        .sni-br .kpi.active { outline: 3px solid #ffd54f; outline-offset: 1px; }
+        .sni-br .kpi:hover { transform: translateY(-1px); }
+        #sniPanel .panel-header { flex-wrap: wrap; gap: 8px 12px; }
+        .sni-ctl { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-left: auto; }
+        .sni-ctl-lbl { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; opacity: .7; }
+        .sni-ctl select, .sni-ctl input { margin-left: 6px; }
+        #sniSearch { min-width: 210px; }
+        #sniTable th[data-sni-sort] { cursor: pointer; }
+        .sni-age { display: inline-block; min-width: 34px; padding: 1px 8px; border-radius: 10px; font-weight: 700; text-align: center; }
+        .sni-age.a { background: #e8f5e9; color: #1b5e20; }
+        .sni-age.b { background: #ffe0b2; color: #e65100; }
+        .sni-age.c { background: #ffcdd2; color: #b71c1c; }
+        .sni-plan { opacity: .6; cursor: help; }
+        body.sni-on [data-sni-scope] { cursor: pointer; }
+        body.sni-on [data-sni-scope] .sub::after { content: " · click for the list"; }
         .hint  { padding: 14px 16px; background: #fff8e1; border-left: 4px solid #ffca28; border-radius: 8px; font-size: 13px; color: #5d4037; margin-bottom: 18px; }
 
         /* ---------- PLACEHOLDER TAB ---------- */
@@ -1911,6 +1933,7 @@
             <a data-tab="kitTargets">AirTouch &amp; Omniflow Targets</a>
 
             <div class="group-label restrictedNav" style="display:none;">Lists</div>
+            <a data-tab="shippedNotInv" class="restrictedNav" style="display:none;">Shipped Not Invoiced</a>
             <a data-tab="keyCustomers" class="stub restrictedNav" style="display:none;">Key Customer Sales</a>
             <a data-tab="ordersPastDel" class="stub restrictedNav" style="display:none;">Orders past Delivery</a>
 
@@ -2309,10 +2332,10 @@
                     <div class="kpi k-rev ds-pane" id="dsPaneSales">
                         <div class="label">Sales + Shipped Not Invoiced · month to date</div>
                         <div class="value ds-big ds-tot-row"><span id="dsTotal">—</span><span class="ds-pct" id="dsTotPct"></span></div>
-                        <div class="ds-split" id="dsSplitBar"><span class="ds-seg s1" id="dsSegSales"></span><span class="ds-seg s2" id="dsSegSni"></span><span class="ds-seg s3" id="dsSegBal"></span></div>
+                        <div class="ds-split" id="dsSplitBar"><span class="ds-seg s1" id="dsSegSales"></span><span class="ds-seg s2" id="dsSegSni" data-sni-scope="month"></span><span class="ds-seg s3" id="dsSegBal"></span></div>
                         <div class="ds-parts">
                             <div class="ds-part"><div class="ds-part-lbl"><i class="ds-dot s1"></i>Sales (excl. tax)</div><div class="ds-part-val" id="dsSales">—</div><div class="sub" id="dsSalesSub">&nbsp;</div></div>
-                            <div class="ds-part"><div class="ds-part-lbl"><i class="ds-dot s2"></i>Shipped Not Invoiced</div><div class="ds-part-val ds-alt" id="dsSni">—</div><div class="sub" id="dsSniSub">&nbsp;</div></div>
+                            <div class="ds-part" data-sni-scope="month"><div class="ds-part-lbl"><i class="ds-dot s2"></i>Shipped Not Invoiced</div><div class="ds-part-val ds-alt" id="dsSni">—</div><div class="sub" id="dsSniSub">&nbsp;</div></div>
                             <div class="ds-part" id="dsBalPart" style="display:none"><div class="ds-part-lbl"><i class="ds-dot s3"></i><span id="dsBalLbl">Balance to target</span></div><div class="ds-part-val ds-alt" id="dsBal">—</div><div class="sub" id="dsBalSub">&nbsp;</div></div>
                         </div>
                     </div>
@@ -2395,7 +2418,7 @@
 
                 <div class="kpi-row" style="grid-template-columns: repeat(3, 1fr);" title="Pipeline state from BC. Counts current-state — independent of toolbar date range — so you always see what's actually open right now.">
                     <div class="kpi k-rev"><div class="label">Outstanding Sales Orders</div><div class="value" id="kpiPipeOpenAmt">—</div><div class="sub" id="kpiPipeOpenSub">orders not fully shipped</div></div>
-                    <div class="kpi k-gp"><div class="label">Shipped Not Invoiced</div><div class="value" id="kpiPipeSniAmt">—</div><div class="sub" id="kpiPipeSniSub">delivered, awaiting invoice</div></div>
+                    <div class="kpi k-gp" data-sni-scope="period"><div class="label">Shipped Not Invoiced</div><div class="value" id="kpiPipeSniAmt">—</div><div class="sub" id="kpiPipeSniSub">delivered, awaiting invoice</div></div>
                     <div class="kpi k-cust"><div class="label">Outstanding Invoices</div><div class="value" id="kpiPipeOiAmt">—</div><div class="sub" id="kpiPipeOiSub">invoiced, unpaid (in range)</div></div>
                 </div>
 
@@ -3544,7 +3567,7 @@
                 </div>
                 <div class="kpi-row" style="grid-template-columns: repeat(2, 1fr);" title="Sales-order pipeline for the current calendar month: lines whose scheduled shipment date falls in this month (1st to month end). Same basis as the Overview tiles, independent of the toolbar date range.">
                     <div class="kpi k-rev"><div class="label">Outstanding Sales Orders</div><div class="value" id="mtdPipeOpenAmt">—</div><div class="sub" id="mtdPipeOpenSub">orders not fully shipped</div></div>
-                    <div class="kpi k-gp"><div class="label">Shipped Not Invoiced</div><div class="value" id="mtdPipeSniAmt">—</div><div class="sub" id="mtdPipeSniSub">delivered, awaiting invoice</div></div>
+                    <div class="kpi k-gp" data-sni-scope="month"><div class="label">Shipped Not Invoiced</div><div class="value" id="mtdPipeSniAmt">—</div><div class="sub" id="mtdPipeSniSub">delivered, awaiting invoice</div></div>
                 </div>
                 <div class="chart-grid">
                     <div class="card span-12">
@@ -4229,6 +4252,61 @@
                 </div>
             </section>
 
+            <!-- TAB: Shipped Not Invoiced (owner-only trial, 2026-11-18). The chase list
+                 behind the Shipped Not Invoiced figures: one row per sales order,
+                 opening into its item lines, by branch / salesperson / customer. -->
+            <section data-tab-content="shippedNotInv" style="display:none;">
+                <div class="hint rr-hint"><span>Goods delivered on sales orders and not invoiced yet, oldest first. <span id="sniAsOf"></span></span><span class="rr-tgt"><span class="rr-tgt-lbl">Show</span><select id="sniScope" class="mini-select" title="Which orders the list covers">
+                    <option value="all">Everything not invoiced</option>
+                    <option value="month">This month only (Daily Snapshot figure)</option>
+                    <option value="period">Toolbar period only (Overview figure)</option>
+                </select></span></div>
+                <div class="kpi-row">
+                    <div class="kpi k-rev"><div class="label">Shipped Not Invoiced</div><div class="value" id="sniKpiAmt">—</div><div class="sub" id="sniKpiAmtSub">&nbsp;</div></div>
+                    <div class="kpi k-gp"><div class="label">Gross Profit On These Goods</div><div class="value" id="sniKpiGp">—</div><div class="sub" id="sniKpiGpSub">&nbsp;</div></div>
+                    <div class="kpi k-cust"><div class="label">Waiting Over 30 Days</div><div class="value" id="sniKpiOld">—</div><div class="sub" id="sniKpiOldSub">&nbsp;</div></div>
+                    <div class="kpi k-gpp"><div class="label">Longest Wait</div><div class="value" id="sniKpiMax">—</div><div class="sub" id="sniKpiMaxSub">&nbsp;</div></div>
+                </div>
+                <div class="sni-br-lbl">By branch <span>click a branch to filter the list, click it again to clear</span></div>
+                <div class="kpi-row sni-br" id="sniBranches"></div>
+                <div class="panel" id="sniPanel">
+                    <div class="panel-header"><h2>Orders to chase</h2><div class="meta" id="sniMeta"></div>
+                        <div class="sni-ctl">
+                            <span class="sni-ctl-lbl">Group by</span>
+                            <button type="button" class="gp-filter-btn" data-sni-group="order">Order</button>
+                            <button type="button" class="gp-filter-btn" data-sni-group="branch">Branch</button>
+                            <button type="button" class="gp-filter-btn" data-sni-group="salesperson">Salesperson</button>
+                            <button type="button" class="gp-filter-btn" data-sni-group="customer">Customer</button>
+                            <select id="sniSp" class="mini-select" title="Salesperson"></select>
+                            <select id="sniAge" class="mini-select" title="Days waiting since shipment">
+                                <option value="">Any wait</option>
+                                <option value="a">0–7 days</option>
+                                <option value="b">8–30 days</option>
+                                <option value="c">Over 30 days</option>
+                            </select>
+                            <input type="search" id="sniSearch" class="mini-select" placeholder="Search order, customer, item…" title="Search order number, customer or item">
+                        </div>
+                    </div>
+                    <div class="table-scroll">
+                        <table id="sniTable" class="ds-table">
+                            <thead><tr>
+                                <th data-sni-sort="label">Order / item</th>
+                                <th data-sni-sort="branch">Branch</th>
+                                <th data-sni-sort="customer">Customer</th>
+                                <th data-sni-sort="sp">Salesperson</th>
+                                <th data-sni-sort="shipDate">Shipped</th>
+                                <th class="num" data-sni-sort="days">Days waiting</th>
+                                <th class="num" data-sni-sort="qty">Qty</th>
+                                <th class="num" data-sni-sort="amount">Value (excl. tax)</th>
+                                <th class="num" data-sni-sort="gp">GP $</th>
+                                <th class="num" data-sni-sort="gpPct">GP %</th>
+                            </tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
             <section data-tab-content="ordersPastDel" style="display:none;">
                 <div class="placeholder">
                     <h2>Orders past Requested Delivery Date</h2>
@@ -4655,6 +4733,7 @@ const TAB_TITLES = {
     salespersonSalesRate: "Salesperson Sales Run Rate",
     salespersonMarginRate: "Salesperson Margin Run Rate",
     kitTargets: "AirTouch & Omniflow Targets",
+    shippedNotInv: "Shipped Not Invoiced",
     keyCustomers: "Key Customer Sales",
     ordersPastDel: "Orders past Requested Delivery",
     pnl: "Profit & Loss (General Ledger)",
@@ -5914,6 +5993,7 @@ function renderCurrentTab() {
         case "branchMarginRate":       renderBranchMarginRunRate(); break;
         case "salespersonSalesRate":   renderSalespersonSalesRunRate(); break;
         case "kitTargets":             renderKitTargets(); break;
+        case "shippedNotInv":          renderShippedNotInv(); break;
         case "salespersonMarginRate":  renderSalespersonMarginRunRate(); break;
         case "pnl":                    renderPnl(); break;
     }
@@ -14697,6 +14777,329 @@ function dsSnapshotFigures() {
              branch: table("branch"), salesperson: table("salesperson"),
              kits: DS_KIT_TARGETS.map(g => dsKitFigures(g, m, sd)) };
 }
+// ============================================================
+// SHIPPED NOT INVOICED tab (owner-only trial; Faik, 2026-11-18)
+// The chase list behind the Shipped Not Invoiced figures. One row per
+// order line with a shipped-not-invoiced quantity, from the same source
+// and with the same amounts as computePipelineOrders(), so with "This
+// month only" picked the total equals the Daily Snapshot / Month-to-Date
+// figure, and with "Toolbar period only" the Overview tile.
+//   • who / where: the order header (customer, salesperson) and the order
+//     line's location (branch), joined on the order number
+//   • how long: days since the posted shipment of that item on that order;
+//     when no posted shipment is in the load, the line's planned shipment
+//     date is used and the date is marked "planned"
+// The tab keeps its own filters; the toolbar's salesperson / customer /
+// branch filters do not apply here (as on the tiles it explains).
+// ============================================================
+const SNI_AGE = { a: [0, 7], b: [8, 30], c: [31, Infinity] };
+function sniState() {
+    return state.sni || (state.sni = { scope: "all", branch: "", sp: "", age: "", group: "order", q: "", sort: { key: "days", dir: "desc" } });
+}
+function sniAllowed() { return document.body.classList.contains("sni-on"); }
+// The day the figures were taken: a snapshot's capture day, otherwise today.
+function sniAsOfDay() {
+    const a = String(state.dataAsOf || "").slice(0, 10);
+    return /^\d{4}-\d\d-\d\d$/.test(a) ? a : localISO(new Date());
+}
+function sniDaysBetween(fromISO, toISO) {
+    const p = s => { const a = s.split("-").map(Number); return Date.UTC(a[0], a[1] - 1, a[2]); };
+    return Math.round((p(toISO) - p(fromISO)) / 86400000);
+}
+// order number → latest posted shipment day, overall and per item.
+function sniShipmentIndex() {
+    const memo = sniShipmentIndex._memo;
+    if (memo && memo.list === state.shipments) return memo.idx;
+    const idx = new Map();
+    for (const sh of (state.shipments || [])) {
+        const ord = sh.orderNumber || sh.orderNo || "", day = String(sh.postingDate || "").slice(0, 10);
+        if (!ord || !day) continue;
+        let e = idx.get(ord);
+        if (!e) idx.set(ord, e = { last: "", items: new Map() });
+        if (day > e.last) e.last = day;
+        for (const ln of (sh.salesShipmentLines || [])) {
+            const it = String(ln.lineObjectNumber || "").trim().toUpperCase();
+            if (!it || num(ln.quantity) <= 0) continue;
+            if (day > (e.items.get(it) || "")) e.items.set(it, day);
+        }
+    }
+    sniShipmentIndex._memo = { list: state.shipments, idx };
+    return idx;
+}
+function sniBuildLines() {
+    const src = state.salesOrderOutstandingLines || [], orders = state.salesOrders || [], asOf = sniAsOfDay();
+    const memo = sniBuildLines._memo;
+    if (memo && memo.src === src && memo.orders === orders && memo.ships === state.shipments && memo.asOf === asOf) return memo.rows;
+    const hdr = new Map();
+    for (const so of orders) if (so.number) hdr.set(so.number, so);
+    const ships = sniShipmentIndex(), spNames = spBudgetNames("salesperson");
+    const pick = (ln, names) => { for (const n of names) if (ln[n] != null) return num(ln[n]); return 0; };
+    const v2Sni = ln => pick(ln, ["quantityShipped", "shippedQuantity", "qtyShipped"]) - pick(ln, ["quantityInvoiced", "invoicedQuantity", "qtyInvoiced"]);
+    const same = (a, b) => Math.abs(a - b) < 1e-6;
+    const rows = [];
+    const add = (docNo, so, v2, o) => {
+        const item = String(o.item || (v2 && v2.lineObjectNumber) || "").trim();
+        const e = ships.get(docNo);
+        const shipped = e ? (e.items.get(item.toUpperCase()) || e.last) : "";
+        const shipDate = shipped || o.sched || "";
+        const sp = (so && so.salesperson) || "(unassigned)";
+        const r = {
+            docNo, lineNo: o.lineNo, item, desc: o.desc || (v2 && v2.description) || "",
+            branch: v2 ? locationCode(v2.locationId) : locationCode(o.loc),
+            custNo: (so && so.customerNumber) || "(unknown)", custName: (so && (so.customerName || so.customerNumber)) || "(order not in this load)",
+            sp, spLabel: sp + (spNames[sp] ? " · " + spNames[sp] : ""),
+            orderDate: so ? String(so.orderDate || "").slice(0, 10) : "",
+            extRef: (so && so.externalDocumentNumber) || "",
+            qty: o.qty, amount: o.amount, cost: o.cost, sched: o.sched || "",
+            shipDate, planned: !shipped && !!shipDate,
+            days: shipDate ? Math.max(0, sniDaysBetween(shipDate, asOf)) : null,
+        };
+        r.hay = [r.docNo, r.custNo, r.custName, r.item, r.desc, r.extRef, r.spLabel, r.branch].join(" ").toLowerCase();
+        rows.push(r);
+    };
+    if (src.length) {
+        const used = new Map();   // order number → order lines already matched
+        for (const ln of src) {
+            if (!(ln.qtyShippedNotInvoiced > 0)) continue;
+            const docNo = ln.documentNumber || "", so = hdr.get(docNo), lines = so ? (so.salesOrderLines || []) : [];
+            let u = used.get(docNo);
+            if (!u) used.set(docNo, u = new Set());
+            // Exact match on the line number when the load carries it; older
+            // snapshots do not, so fall back to quantity (+ item, + date).
+            let v2 = ln.lineNo != null ? lines.find(x => !u.has(x) && num(x.sequence) === ln.lineNo) : null;
+            if (!v2) {
+                let c = lines.filter(x => !u.has(x) && same(num(x.quantity), ln.quantity) && same(v2Sni(x), ln.qtyShippedNotInvoiced));
+                if (ln.itemNo) { const byItem = c.filter(x => String(x.lineObjectNumber || "").trim().toUpperCase() === ln.itemNo.trim().toUpperCase()); if (byItem.length) c = byItem; }
+                v2 = c.find(x => String(x.shipmentDate || "").slice(0, 10) === ln.shipmentDate) || c[0] || null;
+            }
+            if (v2) u.add(v2);
+            add(docNo, so, v2, { lineNo: ln.lineNo, item: ln.itemNo, desc: ln.description, loc: ln.locationCode,
+                qty: ln.qtyShippedNotInvoiced, amount: ln.shippedNotInvLcyExVat || 0,
+                cost: ln.unitCostLcy != null ? ln.qtyShippedNotInvoiced * ln.unitCostLcy : null, sched: ln.shipmentDate });
+        }
+    } else {
+        // No Wiise-computed lines in the load: work it out from the order lines
+        // (same fallback, same arithmetic, as computePipelineOrders).
+        for (const so of orders) for (const v2 of (so.salesOrderLines || [])) {
+            const q = num(v2.quantity), sq = v2Sni(v2);
+            if (q <= 0 || sq <= 0) continue;
+            add(so.number || "", so, v2, { lineNo: num(v2.sequence), qty: sq, amount: sq * num(v2.amountExcludingTax) / q, cost: null,
+                sched: String(v2.shipmentDate || "").slice(0, 10) });
+        }
+    }
+    sniBuildLines._memo = { src, orders, ships: state.shipments, asOf, rows };
+    return rows;
+}
+// Lines after the tab's own filters. skipBranch: for the branch cards,
+// which must keep showing every branch while one is picked.
+function sniFiltered(skipBranch) {
+    const s = sniState();
+    let inScope = () => true;
+    if (s.scope === "month") {
+        const t = new Date(), lo = localISO(startOfMonth(t)), hi = localISO(new Date(t.getFullYear(), t.getMonth() + 1, 0));
+        inScope = iso => !!iso && iso >= lo && iso <= hi;
+    } else if (s.scope === "period") inScope = getDateRangePredicate();
+    const q = s.q.trim().toLowerCase(), age = SNI_AGE[s.age];
+    return sniBuildLines().filter(r => inScope(r.sched)
+        && (skipBranch || !s.branch || r.branch === s.branch)
+        && (!s.sp || r.sp === s.sp)
+        && (!age || (r.days != null && r.days >= age[0] && r.days <= age[1]))
+        && (!q || r.hay.includes(q)));
+}
+function sniNode(key, label) {
+    return { key, label, amount: 0, cost: 0, costed: 0, costMissing: false, qty: 0, days: null, shipDate: "", planned: false,
+             branches: new Set(), custs: new Set(), sps: new Set(), orders: new Set(), lines: 0, kids: new Map(), children: [] };
+}
+function sniAddTo(n, r) {
+    n.amount += r.amount; n.qty += r.qty; n.lines++;
+    // costed = value of the lines that carry a cost; GP is worked out on those only.
+    if (r.cost == null) n.costMissing = true; else { n.cost += r.cost; n.costed += r.amount; }
+    if (r.days != null && (n.days == null || r.days > n.days)) n.days = r.days;
+    if (r.shipDate && (!n.shipDate || r.shipDate < n.shipDate)) { n.shipDate = r.shipDate; n.planned = r.planned; }
+    n.branches.add(r.branch); n.custs.add(r.custNo); n.sps.add(r.sp); n.orders.add(r.docNo);
+}
+function sniBranchLabel(code) {
+    const name = spBudgetNames("branch")[code] || (state.locationNames && state.locationNames.get(code)) || "";
+    return code + (name && name !== code ? " · " + name : "");
+}
+function sniAgeBadge(days) {
+    if (days == null) return "—";
+    return '<span class="sni-age ' + (days > 30 ? "c" : days > 7 ? "b" : "a") + '">' + fmtInt(days) + "</span>";
+}
+function sniOpen(scope, branch) {
+    const s = sniState();
+    s.scope = scope || "all"; s.branch = branch || ""; s.sp = ""; s.age = ""; s.q = "";
+    setActiveTab("shippedNotInv");
+}
+// Any Shipped Not Invoiced figure (Daily Snapshot, Overview, Month-to-Date)
+// opens the tab on the orders behind that figure.
+document.addEventListener("click", e => {
+    if (!sniAllowed()) return;
+    const el = e.target.closest && e.target.closest("[data-sni-scope]");
+    if (el) sniOpen(el.dataset.sniScope);
+});
+function renderShippedNotInv() {
+    const $ = id => document.getElementById(id), s = sniState();
+    const sec = document.querySelector('section[data-tab-content="shippedNotInv"]');
+    if (!sec.dataset.wired) {
+        $("sniScope").addEventListener("change", e => { s.scope = e.target.value; renderShippedNotInv(); });
+        $("sniSp").addEventListener("change", e => { s.sp = e.target.value; renderShippedNotInv(); });
+        $("sniAge").addEventListener("change", e => { s.age = e.target.value; renderShippedNotInv(); });
+        $("sniSearch").addEventListener("input", e => { s.q = e.target.value; renderShippedNotInv(); });
+        sec.addEventListener("click", e => {
+            if (e.target.closest("a")) return;
+            const g = e.target.closest("[data-sni-group]");
+            if (g) { s.group = g.dataset.sniGroup; renderShippedNotInv(); return; }
+            const b = e.target.closest("[data-sni-branch]");
+            if (b) { s.branch = s.branch === b.dataset.sniBranch ? "" : b.dataset.sniBranch; renderShippedNotInv(); return; }
+            const th = e.target.closest("th[data-sni-sort]");
+            if (th) {
+                const key = th.dataset.sniSort, text = new Set(["label", "branch", "customer", "sp", "shipDate"]);
+                if (s.sort.key === key) s.sort.dir = s.sort.dir === "asc" ? "desc" : "asc";
+                else { s.sort.key = key; s.sort.dir = text.has(key) ? "asc" : "desc"; }
+                renderShippedNotInv();
+                return;
+            }
+            const tr = e.target.closest("tr[data-key]");
+            if (!tr || tr.dataset.expandable !== "1") return;
+            const k = tr.dataset.key;
+            if (state.expandedMatrix.has(k)) state.expandedMatrix.delete(k); else state.expandedMatrix.add(k);
+            renderShippedNotInv();
+        });
+        sec.dataset.wired = "1";
+    }
+    const loaded = state.invoices.length > 0 || (state.salesOrders || []).length > 0;
+    const all = sniBuildLines(), rows = sniFiltered(false);
+    $("sniAsOf").textContent = !loaded ? "No figures loaded yet: pick a snapshot from Fast lookup, or click Load sales."
+        : state.dataAsOf ? "Figures as of " + state.dataAsOf.slice(11).replace(/^24:/, "00:") + " on " + fmtDate(state.dataAsOf.slice(0, 10)) + " (snapshot)."
+        : "Live figures from Wiise.";
+    $("sniScope").value = s.scope; $("sniAge").value = s.age;
+    if ($("sniSearch").value !== s.q) $("sniSearch").value = s.q;
+    sec.querySelectorAll("[data-sni-group]").forEach(b => b.classList.toggle("active", b.dataset.sniGroup === s.group));
+
+    // Salesperson list: whoever has something in the list as it stands without that filter.
+    const spSeen = new Map();
+    const keepSp = s.sp; s.sp = "";
+    for (const r of sniFiltered(false)) spSeen.set(r.sp, r.spLabel);
+    s.sp = keepSp;
+    if (s.sp && !spSeen.has(s.sp)) spSeen.set(s.sp, s.sp);
+    $("sniSp").innerHTML = '<option value="">All salespeople</option>' + [...spSeen].sort((a, b) => a[1].localeCompare(b[1]))
+        .map(([v, l]) => '<option value="' + escapeAttr(v) + '"' + (v === s.sp ? " selected" : "") + ">" + escapeHtml(l) + "</option>").join("");
+
+    // ---- tiles ----
+    const tot = sniNode("tot", "Total");
+    const old = sniNode("old", ""), oldest = { days: -1, r: null };
+    for (const r of rows) {
+        sniAddTo(tot, r);
+        if (r.days != null && r.days > 30) sniAddTo(old, r);
+        if (r.days != null && r.days > oldest.days) { oldest.days = r.days; oldest.r = r; }
+    }
+    const gpOf = n => n.costed ? n.costed - n.cost : (n.costMissing ? null : 0);
+    const gpPctOf = n => { const g = gpOf(n); return g == null || !n.costed ? null : g / n.costed; };
+    const part = n => n.costMissing && n.costed ? '<span class="sni-plan" title="Some lines here carry no cost, so the profit is worked out on the lines that do."> *</span>' : "";
+    const plural = (n, w) => fmtInt(n) + " " + w + (n === 1 ? "" : "s");
+    $("sniKpiAmt").textContent = loaded ? fmtMoneyFull(tot.amount) : "—";
+    $("sniKpiAmtSub").textContent = loaded ? plural(tot.orders.size, "order") + " · " + plural(tot.lines, "line") : " ";
+    const gp = gpOf(tot);
+    $("sniKpiGp").textContent = loaded && rows.length && gp != null ? fmtMoneyFull(gp) : "—";
+    $("sniKpiGpSub").textContent = !loaded || !rows.length ? " " : gp == null ? "order-line cost not in this load"
+        : (tot.costed ? fmtPct(gp / tot.costed) + " margin · " : "") + "at order-line cost" + (tot.costMissing ? " · lines without a cost left out" : "");
+    $("sniKpiOld").textContent = loaded ? fmtMoneyFull(old.amount) : "—";
+    $("sniKpiOldSub").textContent = loaded ? plural(old.orders.size, "order") + (tot.amount > 0 ? " · " + fmtPct(old.amount / tot.amount) + " of the total" : "") : " ";
+    $("sniKpiMax").textContent = oldest.r ? plural(oldest.days, "day") : "—";
+    $("sniKpiMaxSub").textContent = oldest.r ? oldest.r.docNo + " · " + oldest.r.custName : " ";
+
+    // ---- branch cards ----
+    const brs = new Map();
+    for (const r of sniFiltered(true)) {
+        if (!brs.has(r.branch)) brs.set(r.branch, sniNode(r.branch, sniBranchLabel(r.branch)));
+        sniAddTo(brs.get(r.branch), r);
+    }
+    const tints = ["k-inv", "k-qty", "k-rev", "k-loc", "k-avg", "k-cust"];
+    const cards = [...brs.values()].sort((a, b) => a.key.localeCompare(b.key, undefined, { numeric: true }));
+    $("sniBranches").classList.toggle("has-pick", !!s.branch);
+    $("sniBranches").innerHTML = cards.map((n, i) => `<div class="kpi ${tints[i % tints.length]}${s.branch === n.key ? " active" : ""}" data-sni-branch="${escapeAttr(n.key)}" title="Click to show only this branch">
+            <div class="label">${escapeHtml(n.label)}</div><div class="value">${fmtMoneyFull(n.amount)}</div>
+            <div class="sub">${plural(n.orders.size, "order")}${n.days != null ? " · longest wait " + plural(n.days, "day") : ""}</div></div>`).join("");
+    sec.querySelector(".sni-br-lbl").style.display = cards.length ? "" : "none";
+
+    // ---- tree: [group →] order → item lines ----
+    const groupOf = r => s.group === "branch" ? [r.branch, sniBranchLabel(r.branch)]
+        : s.group === "salesperson" ? [r.sp, r.spLabel]
+        : s.group === "customer" ? [r.custNo, r.custName] : null;
+    const top = new Map();
+    rows.forEach((r, i) => {
+        let parent = null;
+        const g = groupOf(r);
+        if (g) {
+            const gk = "sni|" + s.group + "|" + g[0];
+            if (!top.has(gk)) top.set(gk, Object.assign(sniNode(gk, g[1]), { kind: "group" }));
+            parent = top.get(gk); sniAddTo(parent, r);
+        }
+        const ok = (parent ? parent.key : "sni|order") + "|" + r.docNo, bag = parent ? parent.kids : top;
+        if (!bag.has(ok)) bag.set(ok, Object.assign(sniNode(ok, r.docNo), { kind: "order", docNo: r.docNo, customer: r.custName, sp: r.spLabel, extRef: r.extRef }));
+        const o = bag.get(ok); sniAddTo(o, r);
+        const leaf = Object.assign(sniNode(ok + "|" + i, r.item || "(no item code)"), { kind: "line", desc: r.desc, customer: r.custName, sp: r.spLabel });
+        sniAddTo(leaf, r); o.kids.set(leaf.key, leaf);
+    });
+    const val = n => {
+        switch (s.sort.key) {
+            case "label": return n.label.toLowerCase();
+            case "branch": return [...n.branches].sort().join(",");
+            case "customer": return n.kind === "group" ? n.custs.size : (n.customer || "").toLowerCase();
+            case "sp": return n.kind === "group" ? n.sps.size : (n.sp || "").toLowerCase();
+            case "shipDate": return n.shipDate || "9999";
+            case "days": return n.days == null ? -1 : n.days;
+            case "gp": { const g = gpOf(n); return g == null ? -Infinity : g; }
+            case "gpPct": { const g = gpPctOf(n); return g == null ? -Infinity : g; }
+            default: return n[s.sort.key];
+        }
+    };
+    const ordered = list => list.slice().sort((a, b) => {
+        const x = val(a), y = val(b), m = s.sort.dir === "asc" ? 1 : -1;
+        const c = (typeof x === "number" && typeof y === "number") ? x - y : String(x).localeCompare(String(y), undefined, { numeric: true });
+        return (c || b.amount - a.amount) * m || a.label.localeCompare(b.label);
+    });
+    const finish = n => { n.children = [...n.kids.values()]; n.children.forEach(finish); return n; };
+    const roots = [...top.values()].map(finish);
+    sec.querySelectorAll("#sniTable th[data-sni-sort]").forEach(th => {
+        th.classList.remove("sorted-asc", "sorted-desc");
+        if (th.dataset.sniSort === s.sort.key) th.classList.add("sorted-" + s.sort.dir);
+    });
+    const cells = n => {
+        const g = gpOf(n);
+        const date = !n.shipDate ? "—" : fmtDate(n.shipDate) + (n.planned ? ' <span class="sni-plan" title="No posted shipment for this order is in the loaded figures, so this is the planned shipment date on the order line.">planned</span>' : "");
+        const cust = n.kind === "group" ? (s.group === "customer" ? "" : plural(n.custs.size, "customer")) : escapeHtml(n.customer || "");
+        const sp = n.kind === "group" ? (s.group === "salesperson" ? "" : n.sps.size === 1 ? escapeHtml([...n.sps][0]) : fmtInt(n.sps.size) + " salespeople") : escapeHtml(n.sp || "");
+        return `<td>${escapeHtml([...n.branches].sort().join(", "))}</td>
+            <td>${cust}</td><td>${sp}</td><td>${date}</td>
+            <td class="num">${sniAgeBadge(n.days)}</td>
+            <td class="num">${Number.isInteger(n.qty) ? fmtInt(n.qty) : fmtQty(n.qty)}</td>
+            <td class="num">${fmtMoneyFull(n.amount)}</td>
+            <td class="num">${g == null ? "—" : fmtMoneyFull(g) + part(n)}</td>
+            <td class="num">${gpPctOf(n) == null ? "—" : fmtPct(gpPctOf(n))}</td>`;
+    };
+    const acc = [];
+    const emit = (n, depth) => {
+        const expandable = n.children.length > 0, open = state.expandedMatrix.has(n.key);
+        const label = escapeHtml(n.label)
+            + (n.kind === "order" ? wiiseDocLinkHtml("Sales Order", n.docNo) + (n.extRef ? `<span class="rr-name">${escapeHtml(n.extRef)}</span>` : "") : "")
+            + (n.kind === "group" ? `<span class="rr-name">${plural(n.orders.size, "order")}</span>` : "")
+            + (n.kind === "line" && n.desc ? `<span class="rr-name">${escapeHtml(n.desc)}</span>` : "");
+        acc.push(`<tr data-key="${escapeAttr(n.key)}" data-expandable="${expandable ? 1 : 0}" style="${treeRowStyle(depth)}cursor:${expandable ? "pointer" : "default"};">
+            <td>${"&nbsp;".repeat(depth * 4)}<span style="display:inline-block; width:14px; color:var(--tree-tint);">${expandable ? (open ? "▾" : "▸") : ""}</span> ${label}</td>${cells(n)}</tr>`);
+        if (expandable && open) ordered(n.children).forEach(c => emit(c, depth + 1));
+    };
+    ordered(roots).forEach(r => emit(r, 0));
+    const empty = !loaded ? "No figures loaded yet."
+        : !all.length ? "Nothing is shipped and waiting for an invoice in the loaded figures."
+        : "No orders match these filters.";
+    document.querySelector("#sniTable tbody").innerHTML = acc.length
+        ? acc.join("") + `<tr class="ds-total"><td>Total</td>${cells(Object.assign(tot, { kind: "group" }))}</tr>`
+        : `<tr><td colspan="10" class="empty">${empty}</td></tr>`;
+    $("sniMeta").textContent = rows.length ? plural(tot.orders.size, "order") + " · " + plural(tot.lines, "line") + (s.branch ? " · branch " + s.branch : "") : "";
+}
+
 // Same ten columns as the run-rate tabs' own tables.
 function dsPaintTable(tableId, entity, data, sd) {
     const names = spBudgetNames(entity);
@@ -17426,7 +17829,10 @@ const RESTRICTED_NAV_OWNER = "faiko@vicair.com.au";
 // The budget-driven tabs are open to everyone: salespersonSalesRate /
 // salespersonMarginRate (Faik, 2026-10-13), branchTarget / branchSalesRate
 // (Faik, 2026-10-14). Branch Margin Run Rate + Lists stay owner-only.
-const RESTRICTED_TABS = new Set(["branchMarginRate", "keyCustomers", "ordersPastDel"]);
+// shippedNotInv: owner-only trial from 2026-11-18. To open it to everyone,
+// take it out of this set and drop "restrictedNav" + display:none from its
+// sidebar link (and from the "Lists" group label above it).
+const RESTRICTED_TABS = new Set(["branchMarginRate", "keyCustomers", "ordersPastDel", "shippedNotInv"]);
 // The Finance group (P&L tab) has its own allow-list (Faik 2026-09-23).
 // Finance view (P&L tab + Overview reconciliation rows): Faik, Michael,
 // Daniel and Shane — approved by Faik 2026-10-03. Nobody else.
@@ -17518,6 +17924,8 @@ function updateRestrictedNav() {
     if (!show && RESTRICTED_TABS.has(state.tab)) setActiveTab("overview");
     // Owner-only trial UI: Help (?) and Tab View
     document.querySelectorAll(".ownerUi").forEach(el => { el.style.display = show ? "" : "none"; });
+    // Shipped Not Invoiced figures become links to the tab for whoever may open it.
+    document.body.classList.toggle("sni-on", show);
     tabViewAllowed = show;
     applyTabView();
     const showPnl = PNL_VIEWERS.has(user);
@@ -17951,6 +18359,7 @@ function applyLoadedData(d) {
         }
         console.log("[Quote extras] loaded " + state.quoteExtras.size + " extras rows for " + quotes.length + " quotes");
         state.locations = new Map(locs.map(l => [l.id, l.code || l.displayName || "(unnamed)"]));
+        state.locationNames = new Map(locs.filter(l => l.code && l.displayName).map(l => [l.code, l.displayName]));   // code → name, for the Shipped Not Invoiced branch cards
         state.items = items;
         state.itemCategory = new Map(items.map(it => [it.number, it.itemCategoryCode || ""]));
         state.customers = customers;

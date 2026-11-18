@@ -643,6 +643,13 @@ async function fetchSalesOrderOutstandingLines() {
         shippedNotInvLcyExVat: fSniLcyNoVat ? num(r[fSniLcyNoVat]) : 0,
         unitCostLcy:           fUnitCost ? num(r[fUnitCost]) : null,
         shipmentDate:          fShipDate ? (r[fShipDate] || "").toString().slice(0, 10) : "",
+        // Line identity for the Shipped Not Invoiced tab (2026-11-18): lets a
+        // line be matched to its order line exactly, and carries the item and
+        // branch when the order header is not in the load.
+        lineNo:                linesInfo.fLineNo ? num(r[linesInfo.fLineNo]) : null,
+        itemNo:                linesInfo.fItemNo ? (r[linesInfo.fItemNo] || "").toString() : "",
+        description:           linesInfo.fDesc ? (r[linesInfo.fDesc] || "").toString() : "",
+        locationCode:          linesInfo.fLocation ? (r[linesInfo.fLocation] || "").toString() : "",
     }));
 }
 async function fetchSalesShipments(fromISO, toISO) {

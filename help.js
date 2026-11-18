@@ -52,6 +52,7 @@
         salespersonMarginRate: B('Salesperson Margin Run Rate', 'For the chosen month: each salesperson’s gross margin dollars against their GP budget target, as a daily run rate. Same layout as the sales run rate.'),
         pnl: B('Profit & Loss (Ledger)', 'The P&L read straight from the Wiise general ledger for the toolbar period: income, cost of goods sold, gross profit, expenses and net profit, month by month, by account, with the account map. Independent of the sales documents.'),
         keyCustomers: B('Key Customer Sales', 'Not built yet.'),
+        shippedNotInv: B('Shipped Not Invoiced', 'The list behind the Shipped Not Invoiced figures: every sales order with goods delivered but not invoiced yet, oldest first. Click a branch card to filter, group by branch, salesperson or customer, and click an order to see its item lines. Value is before GST; days waiting counts from the posted shipment.'),
         ordersPastDel: B('Orders past Delivery', 'Not built yet.'),
     };
 
@@ -89,6 +90,11 @@
         dsPaneSales: B('Sales + Shipped Not Invoiced', 'The big figure is this month’s invoiced sales (excluding tax) plus goods already delivered but not yet invoiced. The two parts are shown underneath, and the thin bar shows how the total splits between them.'),
         dsPaneGp: B('Gross Profit, month to date', 'Gross profit in dollars and as a percentage on this month’s invoiced sales, the same figures as the Month-to-Date tab. The second line adds the margin sitting in goods shipped but not yet invoiced; it is marked as an estimate when the order lines carry no cost.'),
         exportBtn: B('Export', 'Exports what is on this tab to Excel. Pick the whole tab (every pane on its own sheet), the tiles, any one table, or any one chart as numbers or as a picture. Drill-down tables keep their levels: use the + buttons at the left edge in Excel.'),
+        sniScope: B('Show', 'Everything not invoiced is the full chase list. This month only keeps the lines scheduled to ship this month, which is what the Daily Snapshot and Month-to-Date figures add up. Toolbar period only matches the Overview tile.'),
+        sniBranches: B('By branch', 'Shipped not invoiced value for each branch (the location on the order line). Click a card to show only that branch; click it again to clear.'),
+        sniSp: B('Salesperson', 'Show only the orders of one salesperson (the code on the order).'),
+        sniAge: B('Days waiting', 'Show only goods that have waited this long since they were shipped.'),
+        sniSearch: B('Search', 'Type part of an order number, customer name, item code or description.'),
         ktMonthSel: B('Month', 'Which month the two panels show. The current month shows a live run rate against the target; a past month shows the finished result.'),
         ktKit_airtouch_airtouch: B('AirTouch Kit Targets', 'Units of the four AirTouch kit codes invoiced in the chosen month, against a combined target of 120 units a month. Click a code to open it: salesperson, then customer, then the invoices. Click a column heading to sort.'),
         ktKit_omniflow_omniflow: B('Omniflow Targets', 'Units of the five Omniflow codes invoiced in the chosen month, against a combined target of 150 units a month. Click a code to open it: salesperson, then customer, then the invoices. Click a column heading to sort.'),
