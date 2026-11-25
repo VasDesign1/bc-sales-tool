@@ -37,13 +37,15 @@
     const SYSTEM = new Set(["Unit Cost", "Last Direct Cost", "Cost is Adjusted", "Last Unit Cost Calc. Date", "Rolled-up Material Cost", "Rolled-up Capacity Cost",
         "Rolled-up Subcontracted Cost", "Rolled-up Mfg. Ovhd Cost", "Rolled-up Cap. Overhead Cost", "Single-Level Material Cost", "Single-Level Capacity Cost",
         "Single-Level Subcontrd. Cost", "Single-Level Cap. Ovhd Cost", "Single-Level Mfg. Ovhd Cost", "Low-Level Code", "Last Counting Period Update",
-        "Next Counting Start Date", "Next Counting End Date", "Last Phys. Invt. Date", "Coupled to Dataverse", "Allow Online Adjustment"]);
+        "Next Counting Start Date", "Next Counting End Date", "Last Phys. Invt. Date", "Coupled to Dataverse", "Allow Online Adjustment",
+        "Profit %", "Last Landed Cost", "Search Description", "Has Sales Forecast"]);
+    const SETUP_MIN = 60;      // fields the creator fills in within this many minutes of creating an item are part of creating it
     const VIEWS = [["user", "Employee"], ["item", "Item"], ["field", "Field"], ["day", "Day"]];
 
     const S = {
         src: null, ev: [],
         range: "month", from: "", to: "",
-        user: "", field: "", part: "", type: "", q: "", sys: false,
+        user: "", field: "", part: "", type: "", q: "", sys: false, setup: false,
         view: "user", sort: { key: "n", dir: "desc" }, pick: null,
         sumLimit: 200, limit: 300,
     };
@@ -84,6 +86,9 @@
     // ---------- file → lines ----------
     function build(d) {
         const out = [], items = d.items || {}, fields = d.fields || [], vend = d.vend || {};
+        const mins = ts => Date.UTC(+ts.slice(0, 4), +ts.slice(5, 7) - 1, +ts.slice(8, 10), +ts.slice(11, 13), +ts.slice(14, 16)) / 60000;
+        const born = new Map();      // item → [minute, user] of its creation
+        for (const r of (d.ic || [])) if (r[3] === "I" && r[4] === 0) born.set(r[2], [mins(r[0]), r[1]]);
         for (const r of (d.ic || [])) {
             const ts = r[0], t = r[3], type = r[4], sub = r[8] || "", it = items[r[2]] || ["", ""];
             const subLabel = !sub ? "" : t === "V" ? (vend[sub] ? vend[sub] + " (" + sub + ")" : sub) : t === "K" ? "line " + sub : sub;
@@ -92,7 +97,8 @@
             else field = WHOLE[t][type] + (subLabel ? " — " + subLabel : "");
             out.push({ ts, date: ts.slice(0, 10), user: r[1] || "", item: r[2], name: it[0] || (type !== 1 && t === "I" ? (r[7] || r[6] || "") : ""), cat: it[1] || "",
                 t, type, cap: type === 1 ? (fields[r[5]] || "(field)") : WHOLE[t][type], field, oldV: type === 1 ? r[6] : (t === "I" ? "" : ""), newV: type === 1 ? r[7] : "",
-                whole: type !== 1, n: r[9] || 0, sys });
+                whole: type !== 1, n: r[9] || 0, sys,
+                setup: (() => { if (type !== 1) return false; const b = born.get(r[2]); if (!b || b[1] !== r[1]) return false; const m = mins(ts) - b[0]; return m >= 0 && m <= SETUP_MIN; })() });
         }
         return out;
     }
@@ -106,6 +112,7 @@
         return events().filter(e => {
             if (e.date < S.from || e.date > S.to) return false;
             if (!S.sys && e.sys) return false;
+            if (!S.setup && e.setup) return false;
             if (skip !== "user" && S.user && e.user !== S.user) return false;
             if (skip !== "field" && S.field && e.cap !== S.field) return false;
             if (S.part && e.t !== S.part) return false;
@@ -163,6 +170,7 @@
                 </select>
                 <input type="date" id="icFrom" class="mini-select" title="From"><span>to</span><input type="date" id="icTo" class="mini-select" title="To">
                 <label class="chk" id="icSysLbl" title="Unit Cost, Last Direct Cost and similar fields are rewritten by Wiise itself whenever a purchase is posted or costs are adjusted"><input type="checkbox" id="icSys"> Include the cost updates Wiise makes by itself</label>
+                <label class="chk" id="icSetupLbl" title="The fields somebody fills in during the first hour after creating an item are part of creating it, not changes"><input type="checkbox" id="icSetup"> Include the fields filled in while a new item was set up</label>
             </div><div class="panel-header ic-bar" style="border-bottom:0;">
                 <span class="lbl">Filter</span>
                 <select id="icUser" class="mini-select" title="Employee"></select>
@@ -197,6 +205,7 @@
         const dateChange = () => { const f = $("icFrom").value, t = $("icTo").value; if (!f || !t) return; S.from = f <= t ? f : t; S.to = f <= t ? t : f; S.range = "custom"; reset(); };
         $("icFrom").addEventListener("change", dateChange); $("icTo").addEventListener("change", dateChange);
         $("icSys").addEventListener("change", e => { S.sys = e.target.checked; reset(); });
+        $("icSetup").addEventListener("change", e => { S.setup = e.target.checked; reset(); });
         $("icUser").addEventListener("change", e => { S.user = e.target.value; reset(); });
         $("icField").addEventListener("change", e => { S.field = e.target.value; reset(); });
         $("icPart").addEventListener("change", e => { S.part = e.target.value; reset(); });
@@ -241,7 +250,7 @@
         const off = "Nothing has been recorded yet. Item changes are collected from the Wiise Change Log once the Item table (27) is switched on in Change Log Setup and people have signed in again; the robot then adds them on its next run.";
         $("icHint").innerHTML = status === "error" ? esc(sa.err) : !ready ? "Loading the activity file…" : !has ? esc(off)
             : "Every change made on an item card: who, when, which field, and the old and new value. From the Wiise Change Log, held from <strong>" + dateLabel(heldFrom()) + "</strong>; nothing earlier exists. The toolbar filters above do not apply here; use the ones below.";
-        ["icRange", "icFrom", "icTo", "icSys", "icUser", "icField", "icPart", "icType", "icQ"].forEach(id => { $(id).disabled = !has; });
+        ["icRange", "icFrom", "icTo", "icSys", "icSetup", "icUser", "icField", "icPart", "icType", "icQ"].forEach(id => { $(id).disabled = !has; });
         if (!has) {
             $("icTiles").innerHTML = ""; $("icSum").querySelector("thead").innerHTML = "";
             $("icSum").querySelector("tbody").innerHTML = `<tr><td class="empty">${esc(status === "error" ? sa.err : ready ? off : "Loading…")}</td></tr>`;
@@ -249,7 +258,7 @@
             return;
         }
         if (!S.from) setRange(S.range);
-        $("icRange").value = S.range; $("icFrom").value = S.from; $("icTo").value = S.to; $("icSys").checked = S.sys;
+        $("icRange").value = S.range; $("icFrom").value = S.from; $("icTo").value = S.to; $("icSys").checked = S.sys; $("icSetup").checked = S.setup;
         $("icPart").value = S.part; $("icType").value = S.type;
         if ($("icQ").value !== S.q) $("icQ").value = S.q;
         $("icRoot").querySelectorAll("[data-ic-view]").forEach(b => b.classList.toggle("active", b.dataset.icView === S.view));
@@ -312,7 +321,7 @@
               + (list.length > shown.length ? `<tr><td colspan="${cols.length}" class="empty"><span class="ic-link" data-ic-more="sum">Showing the first ${fmtInt(shown.length)} of ${fmtInt(list.length)} — show 500 more</span></td></tr>` : "")
             : `<tr><td colspan="${cols.length}" class="empty">No item changes for this period and these filters.</td></tr>`;
         $("icSumMeta").textContent = rows.length ? plural(rows.length, "line") + " · " + dateLabel(S.from) + " to " + dateLabel(S.to) : "";
-        $("icSumNote").textContent = "Click a row to list its changes below; click it again to clear. Click a column heading to sort. A new or deleted item counts as one line, however many fields it carried.";
+        $("icSumNote").textContent = "Click a row to list its changes below; click it again to clear. Click a column heading to sort. A new item counts as one line: the fields its creator fills in during the first hour are left out unless the box above is ticked.";
     }
 
     function paintList(all) {
@@ -330,7 +339,7 @@
             return `<tr><td>${esc(whenLabel(e.ts))}</td><td title="${escapeAttr(e.user)}">${esc(userLabel(e.user))}</td>
                 <td><span class="ic-link" data-ic-item="${escapeAttr(e.item)}" title="Show only this item">${esc(e.item)}</span>${gone ? "" : itemLink(e.item)}</td>
                 <td class="wrap" title="${escapeAttr(e.cat ? "Category " + e.cat : "")}">${esc(e.name)}</td><td>${esc(PARTS[e.t] || "")}</td>
-                <td class="wrap">${esc(e.field)}${e.sys ? '<span class="ic-chip" title="Wiise rewrites this field by itself">Wiise</span>' : ""}</td>${oldCell}${newCell}</tr>`;
+                <td class="wrap">${esc(e.field)}${e.sys ? '<span class="ic-chip" title="Wiise rewrites this field by itself">Wiise</span>' : ""}${e.setup ? '<span class="ic-chip" title="Filled in while the new item was being set up">new item</span>' : ""}</td>${oldCell}${newCell}</tr>`;
         }).join("") + (rows.length > shown.length ? `<tr><td colspan="8" class="empty"><span class="ic-link" data-ic-more="list">Showing the first ${fmtInt(shown.length)} of ${fmtInt(rows.length)} lines — show 500 more</span></td></tr>` : "")
             : `<tr><td colspan="8" class="empty">No item changes for this choice.</td></tr>`;
         $("icListNote").textContent = "Newest first, Melbourne time. Click an item number to keep only that item; the ↗ opens its card in Wiise. A login shared by several people shows as one employee. Values longer than 140 characters are cut short.";

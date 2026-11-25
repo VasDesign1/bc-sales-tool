@@ -101,6 +101,7 @@
         icReload: B('Activity file', 'When the robot last wrote the file this tab reads (the same file as Staff Activity). The arrow reads the latest file again.'),
         icRange: B('Period', 'A quick period, by the day the change was made (Melbourne time). Custom dates keeps whatever you type in the two date boxes.'),
         icSysLbl: B('Wiise’s own cost updates', 'Unit Cost, Last Direct Cost and a few similar fields are rewritten by Wiise itself every time a purchase is posted or costs are adjusted. Nobody typed them, so they are hidden until you tick this box.'),
+        icSetupLbl: B('New item set-up', 'When somebody creates an item, the fields they fill in during the first hour are part of creating it. They are left out so that only real later changes show; tick this box to see them too.'),
         icUser: B('Employee', 'Show only the changes of one Wiise login. A login shared by several people shows as one employee. The number in brackets is how many lines they have in the period.'),
         icField: B('Field', 'Show only changes to one field of the card, for example Unit Price or Blocked.'),
         icPart: B('Part of the card', 'The item card itself, or one of the lists behind it: units of measure, suppliers, kit contents. The lists only appear when their tables are switched on in the Wiise Change Log Setup.'),

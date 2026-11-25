@@ -259,7 +259,10 @@ const upper = (s) => String(s || "").trim().toUpperCase();
         if (!st.ic) st.ic = [];
         if (!st.items) st.items = {};
         const IT_TABLES = { 27: "I", 5404: "U", 99: "V", 90: "K" };
-        const IT_DROP = /^Last (Date|Time|Date ?Time) Modified$/i;      // stamped by Wiise on every save: says nothing
+        // Left out altogether: the save stamps, two flags the cost adjustment flips
+        // on every posting, and the "... Id" copies of a code field shown beside it.
+        const IT_DROP = /^(Last (Date|Time|Date ?Time) Modified|Cost is Adjusted|Allow Online Adjustment|.+ Id)$/i;
+        { const before = st.ic.length; st.ic = st.ic.filter(r => r[4] !== 1 || !IT_DROP.test(st.fields[r[5]] || "")); if (before !== st.ic.length) console.log("Item change log: " + (before - st.ic.length) + " bookkeeping lines removed from the file"); }
         const clip = (s) => s.length > 140 ? s.slice(0, 139) + "…" : s;
         const icRows = await odata("ChangeLogEntries", "Entry_No gt " + cur.ic + " and (Table_No eq 27 or Table_No eq 5404 or Table_No eq 99 or Table_No eq 90)", CL_SEL, "Item change log");
         icRows.sort((a, b) => a.Entry_No - b.Entry_No);
@@ -304,7 +307,7 @@ const upper = (s) => String(s || "").trim().toUpperCase();
             for (const it of items) if (wanted.has(it.number)) st.items[it.number] = [it.displayName || "", it.itemCategoryCode || ""];
             for (const no of wanted) if (!(no in st.items)) st.items[no] = ["", ""];      // deleted since: asked once only
         }
-        console.log("Item change log: " + icRows.length + " lines read · " + icKept + " kept (" + icNew + " new records, " + icGone + " deleted) · " + icDropped + " save stamps left out · file holds " + st.ic.length + " lines on " + Object.keys(st.items).length + " items" + (itemFrom ? " from " + itemFrom.slice(0, 10) : ""));
+        console.log("Item change log: " + icRows.length + " lines read · " + icKept + " kept (" + icNew + " new records, " + icGone + " deleted) · " + icDropped + " bookkeeping lines left out · file holds " + st.ic.length + " lines on " + Object.keys(st.items).length + " items" + (itemFrom ? " from " + itemFrom.slice(0, 10) : ""));
         const topIc = [...icFreq].sort((a, b) => b[1] - a[1]).slice(0, 30).map(x => x[0] + " " + x[1]).join(" · ");
         if (topIc) console.log("  item changes by field: " + topIc);
     } catch (e) {
