@@ -66,3 +66,20 @@ jobs:
           SLOT: ${{ github.event.inputs.slot }}
           FROM_TIMER: ${{ github.event.inputs.timer }}
         run: node scripts/snapshot.js
+
+      # Staff activity file (Operations → Staff Activity): topped up on every
+      # run from where it left off. Quiet by design — it never fails the
+      # snapshot workflow, and does nothing until the file has been built
+      # once by hand (staff-activity workflow).
+      - name: Top up the staff activity file
+        if: ${{ !cancelled() && github.event.inputs.selftest != 'true' }}
+        continue-on-error: true
+        timeout-minutes: 10
+        env:
+          BC_CLIENT_ID: ${{ secrets.BC_CLIENT_ID }}
+          BC_TENANT: ${{ secrets.BC_TENANT }}
+          BC_REFRESH_TOKEN: ${{ secrets.BC_REFRESH_TOKEN }}
+          SNAPSHOT_PASSPHRASE: ${{ secrets.SNAPSHOT_PASSPHRASE }}
+          ACTIVITY_PASSPHRASE: ${{ secrets.ACTIVITY_PASSPHRASE }}
+          ACTIVITY_INCREMENTAL_ONLY: "true"
+        run: node scripts/activity.js
