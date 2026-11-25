@@ -12,7 +12,7 @@
    robot scripts/activity.js, section 1b). It is downloaded once and
    shared: this tab asks staff-activity.js for it (staffActivity.ensure).
      data.ic     [when, user, item, part, type, field, old, new, sub, n]
-                 part  I item card · U unit of measure · V supplier · K kit line
+                 part  I item card · S stock card per branch (stockkeeping unit) · U unit of measure · V supplier · K kit line
                  type  0 new · 1 changed · 2 deleted   (0 / 2: one line per record, n fields)
      data.items  item number → [description, category]
    "Get latest from Wiise" (staffActivity.live) adds what Wiise holds
@@ -27,12 +27,13 @@
     const $ = id => document.getElementById(id);
     const esc = s => escapeHtml(s == null ? "" : s);
 
-    const PARTS = { I: "Item card", U: "Units of measure", V: "Suppliers", K: "Kit contents" };
+    const PARTS = { I: "Item card", S: "Stock card (per branch)", U: "Units of measure", V: "Suppliers", K: "Kit contents" };
     const WHOLE = {
         I: ["New item created", "", "Item deleted"],
         U: ["Unit of measure added", "", "Unit of measure removed"],
         V: ["Supplier added", "", "Supplier removed"],
         K: ["Kit line added", "", "Kit line removed"],
+        S: ["Stock card created", "", "Stock card deleted"],
     };
     // Fields Wiise rewrites by itself when a purchase is posted or costs are
     // adjusted. Nobody typed these; they are hidden until asked for.
@@ -93,7 +94,7 @@
         for (const r of (d.ic || [])) if (r[3] === "I" && r[4] === 0) born.set(r[2], [mins(r[0]), r[1]]);
         for (const r of (d.ic || [])) {
             const ts = r[0], t = r[3], type = r[4], sub = r[8] || "", it = items[r[2]] || ["", ""];
-            const subLabel = !sub ? "" : t === "V" ? (vend[sub] ? vend[sub] + " (" + sub + ")" : sub) : t === "K" ? "line " + sub : sub;
+            const subLabel = !sub ? "" : t === "V" ? (vend[sub] ? vend[sub] + " (" + sub + ")" : sub) : t === "K" ? "line " + sub : t === "S" ? "branch " + sub : sub;
             let field, sys = false;
             if (type === 1) { const cap = fields[r[5]] || "(field)"; field = cap + (subLabel ? " — " + subLabel : ""); sys = t === "I" && SYSTEM.has(cap); }
             else field = WHOLE[t][type] + (subLabel ? " — " + subLabel : "");

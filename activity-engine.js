@@ -139,7 +139,7 @@ async function activityTopUp(st, env) {
     // 1b. CHANGE LOG → item card changes (Operations → Item Changes)
     //     Table 27 Item, plus the lists that hang off the card when they
     //     are logged too: 5404 units of measure, 99 item suppliers,
-    //     90 kit contents. Every changed field is kept with its old and
+    //     90 kit contents, 5700 stockkeeping units (per-branch stock card). Every changed field is kept with its old and
     //     new value; a new or deleted item is logged once per field by
     //     Wiise and is kept here as one line. Never stops the rest of
     //     the run.
@@ -149,23 +149,32 @@ async function activityTopUp(st, env) {
         if (cur.ic == null) cur.ic = 0;
         if (!st.ic) st.ic = [];
         if (!st.items) st.items = {};
-        const IT_TABLES = { 27: "I", 5404: "U", 99: "V", 90: "K" };
+        // 5700 Stockkeeping Unit = the per-branch stock card (reorder point, maximum inventory … by location)
+        const IT_TABLES = { 27: "I", 5404: "U", 99: "V", 90: "K", 5700: "S" };
         // Left out altogether: the save stamps, two flags the cost adjustment flips
         // on every posting, and the "... Id" copies of a code field shown beside it.
         const IT_DROP = /^(Last (Date|Time|Date ?Time) Modified|Cost is Adjusted|Allow Online Adjustment|.+ Id)$/i;
         { const before = st.ic.length; st.ic = st.ic.filter(r => r[4] !== 1 || !IT_DROP.test(st.fields[r[5]] || "")); if (before !== st.ic.length) log("Item change log: " + (before - st.ic.length) + " bookkeeping lines removed from the file"); }
         const clip = (s) => s.length > 140 ? s.slice(0, 139) + "…" : s;
-        const icRows = await odata("ChangeLogEntries", "Entry_No gt " + cur.ic + " and (Table_No eq 27 or Table_No eq 5404 or Table_No eq 99 or Table_No eq 90)", CL_SEL, "Item change log");
+        let icRows = await odata("ChangeLogEntries", "Entry_No gt " + cur.ic + " and (Table_No eq 27 or Table_No eq 5404 or Table_No eq 99 or Table_No eq 90 or Table_No eq 5700)", CL_SEL, "Item change log");
+        // Table 5700 joined later than the others: its older lines are read once (robot only).
+        const skuBackfill = !light && !st.meta.sku && cur.ic > 0;
+        if (skuBackfill) {
+            const old = await odata("ChangeLogEntries", "Entry_No le " + cur.ic + " and Table_No eq 5700", CL_SEL, "Item change log (stock cards)");
+            log("Item change log: " + old.length + " earlier stock card (5700) lines read once");
+            icRows = icRows.concat(old);
+        }
+        if (!light) st.meta.sku = 1;
         icRows.sort((a, b) => a.Entry_No - b.Entry_No);
         const whole = new Map(), icFreq = new Map();
         let icMax = cur.ic, icKept = 0, icNew = 0, icGone = 0, icDropped = 0, itemFrom = st.meta.itemFrom || "";
         for (const r of icRows) {
-            if (r.Entry_No <= cur.ic) continue;
+            if (r.Entry_No <= cur.ic && !(skuBackfill && r.Table_No === 5700)) continue;
             if (r.Entry_No > icMax) icMax = r.Entry_No;
             const t = IT_TABLES[r.Table_No];
             if (!t) continue;
             const pk1 = String(r.Primary_Key_Field_1_Value || ""), pk2 = String(r.Primary_Key_Field_2_Value || "");
-            const item = t === "V" ? pk2 : pk1, sub = t === "I" ? "" : t === "V" ? pk1 : pk2;
+            const item = t === "V" || t === "S" ? pk2 : pk1, sub = t === "I" ? "" : t === "V" || t === "S" ? pk1 : pk2;
             if (!item) continue;
             const cap = String(r.Field_Caption || "");
             if (IT_DROP.test(cap)) { icDropped++; continue; }

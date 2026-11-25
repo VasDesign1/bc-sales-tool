@@ -104,7 +104,7 @@
         icSetupLbl: B('New item set-up', 'When somebody creates an item, the fields they fill in during the first hour are part of creating it. They are left out so that only real later changes show; tick this box to see them too.'),
         icUser: B('Employee', 'Show only the changes of one Wiise login. A login shared by several people shows as one employee. The number in brackets is how many lines they have in the period.'),
         icField: B('Field', 'Show only changes to one field of the card, for example Unit Price or Blocked.'),
-        icPart: B('Part of the card', 'The item card itself, or one of the lists behind it: units of measure, suppliers, kit contents. The lists only appear when their tables are switched on in the Wiise Change Log Setup.'),
+        icPart: B('Part of the card', 'The item card itself, or one of the lists behind it: the per-branch stock card (stockkeeping unit, where reorder point and maximum inventory are kept by location), units of measure, suppliers, kit contents. The lists only appear when their tables are switched on in the Wiise Change Log Setup.'),
         icType: B('Kind of change', 'Changed = a field was edited. New = an item was created (or a line added to one of the lists). Deleted = an item or a line was removed.'),
         icQ: B('Search', 'Type part of an item number, description, field name, or an old or new value.'),
         icClear: B('Clear filters', 'Clears employee, field, part, kind and search. The period stays.'),
