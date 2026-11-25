@@ -130,7 +130,7 @@
             if (type !== "1" && !(kind === "S" && type === "0")) continue;       // orders, and sales quotes
             const inv = (kind === "S" ? siO : piO).get(no), goods = (kind === "S" ? shO : prO).get(no), linked = inv || goods || {};
             const base = { kind, no, key, party: x.cu || linked.c || "", br: x.br || linked.b || "", sp: x.sp != null ? x.sp : (linked.s || ""),
-                amt: x.a != null ? x.a : (inv ? Math.round(inv.a * 100) / 100 : null), au: x.au || "", open: !!x.o, closed: x.d || null, doc: type === "1" ? "order" : "quote" };
+                amt: x.a != null ? x.a : (inv ? Math.round(inv.a * 100) / 100 : null), au: x.au || "", open: !!x.o, closed: x.d || null, doc: type === "1" ? "order" : "quote", dropped: !!x.d && !inv && !goods };
             if (x.c) {
                 const stamp = { date: x.f[0].slice(0, 10), hour: +x.f[0].slice(11, 13), time: x.f[0].slice(11, 16), user: x.f[1] };
                 ev.push(Object.assign({ m: type === "0" ? "sqC" : kind === "S" ? "soC" : "poC" }, base, stamp));
@@ -631,7 +631,7 @@
         if (e.m === "soM" || e.m === "poM") bits.push(plural(e.n, "change") + ": " + e.fields.slice(0, 6).join(", ") + (e.fields.length > 6 ? " +" + (e.fields.length - 6) + " more" : ""));
         if (e.m === "sqV") bits.push("from quote " + e.quote);
         if ((e.doc === "order" || e.doc === "quote") && e.au && e.au !== e.user) bits.push("assigned to " + userLabel(e.au));
-        if (e.doc === "order" || e.doc === "quote") bits.push(e.open ? "still open" : e.closed ? "closed " + dateLabel(e.closed[0].slice(0, 10)) + " by " + userLabel(e.closed[1]) : "no longer open");
+        if (e.doc === "order" || e.doc === "quote") bits.push(e.open ? "still open" : e.closed ? (e.doc === "order" && e.dropped ? "deleted " : "closed ") + dateLabel(e.closed[0].slice(0, 10)) + " by " + userLabel(e.closed[1]) + (e.doc === "order" && e.dropped ? " with no shipment or invoice" : "") : "no longer open");
         if (e.via) bits.push("posted with invoice " + e.via);
         if (e.lines) bits.push(plural(e.lines, "line"));
         if (e.approx) bits.push("value estimated from the GST-inclusive total");

@@ -73,22 +73,28 @@ async function activityTopUp(st, env) {
     // A deleted order is logged once per field (80+ lines); the "No." line
     // (field 3) is enough. Wiise refuses an OR across two different fields,
     // so that is two reads; if either is refused, read every line instead.
-    let clRows;
+    let clRows, clSplit = true;
     try {
-        const [live, gone] = await Promise.all([
+        // Field 2 of a removed document is its customer / vendor number: the only
+        // place the party is written down when it was already on the document
+        // as it was created (no "typed in" line exists for that).
+        const [live, gone, goneParty] = await Promise.all([
             odata("ChangeLogEntries", clBase + " and Type_of_Change ne 'Deletion'", CL_SEL, "Change log"),
             odata("ChangeLogEntries", clBase + " and Type_of_Change eq 'Deletion' and Field_No eq 3", CL_SEL, "Change log (closed)"),
+            odata("ChangeLogEntries", clBase + " and Type_of_Change eq 'Deletion' and Field_No eq 2", CL_SEL, "Change log (closed, party)"),
         ]);
         if (!gone.length && live.length > 3000) warn("  [Change log] no closing lines among " + live.length + " lines — check the Field_No 3 filter");
-        clRows = live.concat(gone);
+        clRows = live.concat(gone, goneParty);
     } catch (e) {
         warn("  [Change log] split read refused (" + e.message.slice(0, 160) + ") — reading every line");
+        clSplit = false;
         clRows = await odata("ChangeLogEntries", clBase, CL_SEL, "Change log");
     }
     clRows.sort((a, b) => a.Entry_No - b.Entry_No);
     const fieldIdx = new Map(st.fields.map((c, i) => [c, i]));
     const fIdx = (cap) => { if (!fieldIdx.has(cap)) { fieldIdx.set(cap, st.fields.length); st.fields.push(cap); } return fieldIdx.get(cap); };
     const capFreq = { S: new Map(), P: new Map() };
+    let clParty = 0;
     let clCreated = 0, clDeleted = 0, clEdits = 0, clSkipped = 0, clMax = cur.cl, logFrom = st.meta.logFrom || "";
     const seenDel = new Set();
     for (const r of clRows) {
@@ -105,6 +111,11 @@ async function activityTopUp(st, env) {
         if (!d) d = st.docs[key] = { f: [ts, user], f0: sec, c: 0, n: 0 };
         d.n++;
         if (r.Type_of_Change === "Deletion") {
+            if (r.Field_No === 2) {                        // the customer / vendor the removed document was for
+                const party = String(r.Old_Value == null ? "" : r.Old_Value).trim();
+                if (party && !d.cu) { d.cu = party; clParty++; }
+                if (seenDel.has(key) || clSplit) { d.n--; continue; }
+            }
             if (!seenDel.has(key)) { seenDel.add(key); if (!d.d) clDeleted++; d.d = [ts, user]; }
             continue;
         }
@@ -129,7 +140,7 @@ async function activityTopUp(st, env) {
         const fi = fIdx(cap); if (!e[1].includes(fi)) e[1].push(fi);
     }
     cur.cl = clMax; st.meta.logFrom = logFrom;
-    log("Change log: " + clRows.length + " lines read (" + clSkipped + " skipped) · " + clCreated + " documents raised · " + clDeleted + " closed · " + clEdits + " later changes · log starts " + (logFrom || "?").slice(0, 10));
+    log("Change log: " + clRows.length + " lines read (" + clSkipped + " skipped) · " + clCreated + " documents raised · " + clDeleted + " closed · " + clEdits + " later changes · " + clParty + " closed documents given their customer / vendor · log starts " + (logFrom || "?").slice(0, 10));
     for (const k of ["S", "P"]) {
         const top = [...capFreq[k]].sort((a, b) => b[1] - a[1]).slice(0, 30).map(x => x[0] + " " + x[1]).join(" · ");
         if (top) log("  later changes by field (" + (k === "S" ? "sales" : "purchase") + "): " + top);
