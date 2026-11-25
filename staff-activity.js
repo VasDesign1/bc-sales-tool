@@ -15,8 +15,11 @@
                                      a document = the person who raised it)
      who POSTED shipments, receipts  the user on the stock movement
      who POSTED invoices, credits    the user on the customer / vendor ledger
-   The only live call is the "full change history" of one order,
-   read from the Change Log with the viewer's own sign-in.
+   Live reads, both with the viewer's own sign-in:
+     "Get latest from Wiise"   everything newer than the file, added on
+                               screen only (activity-engine.js, the same
+                               rules the robot runs; the file is untouched)
+     "full change history"     of one order, from the Change Log.
 
    Keep help.js in step when tiles, columns or controls change.
    ============================================================ */
@@ -71,6 +74,7 @@
         view: "user", then: "", sort: { key: "__total", dir: "desc" },
         chart: "trend", cm: "",
         pick: null, docQ: "", docLimit: 300, hist: null,
+        live: "", liveErr: "",      // "" | loading | done | error  — "Get latest from Wiise"
     };
     const money0 = n => n == null || isNaN(n) ? "—" : new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD", maximumFractionDigits: 0 }).format(n);
     const plural = (n, w) => fmtInt(n) + " " + w + (n === 1 ? "" : "s");
@@ -185,7 +189,37 @@
             paint();
         }
     }
+    // ---------- live top-up: what Wiise holds beyond the robot's file ----------
+    // Runs the robot's own rules (activity-engine.js) on a COPY of the file,
+    // reading only what is newer than its cursors, and shows the result.
+    // Nothing is written anywhere; ↻ goes back to the file as published.
+    let liveP = null;
+    function live() {
+        if (S.status !== "ready") return Promise.resolve();
+        if (S.live === "loading" && liveP) return liveP;
+        return (liveP = doLive());
+    }
+    async function doLive() {
+        S.live = "loading"; S.liveErr = ""; paint();
+        try {
+            if (typeof activityTopUp !== "function") throw new Error("activity-engine.js did not load");
+            const co = await bcGetCompanyInternalName(), cid = await bcGetCompanyId(), enc = encodeURIComponent, t0 = Date.now();
+            const st = typeof structuredClone === "function" ? structuredClone(S.data) : JSON.parse(JSON.stringify(S.data));
+            await activityTopUp(st, { light: true,
+                odata: (set, filter, select, label) => bcFetchAll(BC_ODATA_URL + "/Company('" + enc(co) + "')/" + set + "?$filter=" + enc(filter) + (select ? "&$select=" + select : ""), label),
+                api: (p, label) => bcFetchAll(BC_API_URL + "/companies(" + cid + ")/" + p, label),
+                warn: m => console.warn("[Staff activity live]", m) });
+            st.meta.liveAt = actMel(new Date()).replace("T", " ");
+            st.meta.liveSecs = Math.round((Date.now() - t0) / 100) / 10;
+            S.data = st; S.meta = st.meta; S.ev = build(st); S.live = "done";
+        } catch (e) {
+            S.live = "error"; S.liveErr = "Could not read the latest from Wiise: " + (e.message || e);
+        }
+        const prog = document.getElementById("bcProgress"); if (prog) prog.style.display = "none";    // the corner progress line bcFetchAll switches on
+        paint();
+    }
     function inject(data) {
+        S.live = ""; S.liveErr = "";
         S.data = data; S.meta = data.meta || {}; S.ev = build(data); S.status = "ready";
         setRange(S.range === "custom" ? "month" : S.range);
         paint();
@@ -269,7 +303,7 @@
         const opt = (v, l) => `<option value="${v}">${l}</option>`;
         root.innerHTML = `
             <div class="hint rr-hint"><span id="saHint">Who raised, changed, shipped, invoiced and received what.</span>
-                <span class="rr-tgt"><span class="rr-tgt-lbl">Activity file</span><span id="saAsOf">not loaded</span><button type="button" class="more-btn" id="saReload" title="Read the latest staff activity file again">↻</button></span></div>
+                <span class="rr-tgt"><span class="rr-tgt-lbl">Activity file</span><span id="saAsOf">not loaded</span><button type="button" class="more-btn" id="saReload" title="Read the latest staff activity file again">↻</button><button type="button" class="more-btn" id="saLive" title="Read everything newer than the file straight from Wiise, with your own sign-in">Get latest from Wiise</button></span></div>
             <div class="panel"><div class="panel-header sa-bar">
                 <span class="lbl">Period</span>
                 <select id="saRange" class="mini-select" title="Quick period">
@@ -333,6 +367,7 @@
 
         // ---- wiring ----
         $("saReload").addEventListener("click", () => load(true));
+        $("saLive").addEventListener("click", () => live());
         $("saRange").addEventListener("change", e => { if (e.target.value !== "custom") setRange(e.target.value); else S.range = "custom"; S.pick = null; paint(); });
         const dateChange = () => { const f = $("saFrom").value, t = $("saTo").value; if (!f || !t) return; S.from = f <= t ? f : t; S.to = f <= t ? t : f; S.range = "custom"; S.pick = null; paint(); };
         $("saFrom").addEventListener("change", dateChange); $("saTo").addEventListener("change", dateChange);
@@ -387,10 +422,17 @@
         scaffold();
         if (!$("saRoot") || !$("saRoot").dataset.built) return;
         const ready = S.status === "ready";
-        $("saAsOf").textContent = S.status === "loading" ? "loading…" : S.status === "error" ? "not loaded" : ready ? "as of " + String(S.meta.builtAtMelbourne || "").slice(11) + " on " + dateLabel(String(S.meta.builtAtMelbourne || "").slice(0, 10)) : "not loaded";
+        const fileAsOf = () => "as of " + String(S.meta.builtAtMelbourne || "").slice(11) + " on " + dateLabel(String(S.meta.builtAtMelbourne || "").slice(0, 10));
+        $("saAsOf").textContent = S.status === "loading" ? "loading…" : S.status === "error" ? "not loaded" : !ready ? "not loaded"
+            : S.live === "loading" ? fileAsOf() + " · reading Wiise…"
+            : S.live === "error" ? fileAsOf() + " · live read failed"
+            : S.meta.liveAt ? "LIVE from Wiise at " + S.meta.liveAt.slice(11) + " (" + S.meta.liveSecs + " s)" : fileAsOf();
+        $("saAsOf").title = S.liveErr || (S.meta && S.meta.liveAt ? "The robot's file " + fileAsOf() + ", plus everything Wiise holds since. On screen only; ↻ goes back to the file." : "");
+        $("saLive").disabled = !ready || S.live === "loading";
+        $("saLive").textContent = S.live === "loading" ? "Reading Wiise…" : "Get latest from Wiise";
         $("saHint").innerHTML = S.status === "error" ? esc(S.err)
             : !ready ? "Loading the staff activity file…"
-            : "Who raised, changed, shipped, invoiced and received what. <strong>Raised</strong> and <strong>changed</strong> come from the Wiise Change Log, held from "
+            : (S.live === "error" ? "<strong>" + esc(S.liveErr) + "</strong> Showing the robot's file. " : "") + "Who raised, changed, shipped, invoiced and received what. <strong>Raised</strong> and <strong>changed</strong> come from the Wiise Change Log, held from "
               + dateLabel(String(S.meta.logFrom || "").slice(0, 10)) + "; <strong>posted</strong> documents are held from " + dateLabel(S.meta.postedFrom || "") + ". The toolbar filters above do not apply here; use the ones below. Click a tile or any figure to list its documents.";
         ["saRange", "saFrom", "saTo", "saBranch", "saUser", "saSp", "saParty", "saThen", "saChartSel", "saChartMeasure", "saDocQ"].forEach(id => { $(id).disabled = !ready; });
         if (!ready) {
@@ -672,6 +714,6 @@
         if (S.status === "idle") { load(false); return; }
         paint();
     };
-    window.staffActivity = { state: S, inject, reload: () => load(true),     // inject() is for the headless test rig
+    window.staffActivity = { state: S, inject, reload: () => load(true), live,     // inject() is for the headless test rig
         ensure: () => S.status === "ready" ? Promise.resolve() : load(false) };
 })();

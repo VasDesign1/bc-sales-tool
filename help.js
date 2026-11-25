@@ -111,6 +111,8 @@
         icTiles: B('Totals', 'Changes, items touched, new and deleted items and the number of employees for the period and filters. The last tile counts the cost updates Wiise made by itself, which are hidden unless the box is ticked.'),
         icSum: B('Summary', 'The changes grouped by employee, item, field or day. Click a row to list just its changes underneath; click a column heading to sort.'),
         icList: B('Every change', 'One line per changed field, newest first, with the old and the new value. A new or deleted item is one line. Click an item number to keep only that item; the arrow opens its card in Wiise.'),
+        saLive: B('Get latest from Wiise', 'The figures normally come from the file the robot writes several times a day. This button reads everything Wiise holds since that file, with your own sign-in, and adds it on screen. Nothing is saved; the arrow goes back to the file. One press brings both Staff Activity and Item Changes up to date.'),
+        icLive: B('Get latest from Wiise', 'Reads the item changes made since the robot last wrote its file, straight from Wiise with your own sign-in, and adds them on screen. Nothing is saved; the arrow goes back to the file. One press brings both Item Changes and Staff Activity up to date.'),
         saReload: B('Activity file', 'When the robot last wrote the staff activity file. The arrow reads the latest file again.'),
         saRange: B('Period', 'A quick period. Picking one also sets the step (daily, weekly or monthly) to suit its length. Custom dates keeps whatever you type in the two date boxes.'),
         saFrom: B('From', 'First day counted. Orders raised and changed use the day they were entered (Melbourne time); posted documents use their posting date.'),

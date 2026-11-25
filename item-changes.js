@@ -15,6 +15,8 @@
                  part  I item card · U unit of measure · V supplier · K kit line
                  type  0 new · 1 changed · 2 deleted   (0 / 2: one line per record, n fields)
      data.items  item number → [description, category]
+   "Get latest from Wiise" (staffActivity.live) adds what Wiise holds
+   beyond the file, on screen only; one press serves both tabs.
    The history starts the day the Item table was switched on in the
    Wiise Change Log Setup; nothing earlier exists.
 
@@ -162,7 +164,7 @@
         const opt = (v, l) => `<option value="${v}">${l}</option>`;
         root.innerHTML = `
             <div class="hint rr-hint"><span id="icHint">Every change made on an item card.</span>
-                <span class="rr-tgt"><span class="rr-tgt-lbl">Activity file</span><span id="icAsOf">not loaded</span><button type="button" class="more-btn" id="icReload" title="Read the latest file again">↻</button></span></div>
+                <span class="rr-tgt"><span class="rr-tgt-lbl">Activity file</span><span id="icAsOf">not loaded</span><button type="button" class="more-btn" id="icReload" title="Read the latest file again">↻</button><button type="button" class="more-btn" id="icLive" title="Read everything newer than the file straight from Wiise, with your own sign-in">Get latest from Wiise</button></span></div>
             <div class="panel"><div class="panel-header ic-bar">
                 <span class="lbl">Period</span>
                 <select id="icRange" class="mini-select" title="Quick period">
@@ -201,6 +203,7 @@
 
         const reset = () => { S.pick = null; S.limit = 300; S.sumLimit = 200; paint(); };
         $("icReload").addEventListener("click", () => { paint("loading"); SA().reload().then(() => paint()); });
+        $("icLive").addEventListener("click", () => { const p = SA().live(); paint(); p.then(() => paint()); });
         $("icRange").addEventListener("change", e => { if (e.target.value !== "custom") setRange(e.target.value); else S.range = "custom"; reset(); });
         const dateChange = () => { const f = $("icFrom").value, t = $("icTo").value; if (!f || !t) return; S.from = f <= t ? f : t; S.to = f <= t ? t : f; S.range = "custom"; reset(); };
         $("icFrom").addEventListener("change", dateChange); $("icTo").addEventListener("change", dateChange);
@@ -245,11 +248,19 @@
         if (!$("icRoot") || !$("icRoot").dataset.built) return;
         const sa = SA().state, status = force || sa.status, ready = status === "ready", d = sa.data || {};
         const meta = d.meta || {}, built = String(meta.builtAtMelbourne || "");
-        $("icAsOf").textContent = status === "loading" || status === "idle" ? "loading…" : ready ? "as of " + built.slice(11) + " on " + dateLabel(built.slice(0, 10)) : "not loaded";
+        const fileAsOf = "as of " + built.slice(11) + " on " + dateLabel(built.slice(0, 10));
+        const liveErr = ready && sa.live === "error" ? sa.liveErr : ready && meta.liveAt && meta.icErr ? "The item changes could not be read live (" + meta.icErr + ")." : "";
+        $("icAsOf").textContent = status === "loading" || status === "idle" ? "loading…" : !ready ? "not loaded"
+            : sa.live === "loading" ? fileAsOf + " · reading Wiise…"
+            : liveErr ? fileAsOf + " · live read failed"
+            : meta.liveAt ? "LIVE from Wiise at " + meta.liveAt.slice(11) + " (" + meta.liveSecs + " s)" : fileAsOf;
+        $("icAsOf").title = liveErr || (meta.liveAt ? "The robot's file " + fileAsOf + ", plus everything Wiise holds since. On screen only; ↻ goes back to the file." : "");
+        $("icLive").disabled = !ready || sa.live === "loading";
+        $("icLive").textContent = sa.live === "loading" ? "Reading Wiise…" : "Get latest from Wiise";
         const has = ready && (d.ic || []).length > 0;
         const off = "Nothing has been recorded yet. Item changes are collected from the Wiise Change Log once the Item table (27) is switched on in Change Log Setup and people have signed in again; the robot then adds them on its next run.";
-        $("icHint").innerHTML = status === "error" ? esc(sa.err) : !ready ? "Loading the activity file…" : !has ? esc(off)
-            : "Every change made on an item card: who, when, which field, and the old and new value. From the Wiise Change Log, held from <strong>" + dateLabel(heldFrom()) + "</strong>; nothing earlier exists. The toolbar filters above do not apply here; use the ones below.";
+        $("icHint").innerHTML = status === "error" ? esc(sa.err) : !ready ? "Loading the activity file…" : !has ? (liveErr ? "<strong>" + esc(liveErr) + "</strong> " : "") + esc(off)
+            : (liveErr ? "<strong>" + esc(liveErr) + "</strong> Showing the robot's file. " : "") + "Every change made on an item card: who, when, which field, and the old and new value. From the Wiise Change Log, held from <strong>" + dateLabel(heldFrom()) + "</strong>; nothing earlier exists. The toolbar filters above do not apply here; use the ones below.";
         ["icRange", "icFrom", "icTo", "icSys", "icSetup", "icUser", "icField", "icPart", "icType", "icQ"].forEach(id => { $(id).disabled = !has; });
         if (!has) {
             $("icTiles").innerHTML = ""; $("icSum").querySelector("thead").innerHTML = "";
