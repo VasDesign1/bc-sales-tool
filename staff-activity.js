@@ -705,6 +705,7 @@
             }
             if (S.hist === h) { h.live = out; paintHist(); }
         } catch (e) { if (S.hist === h) { h.live = { error: "Could not read the Change Log from Wiise: " + (e.message || e) }; paintHist(); } }
+        const prog = document.getElementById("bcProgress"); if (prog) prog.style.display = "none";    // the corner progress line bcFetchAll switches on
     }
 
     // ---------- entry point ----------
