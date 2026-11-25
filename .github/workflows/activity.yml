@@ -1,0 +1,42 @@
+name: staff-activity
+
+# Builds / tops up the staff activity file (Operations → Staff Activity).
+# Started by hand here; the everyday top-ups ride along with the snapshot
+# robot (see the last step of snapshot.yml), so this one is for the first
+# build and for starting again.
+on:
+  workflow_dispatch:
+    inputs:
+      rebuild:
+        description: "Start again from nothing (re-reads the whole Change Log and posted documents)"
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: staff-activity
+  cancel-in-progress: false
+
+jobs:
+  activity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build the staff activity file and publish to SharePoint
+        env:
+          BC_CLIENT_ID: ${{ secrets.BC_CLIENT_ID }}
+          BC_TENANT: ${{ secrets.BC_TENANT }}
+          BC_REFRESH_TOKEN: ${{ secrets.BC_REFRESH_TOKEN }}
+          SNAPSHOT_PASSPHRASE: ${{ secrets.SNAPSHOT_PASSPHRASE }}
+          ACTIVITY_PASSPHRASE: ${{ secrets.ACTIVITY_PASSPHRASE }}
+          ACTIVITY_REBUILD: ${{ github.event.inputs.rebuild }}
+        run: node scripts/activity.js
