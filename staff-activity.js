@@ -154,8 +154,13 @@
     }
 
     // ---------- loading ----------
-    async function load(force) {
-        if (S.status === "loading") return;
+    // One download serves this tab and Item Changes (item-changes.js): both wait on the same promise.
+    let loadP = null;
+    function load(force) {
+        if (S.status === "loading" && loadP) return loadP;
+        return (loadP = doLoad(force));
+    }
+    async function doLoad(force) {
         S.status = "loading"; S.err = ""; paint();
         try {
             let meta = {};
@@ -667,5 +672,6 @@
         if (S.status === "idle") { load(false); return; }
         paint();
     };
-    window.staffActivity = { state: S, inject, reload: () => load(true) };   // inject() is for the headless test rig
+    window.staffActivity = { state: S, inject, reload: () => load(true),     // inject() is for the headless test rig
+        ensure: () => S.status === "ready" ? Promise.resolve() : load(false) };
 })();

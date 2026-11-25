@@ -246,6 +246,72 @@ const upper = (s) => String(s || "").trim().toUpperCase();
     }
 
     // =====================================================
+    // 1b. CHANGE LOG → item card changes (Operations → Item Changes)
+    //     Table 27 Item, plus the lists that hang off the card when they
+    //     are logged too: 5404 units of measure, 99 item suppliers,
+    //     90 kit contents. Every changed field is kept with its old and
+    //     new value; a new or deleted item is logged once per field by
+    //     Wiise and is kept here as one line. Never stops the rest of
+    //     the run.
+    // =====================================================
+    try {
+        if (cur.ic == null) cur.ic = 0;
+        if (!st.ic) st.ic = [];
+        if (!st.items) st.items = {};
+        const IT_TABLES = { 27: "I", 5404: "U", 99: "V", 90: "K" };
+        const IT_DROP = /^Last (Date|Time|Date ?Time) Modified$/i;      // stamped by Wiise on every save: says nothing
+        const clip = (s) => s.length > 140 ? s.slice(0, 139) + "…" : s;
+        const icRows = await odata("ChangeLogEntries", "Entry_No gt " + cur.ic + " and (Table_No eq 27 or Table_No eq 5404 or Table_No eq 99 or Table_No eq 90)", CL_SEL, "Item change log");
+        icRows.sort((a, b) => a.Entry_No - b.Entry_No);
+        const whole = new Map(), icFreq = new Map();
+        let icMax = cur.ic, icKept = 0, icNew = 0, icGone = 0, icDropped = 0, itemFrom = st.meta.itemFrom || "";
+        for (const r of icRows) {
+            if (r.Entry_No <= cur.ic) continue;
+            if (r.Entry_No > icMax) icMax = r.Entry_No;
+            const t = IT_TABLES[r.Table_No];
+            if (!t) continue;
+            const pk1 = String(r.Primary_Key_Field_1_Value || ""), pk2 = String(r.Primary_Key_Field_2_Value || "");
+            const item = t === "V" ? pk2 : pk1, sub = t === "I" ? "" : t === "V" ? pk1 : pk2;
+            if (!item) continue;
+            const cap = String(r.Field_Caption || "");
+            if (IT_DROP.test(cap)) { icDropped++; continue; }
+            const when = new Date(r.Date_and_Time), sec = Math.floor(when.getTime() / 1000), ts = mel(when), user = upper(r.User_ID);
+            if (!itemFrom || ts < itemFrom) itemFrom = ts;
+            const oldV = String(r.Old_Value == null ? "" : r.Old_Value).trim(), newV = String(r.New_Value == null ? "" : r.New_Value).trim();
+            const type = r.Type_of_Change === "Insertion" ? 0 : r.Type_of_Change === "Deletion" ? 2 : 1;
+            if (type !== 1) {
+                // one line for the whole new / deleted record
+                const k = t + "|" + item + "|" + sub + "|" + type + "|" + user;
+                let w = whole.get(k);
+                if (!w || sec - w.sec > 300) {
+                    w = { sec, row: [ts, user, item, t, type, -1, "", "", sub, 0] };
+                    whole.set(k, w); st.ic.push(w.row); icKept++;
+                    if (type === 0) icNew++; else icGone++;
+                }
+                w.row[9]++;
+                if (/^Description$/i.test(cap)) { if (type === 0) w.row[7] = clip(newV); else w.row[6] = clip(oldV); }
+                continue;
+            }
+            st.ic.push([ts, user, item, t, 1, fIdx(cap), clip(oldV), clip(newV), sub]);
+            icKept++;
+            icFreq.set(cap, (icFreq.get(cap) || 0) + 1);
+        }
+        cur.ic = icMax; st.meta.itemFrom = itemFrom;
+        // names for the items that have a line (read only when one is missing)
+        if (st.ic.some(r => !(r[2] in st.items))) {
+            const items = await api("items?$select=number,displayName,itemCategoryCode", "Items").catch(e => { console.warn("  [Items] not readable: " + e.message.slice(0, 120)); return []; });
+            const wanted = new Set(st.ic.map(r => r[2]));
+            for (const it of items) if (wanted.has(it.number)) st.items[it.number] = [it.displayName || "", it.itemCategoryCode || ""];
+            for (const no of wanted) if (!(no in st.items)) st.items[no] = ["", ""];      // deleted since: asked once only
+        }
+        console.log("Item change log: " + icRows.length + " lines read · " + icKept + " kept (" + icNew + " new records, " + icGone + " deleted) · " + icDropped + " save stamps left out · file holds " + st.ic.length + " lines on " + Object.keys(st.items).length + " items" + (itemFrom ? " from " + itemFrom.slice(0, 10) : ""));
+        const topIc = [...icFreq].sort((a, b) => b[1] - a[1]).slice(0, 30).map(x => x[0] + " " + x[1]).join(" · ");
+        if (topIc) console.log("  item changes by field: " + topIc);
+    } catch (e) {
+        console.warn("  [Item change log] not added this run: " + String(e.message || e).slice(0, 200));
+    }
+
+    // =====================================================
     // 2. VALUE ENTRIES + ITEM LEDGER → who shipped / received
     // =====================================================
     const veScope = "(Item_Ledger_Entry_Type eq 'Sale' or Item_Ledger_Entry_Type eq 'Purchase')";
@@ -387,7 +453,7 @@ const upper = (s) => String(s || "").trim().toUpperCase();
     st.meta.builtAtMelbourne = mel(now).replace("T", " ");
     const bin = encrypt(st);
     await SP.uploadFile(driveId, FILE, bin);
-    await SP.uploadFile(driveId, META, Buffer.from(JSON.stringify({ v: FORMAT, lock: LOCK, builtAtUtc: st.meta.builtAtUtc, builtAtMelbourne: st.meta.builtAtMelbourne, bytes: bin.length, logFrom: st.meta.logFrom, postedFrom: POSTED_FROM }, null, 2), "utf8"));
+    await SP.uploadFile(driveId, META, Buffer.from(JSON.stringify({ v: FORMAT, lock: LOCK, builtAtUtc: st.meta.builtAtUtc, builtAtMelbourne: st.meta.builtAtMelbourne, bytes: bin.length, logFrom: st.meta.logFrom, postedFrom: POSTED_FROM, itemFrom: st.meta.itemFrom || "", itemLines: (st.ic || []).length }, null, 2), "utf8"));
     console.log("Published activity.bin (" + (bin.length / 1048576).toFixed(2) + " MB) in " + ((Date.now() - t0) / 1000).toFixed(0) + "s");
 })().catch(e => {
     console.error("ACTIVITY FILE NOT UPDATED:", e.message);
