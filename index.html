@@ -1952,6 +1952,11 @@
             <!-- Finance group has its own allow-list (PNL_VIEWERS), separate from the owner-only groups above. -->
             <div class="group-label financeNav" style="display:none;">Finance</div>
             <a data-tab="pnl" class="financeNav" style="display:none;">Profit &amp; Loss (Ledger)</a>
+
+            <!-- Operations group: owner-only (Faik, 2026-11-25). Staff Activity = who raised,
+                 changed, shipped, invoiced and received what (staff-activity.js). -->
+            <div class="group-label restrictedNav" style="display:none;">Operations</div>
+            <a data-tab="staffActivity" class="restrictedNav" style="display:none;">Staff Activity</a>
         </nav>
     </aside>
 
@@ -4319,6 +4324,9 @@
                 </div>
             </section>
 
+            <!-- TAB: Staff Activity (owner-only, 2026-11-25). Built and drawn by staff-activity.js. -->
+            <section data-tab-content="staffActivity" style="display:none;"><div id="saRoot"></div></section>
+
             <section data-tab-content="ordersPastDel" style="display:none;">
                 <div class="placeholder">
                     <h2>Orders past Requested Delivery Date</h2>
@@ -4749,6 +4757,7 @@ const TAB_TITLES = {
     keyCustomers: "Key Customer Sales",
     ordersPastDel: "Orders past Requested Delivery",
     pnl: "Profit & Loss (General Ledger)",
+    staffActivity: "Staff Activity",
 };
 
 // ============================================================
@@ -5960,7 +5969,7 @@ function setActiveTab(name) {
         nextPaint().then(eomOpenWithProgress)
             .catch(e => { console.warn("[EOM] staged build failed, plain render instead:", e); if (state.tab === "eom") renderCurrentTab(); })
             .finally(hideBusy);
-    } else if (state.invoices.length || name === "pnl") renderCurrentTab();
+    } else if (state.invoices.length || name === "pnl" || name === "staffActivity") renderCurrentTab();
     window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -6008,6 +6017,7 @@ function renderCurrentTab() {
         case "shippedNotInv":          renderShippedNotInv(); break;
         case "salespersonMarginRate":  renderSalespersonMarginRunRate(); break;
         case "pnl":                    renderPnl(); break;
+        case "staffActivity":          if (typeof renderStaffActivity === "function") renderStaffActivity(); break;
     }
     // Re-sync the per-chart Gross/Adj pill active-state after every tab render.
     paintChartViewToggles();
@@ -17846,7 +17856,8 @@ const RESTRICTED_NAV_OWNER = "faiko@vicair.com.au";
 // (Faik, 2026-10-14). Branch Margin Run Rate + Lists stay owner-only.
 // Shipped Not Invoiced (Lists group) is open to everyone (Faik, 2026-11-18);
 // the two unbuilt Lists tabs stay owner-only.
-const RESTRICTED_TABS = new Set(["branchMarginRate", "keyCustomers", "ordersPastDel"]);
+// Staff Activity (Operations group) is owner-only (Faik, 2026-11-25).
+const RESTRICTED_TABS = new Set(["branchMarginRate", "keyCustomers", "ordersPastDel", "staffActivity"]);
 // The Finance group (P&L tab) has its own allow-list (Faik 2026-09-23).
 // Finance view (P&L tab + Overview reconciliation rows): Faik, Michael,
 // Daniel and Shane — approved by Faik 2026-10-03. Nobody else.
@@ -19396,6 +19407,7 @@ else showThemePicker(false);
     } catch (_) {}
 })();
 </script>
+<script src="staff-activity.js"></script>
 <script src="help.js"></script>
 <script src="export.js"></script>
 

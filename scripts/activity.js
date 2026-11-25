@@ -180,8 +180,21 @@ const upper = (s) => String(s || "").trim().toUpperCase();
     // =====================================================
     const CL_SEL = "Entry_No,Date_and_Time,User_ID,Table_No,Primary_Key_Field_1_Value,Primary_Key_Field_2_Value,Field_No,Field_Caption,Type_of_Change,Old_Value,New_Value";
     const clBase = "Entry_No gt " + cur.cl + " and (Table_No eq 36 or Table_No eq 38)";
-    // A deleted order is logged once per field (80+ lines); the "No." line (field 3) is enough.
-    const clRows = await odataEither("ChangeLogEntries", [clBase + " and (Type_of_Change ne 'Deletion' or Field_No eq 3)", clBase], CL_SEL, "Change log");
+    // A deleted order is logged once per field (80+ lines); the "No." line
+    // (field 3) is enough. Wiise refuses an OR across two different fields,
+    // so that is two reads; if either is refused, read every line instead.
+    let clRows;
+    try {
+        const [live, gone] = await Promise.all([
+            odata("ChangeLogEntries", clBase + " and Type_of_Change ne 'Deletion'", CL_SEL, "Change log"),
+            odata("ChangeLogEntries", clBase + " and Type_of_Change eq 'Deletion' and Field_No eq 3", CL_SEL, "Change log (closed)"),
+        ]);
+        if (!gone.length && live.length > 3000) console.warn("  [Change log] no closing lines among " + live.length + " lines — check the Field_No 3 filter");
+        clRows = live.concat(gone);
+    } catch (e) {
+        console.warn("  [Change log] split read refused (" + e.message.slice(0, 160) + ") — reading every line");
+        clRows = await odata("ChangeLogEntries", clBase, CL_SEL, "Change log");
+    }
     clRows.sort((a, b) => a.Entry_No - b.Entry_No);
     const fieldIdx = new Map(st.fields.map((c, i) => [c, i]));
     const fIdx = (cap) => { if (!fieldIdx.has(cap)) { fieldIdx.set(cap, st.fields.length); st.fields.push(cap); } return fieldIdx.get(cap); };
