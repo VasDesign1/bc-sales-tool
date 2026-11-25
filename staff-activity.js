@@ -554,7 +554,7 @@
             const dim = S.view === "period" ? "user" : S.view, g = group(rows, dim);
             const keys = [...g.values()].sort((a, b) => totalOf(b) - totalOf(a)).slice(0, 20);
             cfg = { type: "bar", data: { labels: keys.map(n => truncate(n.label, 28)), datasets: ms.map((mm, i) => ({ label: mm.short, stack: "s", backgroundColor: colour(i), borderRadius: 2, data: keys.map(n => val(n, mm.k)) })) },
-                options: chartBase({ indexAxis: "y", plugins: { legend: { position: "bottom" }, tooltip: { mode: "index", intersect: false, filter: i => i.parsed.x !== 0, callbacks: { label: c => c.dataset.label + ": " + tickFmt(c.parsed.x) } } },
+                options: chartBase({ indexAxis: "y", plugins: { legend: { position: "bottom" }, tooltip: { mode: "index", axis: "y", intersect: false, filter: i => i.parsed.x !== 0, callbacks: { label: c => c.dataset.label + ": " + tickFmt(c.parsed.x) } } },
                     scales: { x: { stacked: true, beginAtZero: true, ticks: { callback: tickFmt, precision: 0 } }, y: { stacked: true } },
                     onClick: (ev, els) => { if (!els.length) return; const n = keys[els[0].index]; if (dim === "user") S.user = S.user === n.key ? "" : n.key; else if (dim === "branch") S.branch = S.branch === n.key ? "" : n.key; else return; S.pick = null; paint(); } }) };
             $("saChartTitle").textContent = "Every activity by " + (VIEWS.find(v => v[0] === dim) || [])[1].toLowerCase() + " — " + unit + (keys.length === 20 ? " (top 20)" : "");
@@ -577,7 +577,7 @@
             const ds = topP.map((p, i) => ({ label: truncate(p.label, 30), stack: "s", backgroundColor: colour(i), borderRadius: 2, data: us.map(u => { const c = cell.get(u.key + "||" + p.key); return c ? val(c, m.k) : 0; }) }));
             if (ps.length > 9) ds.push({ label: "Others (" + (ps.length - 9) + ")", stack: "s", backgroundColor: "#9e9e9e", borderRadius: 2, data: us.map(u => { const c = cell.get(u.key + "||__other"); return c ? val(c, m.k) : 0; }) });
             cfg = { type: "bar", data: { labels: us.map(u => truncate(u.label, 26)), datasets: ds },
-                options: chartBase({ indexAxis: "y", plugins: { legend: { position: "bottom" }, tooltip: { mode: "index", intersect: false, filter: i => i.parsed.x !== 0, callbacks: { label: c => c.dataset.label + ": " + tickFmt(c.parsed.x) } } },
+                options: chartBase({ indexAxis: "y", plugins: { legend: { position: "bottom" }, tooltip: { mode: "index", axis: "y", intersect: false, filter: i => i.parsed.x !== 0, callbacks: { label: c => c.dataset.label + ": " + tickFmt(c.parsed.x) } } },
                     scales: { x: { stacked: true, beginAtZero: true, ticks: { callback: tickFmt, precision: 0 } }, y: { stacked: true } } }) };
             $("saChartTitle").textContent = m.label + " — " + unit + " by employee, split by " + (m.side === "purch" ? "supplier" : "customer") + " (nine largest named)";
         }
