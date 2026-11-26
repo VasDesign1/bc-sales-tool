@@ -111,7 +111,7 @@
         icQ: B('Search', 'Type part of a number, description or name, field name, or an old or new value.'),
         icClear: B('Clear filters', 'Clears employee, field, part, kind and search. The period stays.'),
         icViewTop: B('View by', 'How the summary table is grouped: by employee, by item, customer or vendor, by field, or by day.'),
-        icTiles: B('Totals', 'Changes, items touched, new and deleted items and the number of employees for the period and filters. The last tile counts the cost updates Wiise made by itself, which are hidden unless the box is ticked.'),
+        icTiles: B('Totals', 'The totals for the period and filters, and each one can be clicked. Changes, New and Deleted narrow the list at the bottom to just those lines (click again to clear). Touched and Employees regroup the summary table. The last tile shows or hides the updates Wiise makes by itself.'),
         icSum: B('Summary', 'The changes grouped by employee, item, field or day. Click a row to list just its changes underneath; click a column heading to sort.'),
         icList: B('Every change', 'One line per changed field, newest first, with the old and the new value. A new or deleted item is one line. Click an item number to keep only that item; the arrow opens its card in Wiise.'),
         saLive: B('Get latest from Wiise', 'The figures normally come from the file the robot writes several times a day. This button reads everything Wiise holds since that file, with your own sign-in, and adds it on screen. Nothing is saved; the arrow goes back to the file. One press brings both Staff Activity and Item Changes up to date.'),

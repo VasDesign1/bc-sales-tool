@@ -77,7 +77,7 @@
         src: null, ev: [],
         range: "month", from: "", to: "",
         user: "", field: "", part: "", type: "", q: "", sys: false, setup: false,
-        view: "user", sort: { key: "n", dir: "desc" }, lsort: { key: "ts", dir: "desc" }, pick: null,
+        view: "user", sort: { key: "n", dir: "desc" }, lsort: { key: "ts", dir: "desc" }, pick: null, tile: "",      // tile: "" | chg | new | del — the tile clicked, narrows the list
         sumLimit: 200, limit: 300,
     });
     const STATES = { item: newState(), customer: newState(), vendor: newState() };
@@ -176,7 +176,10 @@
             const st = document.createElement("style"); st.id = "icStyle";
             st.textContent = `
                 .ic-tiles { grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); }
-                .ic-tiles .kpi { padding: 12px 16px; }
+                .ic-tiles .kpi { padding: 12px 16px; cursor: pointer; transition: transform .15s, opacity .15s; }
+                .ic-tiles .kpi:hover { transform: translateY(-1px); }
+                .ic-tiles.has-pick .kpi:not(.active) { opacity: .5; }
+                .ic-tiles .kpi.active { outline: 3px solid #ffd54f; outline-offset: 1px; }
                 .ic-tiles .kpi .value { font-size: 23px; }
                 /* panel headings: title and its small print side by side on one line of text, controls at the right */
                 #icRoot .panel-header:not(.ic-bar) { justify-content: flex-start; align-items: baseline; }
@@ -238,7 +241,7 @@
             </div>`;
         root.dataset.built = "1";
 
-        const reset = () => { S.pick = null; S.limit = 300; S.sumLimit = 200; paint(); };
+        const reset = () => { S.pick = null; S.tile = ""; S.limit = 300; S.sumLimit = 200; paint(); };
         $("icReload").addEventListener("click", () => { paint("loading"); SA().reload().then(() => paint()); });
         $("icLive").addEventListener("click", () => { const p = SA().live(); paint(); p.then(() => paint()); });
         $("icRange").addEventListener("change", e => { if (e.target.value !== "custom") setRange(e.target.value); else S.range = "custom"; reset(); });
@@ -252,10 +255,21 @@
         $("icType").addEventListener("change", e => { S.type = e.target.value; reset(); });
         $("icQ").addEventListener("input", e => { S.q = e.target.value; reset(); });
         $("icClear").addEventListener("click", () => { S.user = S.field = S.part = S.type = S.q = ""; reset(); });
-        $("icPickClear").addEventListener("click", () => { S.pick = null; S.limit = 300; paint(); });
+        $("icPickClear").addEventListener("click", () => { S.pick = null; S.tile = ""; S.limit = 300; paint(); });
         root.addEventListener("click", e => {
             if (e.target.closest("a")) return;
             let b;
+            if ((b = e.target.closest("[data-ic-tile]"))) {
+                const t = b.dataset.icTile;
+                if (t === "items" || t === "people") {                 // these two regroup the summary instead of narrowing the list
+                    S.view = t === "items" ? "item" : "user"; S.pick = null; S.tile = ""; S.sumLimit = 200; S.sort = { key: "n", dir: "desc" }; paint();
+                    $("icSum").scrollIntoView({ behavior: "smooth", block: "nearest" }); return;
+                }
+                if (t === "sys") { S.sys = !S.sys; S.pick = null; S.limit = 300; paint(); return; }
+                S.tile = S.tile === t ? "" : t; S.limit = 300; paint();
+                if (S.tile) $("icListPanel").scrollIntoView({ behavior: "smooth", block: "nearest" });
+                return;
+            }
             if ((b = e.target.closest("[data-ic-view]"))) { S.view = b.dataset.icView; S.pick = null; S.sumLimit = 200; S.sort = S.view === "day" ? { key: "key", dir: "desc" } : { key: "n", dir: "desc" }; paint(); return; }
             if ((b = e.target.closest("th[data-ic-lsort]"))) {
                 const k = b.dataset.icLsort;
@@ -345,14 +359,15 @@
             if (e.type === 1) { chg++; fields.add(e.cap); } else if (e.t === K.main) { if (e.type === 0) neu++; else del++; } else chg++;
         }
         const hidden = S.sys ? 0 : events().filter(e => e.sys && e.date >= S.from && e.date <= S.to).length;
-        const tile = (tint, label, value, sub) => `<div class="kpi ${tint}"><div class="label">${label}</div><div class="value">${value}</div><div class="sub">${sub}</div></div>`;
+        const tile = (id, tint, label, value, sub, tip) => `<div class="kpi ${tint}${S.tile === id ? " active" : ""}" data-ic-tile="${id}" title="${tip}"><div class="label">${label}</div><div class="value">${value}</div><div class="sub">${sub}</div></div>`;
+        $("icTiles").classList.toggle("has-pick", !!S.tile);
         $("icTiles").innerHTML =
-            tile("k-rev", "Changes", fmtInt(chg), plural(fields.size, "different field"))
-            + tile("k-qty", cap1(K.many) + " touched", fmtInt(items.size), dateLabel(S.from) + " to " + dateLabel(S.to))
-            + tile("k-loc", "New " + K.many, fmtInt(neu), "created in the period")
-            + tile("k-gpp", cap1(K.many) + " deleted", fmtInt(del), "removed in the period")
-            + tile("k-avg", "Employees", fmtInt(people.size), "made at least one change")
-            + tile("k-inv", kind === "item" ? "Wiise's own cost updates" : "Wiise's own updates", S.sys ? "shown" : fmtInt(hidden), S.sys ? "included in every figure" : "hidden; tick the box to include");
+            tile("chg", "k-rev", "Changes", fmtInt(chg), plural(fields.size, "different field"), "Click to list only the changes below; click again to clear")
+            + tile("items", "k-qty", cap1(K.many) + " touched", fmtInt(items.size), dateLabel(S.from) + " to " + dateLabel(S.to), "Click to group the summary by " + K.one)
+            + tile("new", "k-loc", "New " + K.many, fmtInt(neu), "created in the period", "Click to list only the new " + K.many + " below; click again to clear")
+            + tile("del", "k-gpp", cap1(K.many) + " deleted", fmtInt(del), "removed in the period", "Click to list only the deleted " + K.many + " below; click again to clear")
+            + tile("people", "k-avg", "Employees", fmtInt(people.size), "made at least one change", "Click to group the summary by employee")
+            + tile("sys", "k-inv", kind === "item" ? "Wiise's own cost updates" : "Wiise's own updates", S.sys ? "shown" : fmtInt(hidden), S.sys ? "included; click to hide" : "hidden; click to include", "Click to show or hide the updates Wiise makes by itself");
     }
 
     function paintSum(rows) {
@@ -390,12 +405,14 @@
     function paintList(all) {
         let rows = all;
         if (S.pick) rows = rows.filter(e => keyOf(e, S.pick.dim)[0] === S.pick.k);
+        const TILE = { chg: ["Changes", e => e.type === 1 || e.t !== K.main], new: ["New " + K.many, e => e.t === K.main && e.type === 0], del: [cap1(K.many) + " deleted", e => e.t === K.main && e.type === 2] }[S.tile];
+        if (TILE) rows = rows.filter(TILE[1]);
         const lk = S.lsort.key, lm = S.lsort.dir === "asc" ? 1 : -1;
         const lv = e => lk === "user" ? userLabel(e.user).toLowerCase() : lk === "part" ? (K.parts[e.t] || "") : String(e[lk] == null ? "" : e[lk]).toLowerCase();
         const newest = (a, b) => b.ts.localeCompare(a.ts) || a.item.localeCompare(b.item, undefined, { numeric: true }) || a.field.localeCompare(b.field);
         rows = rows.slice().sort((a, b) => lv(a).localeCompare(lv(b), undefined, { numeric: true }) * lm || newest(a, b));
-        $("icListTitle").textContent = "Every change" + (S.pick ? " — " + S.pick.label : "");
-        $("icPickClear").style.display = S.pick ? "" : "none";
+        $("icListTitle").textContent = "Every change" + (S.pick ? " — " + S.pick.label : "") + (TILE ? " · " + TILE[0] : "");
+        $("icPickClear").style.display = S.pick || TILE ? "" : "none";
         $("icListMeta").textContent = rows.length ? plural(rows.length, "line") + " · " + plural(new Set(rows.map(e => e.item)).size, K.one) : "";
         const shown = rows.slice(0, S.limit);
         $("icList").querySelector("tbody").innerHTML = shown.length ? shown.map(e => {
