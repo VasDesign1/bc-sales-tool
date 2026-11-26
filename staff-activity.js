@@ -77,7 +77,7 @@
         range: "month", from: "", to: "", grain: "day", side: "sales", show: "count",
         branch: "", user: "", sp: "", party: "",
         view: "user", thens: ["", "", ""], sort: { key: "__total", dir: "desc" },      // thens: up to three further levels under View by
-        chart: "trend", cm: "",
+        chart: "trend", cm: "", hm: "",      // hm: the one activity the day-and-hour grid counts ("" = all of them)
         pick: null, docQ: "", docLimit: 300, hist: null,
         docSort: { key: "date", dir: "desc" }, histSort: { key: "when", dir: "asc" },
         othOpen: false, othUser: "", othSort: { key: "v", dir: "desc" },      // the "what is in Others" list under the chart
@@ -396,7 +396,7 @@
                 <div class="panel-header"><h2 id="saChartTitle">Charts</h2>
                     <div class="sa-ctl">
                         <select id="saChartSel" class="mini-select" title="Chart">${CHARTS.map(c => opt(c[0], c[1])).join("")}</select>
-                        <select id="saChartMeasure" class="mini-select" title="Activity shown in the chart"></select>
+                        <select id="saChartMeasure" class="mini-select" title="Activity shown in the chart"></select><select id="saHeatMeasure" class="mini-select" title="Activity counted in the day-and-hour grid" style="display:none;"></select>
                     </div>
                 </div>
                 <div class="chart-wrap" id="saChartWrap" style="position:relative; min-height:380px; height:380px; padding:10px 14px 14px;"><canvas id="saChart"></canvas></div>
@@ -441,6 +441,7 @@
         });
         $("saChartSel").addEventListener("change", e => { S.chart = e.target.value; paint(); });
         $("saChartMeasure").addEventListener("change", e => { S.cm = e.target.value; paint(); });
+        $("saHeatMeasure").addEventListener("change", e => { S.hm = e.target.value; if (S.pick && S.pick.heat) S.pick = null; paint(); });
         $("saDocQ").addEventListener("input", e => { S.docQ = e.target.value; S.docLimit = 300; paintDocs(); });
         $("saPickClear").addEventListener("click", () => { S.pick = null; paint(); });
         $("saHistClose").addEventListener("click", () => { S.hist = null; paintHist(); });
@@ -481,7 +482,7 @@
             }
             if ((b = e.target.closest("td[data-sa-heat]"))) {      // a day-and-hour figure: list what was raised or changed then
                 const id = "heat|" + b.dataset.saHeat, same = S.pick && S.pick.id === id, [wd, h] = b.dataset.saHeat.split("|");
-                S.pick = same ? null : { id, m: "", row: [], heat: [+wd, h === "" ? -1 : +h], label: b.dataset.label + " · raised or changed" };
+                S.pick = same ? null : { id, m: S.hm || "", row: [], heat: [+wd, h === "" ? -1 : +h], label: b.dataset.label + " · " + (S.hm ? MBY[S.hm].label : "raised or changed") };
                 paint();
                 if (!same) $("saDocsPanel").scrollIntoView({ behavior: "smooth", block: "nearest" });
                 return;
@@ -524,7 +525,7 @@
             : !ready ? "Loading the staff activity file…"
             : (S.live === "error" ? "<strong>" + esc(S.liveErr) + "</strong> Showing the robot's file. " : "") + "Who raised, changed, shipped, invoiced and received what. <strong>Raised</strong> and <strong>changed</strong> come from the Wiise Change Log, held from "
               + dateLabel(String(S.meta.logFrom || "").slice(0, 10)) + "; <strong>posted</strong> documents are held from " + dateLabel(S.meta.postedFrom || "") + ". The toolbar filters above do not apply here; use the ones below. Click a tile or any figure to list its documents.";
-        ["saRange", "saFrom", "saTo", "saBranch", "saUser", "saSp", "saParty", "saThen", "saThen2", "saThen3", "saChartSel", "saChartMeasure", "saDocQ"].forEach(id => { $(id).disabled = !ready; });
+        ["saRange", "saFrom", "saTo", "saBranch", "saUser", "saSp", "saParty", "saThen", "saThen2", "saThen3", "saChartSel", "saChartMeasure", "saHeatMeasure", "saDocQ"].forEach(id => { $(id).disabled = !ready; });
         if (!ready) {
             $("saTiles").innerHTML = ""; $("saTable").querySelector("thead").innerHTML = ""; $("saTable").querySelector("tbody").innerHTML = `<tr><td class="empty">${esc(S.status === "error" ? S.err : "Loading…")}</td></tr>`;
             $("saDocs").querySelector("tbody").innerHTML = ""; destroyChart("saChart"); return;
@@ -627,6 +628,10 @@
         const heat = S.chart === "heat";
         $("saChartWrap").style.display = heat ? "none" : ""; $("saHeat").style.display = heat ? "" : "none";
         $("saChartMeasure").style.display = (S.chart === "rank" || heat) ? "none" : "";
+        const hms = ms.filter(m => m.stamp);      // only these carry a time of day
+        if (!hms.some(m => m.k === S.hm)) S.hm = "";
+        $("saHeatMeasure").style.display = heat ? "" : "none";
+        $("saHeatMeasure").innerHTML = `<option value="">Everything raised, changed or deleted</option>` + hms.map(m => `<option value="${m.k}"${m.k === S.hm ? " selected" : ""}>${m.label}</option>`).join("");
         const m = MBY[S.cm], unit = S.show === "amount" ? "value excl. tax" : "documents";
         const colour = i => ENTITY_PALETTE[i % ENTITY_PALETTE.length];
         const tickFmt = v => S.show === "amount" ? fmtMoney(v) : fmtInt(v);
@@ -714,13 +719,13 @@
                 + `<tr class="ds-total"><td>Others in total</td><td class="num">${fmtVal(sum)}</td><td class="num">100%</td></tr></tbody></table></div><div class="sa-note" style="padding-left:0;">Largest first unless you click a heading to sort. Click a row to list its documents below.</div>` : "");
     }
     function paintHeat(rows) {
-        const list = rows.filter(e => e.hour >= 0), grid = new Map(); let max = 0, lo = 7, hi = 17;
+        const list = rows.filter(e => e.hour >= 0 && (!S.hm || e.m === S.hm)), grid = new Map(); let max = 0, lo = 7, hi = 17;
         for (const e of list) { const wd = (D(e.date).getUTCDay() + 6) % 7, k = wd + "|" + e.hour, s = grid.get(k) || new Set(); s.add(e.m + e.key); grid.set(k, s); if (s.size > max) max = s.size; if (e.hour < lo) lo = e.hour; if (e.hour > hi) hi = e.hour; }
         const hours = []; for (let h = lo; h <= hi; h++) hours.push(h);
         const hl = h => (h % 12 || 12) + (h < 12 ? "am" : "pm");
         const on = id => S.pick && S.pick.id === "heat|" + id ? "sa-on" : "";
-        $("saChartTitle").textContent = "Busiest day and hour — orders and quotes raised or changed";
-        $("saHeat").innerHTML = !list.length ? `<div class="sa-empty">Nothing with a time of day in this period.</div>`
+        $("saChartTitle").textContent = "Busiest day and hour — " + (S.hm ? MBY[S.hm].label.toLowerCase() : "orders and quotes raised or changed");
+        $("saHeat").innerHTML = !list.length ? `<div class="sa-empty">${S.hm ? "No " + esc(MBY[S.hm].label.toLowerCase()) + " in this period." : "Nothing with a time of day in this period."}</div>`
             : `<table class="sa-heat"><thead><tr><th>Day</th>${hours.map(h => `<th>${hl(h)}</th>`).join("")}<th>Total</th></tr></thead><tbody>`
             + WD.map((d, wd) => { let t = 0; const tds = hours.map(h => { const n = (grid.get(wd + "|" + h) || new Set()).size; t += n; return `<td${n ? ` data-sa-heat="${wd}|${h}" data-label="${d} ${hl(h)}"` : ""} class="${on(wd + "|" + h)}" style="background:color-mix(in srgb, var(--tree-tint, #3949ab) ${n ? Math.round(12 + 78 * n / max) : 0}%, transparent);${n / max > .55 ? "color:#fff;" : ""}${n ? "cursor:pointer;" : ""}" title="${d} ${hl(h)}: ${n} documents${n ? " — click to list them" : ""}">${n || ""}</td>`; }).join(""); return `<tr><th>${d}</th>${tds}<td${t ? ` data-sa-heat="${wd}|" data-label="${d}, all day" style="cursor:pointer;" title="Click to list them"` : ""} class="${on(wd + "|")}"><strong>${fmtInt(t)}</strong></td></tr>`; }).join("")
             + `</tbody></table>`;
