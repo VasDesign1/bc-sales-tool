@@ -130,6 +130,7 @@
         saChartSel: B('Chart', 'Over time: the chosen activity per day, week or month. Ranking: every activity side by side. Share: who holds what part of the total. Customer split: which customers or suppliers each employee works for. Busiest day and hour: when orders are raised and changed.'),
         saChartMeasure: B('Activity', 'Which activity the chart shows. Clicking a tile sets it too.'),
         saDocs: B('Documents', 'The documents behind the tile or figure you clicked, newest first; everything in the period when nothing is picked. The arrow opens the document in Wiise. Click an order number in the Order column for the full story of that order.'),
+        saOthers: B('What is in Others', 'A chart names only the largest few and adds the rest together as the grey Others part. This line opens the full list of what Others is made of, largest first. Click a row to list its documents below. In the customer split chart, clicking one employee’s grey part shows that employee’s Others only.'),
         saDocQ: B('Search', 'Type part of a document number, employee, customer or supplier.'),
         saHistTable: B('Order history', 'Who raised the order, who changed it and when, and who posted each shipment or receipt and invoice against it. Read every change from Wiise adds the field-by-field Change Log for this one order.'),
         ktMonthSel: B('Month', 'Which month the two panels show. The current month shows a live run rate against the target; a past month shows the finished result.'),

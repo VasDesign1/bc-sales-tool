@@ -77,6 +77,8 @@
         view: "user", then: "", sort: { key: "__total", dir: "desc" },
         chart: "trend", cm: "",
         pick: null, docQ: "", docLimit: 300, hist: null,
+        docSort: { key: "date", dir: "desc" }, histSort: { key: "when", dir: "asc" },
+        othOpen: false, othUser: "",      // the "what is in Others" list under the chart
         live: "", liveErr: "",      // "" | loading | done | error  — "Get latest from Wiise"
     };
     const money0 = n => n == null || isNaN(n) ? "—" : new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD", maximumFractionDigits: 0 }).format(n);
@@ -318,6 +320,7 @@
                 #saTable td.sa-cell:hover { text-decoration: underline; }
                 #saTable td.sa-on, #saTable th.sa-on { outline: 2px solid #ffd54f; outline-offset: -2px; }
                 #saDocs td, #saHistTable td { white-space: nowrap; }
+                #saDocs th, #saHistTable th { cursor: pointer; }
                 #saDocs td.wrap, #saHistTable td.wrap { white-space: normal; }
                 .sa-link { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
                 .sa-note { font-size: 11px; opacity: .75; padding: 8px 14px 12px; }
@@ -374,22 +377,21 @@
                 <div class="chart-wrap" id="saChartWrap" style="position:relative; min-height:380px; height:380px; padding:10px 14px 14px;"><canvas id="saChart"></canvas></div>
                 <div id="saHeat" style="display:none; padding:10px 14px 14px;"></div>
                 <div class="sa-note" id="saChartNote"></div>
+                <div id="saOthers" style="padding:0 14px 12px;"></div>
             </div>
             <div class="panel" id="saDocsPanel">
                 <div class="panel-header"><h2 id="saDocsTitle">Documents</h2><div class="meta" id="saDocsMeta"></div>
                     <div class="sa-ctl"><button type="button" class="more-btn" id="saPickClear" style="display:none;">Show all documents</button>
                         <input type="search" id="saDocQ" class="mini-select" placeholder="Search document, employee, customer…" title="Search the list below"></div>
                 </div>
-                <div class="table-scroll"><table id="saDocs" class="ds-table"><thead><tr>
-                    <th>Date</th><th>Time</th><th>Activity</th><th>Document</th><th>Employee</th><th>Customer / supplier</th><th>Branch</th><th>Salesperson</th><th class="num">Qty</th><th class="num">Value (excl. tax)</th><th>Order</th><th>Detail</th>
-                </tr></thead><tbody></tbody></table></div>
+                <div class="table-scroll"><table id="saDocs" class="ds-table"><thead></thead><tbody></tbody></table></div>
                 <div class="sa-note" id="saDocsNote"></div>
             </div>
             <div class="panel" id="saHistPanel" style="display:none;">
                 <div class="panel-header"><h2 id="saHistTitle">Order history</h2><div class="meta" id="saHistMeta"></div>
                     <div class="sa-ctl"><button type="button" class="more-btn" id="saHistLive">Read every change from Wiise</button><button type="button" class="more-btn" id="saHistClose">Close</button></div>
                 </div>
-                <div class="table-scroll"><table id="saHistTable" class="ds-table"><thead><tr><th>When</th><th>Employee</th><th>What happened</th><th>Detail</th></tr></thead><tbody></tbody></table></div>
+                <div class="table-scroll"><table id="saHistTable" class="ds-table"><thead></thead><tbody></tbody></table></div>
                 <div class="sa-note" id="saHistNote"></div>
             </div>`;
         root.dataset.built = "1";
@@ -420,6 +422,22 @@
             if ((b = e.target.closest("[data-sa-show]"))) { S.show = b.dataset.saShow; paint(); return; }
             if ((b = e.target.closest("[data-sa-view]"))) { S.view = b.dataset.saView; if (S.then === S.view) S.then = ""; S.pick = null; S.sort = { key: S.view === "period" ? "__key" : "__total", dir: S.view === "period" ? "asc" : "desc" }; paint(); return; }
             if ((b = e.target.closest("[data-sa-tile]"))) { const k = b.dataset.saTile; S.pick = S.pick && S.pick.m === k && !S.pick.row ? null : { m: k, label: MBY[k].label }; S.cm = k; paint(); return; }
+            if ((b = e.target.closest("th[data-sa-dsort]"))) {
+                const k = b.dataset.saDsort;
+                S.docSort = S.docSort.key === k ? { key: k, dir: S.docSort.dir === "asc" ? "desc" : "asc" } : { key: k, dir: k === "date" || k === "qty" || k === "amt" ? "desc" : "asc" };
+                paintDocs(); return;
+            }
+            if ((b = e.target.closest("th[data-sa-hsort]"))) {
+                const k = b.dataset.saHsort;
+                S.histSort = S.histSort.key === k ? { key: k, dir: S.histSort.dir === "asc" ? "desc" : "asc" } : { key: k, dir: "asc" };
+                paintHist(); return;
+            }
+            if ((b = e.target.closest("[data-sa-oth-toggle]"))) { S.othOpen = !S.othOpen; if (!S.othOpen) S.othUser = ""; paint(); return; }
+            if ((b = e.target.closest("[data-sa-oth-all]"))) { S.othUser = ""; paint(); return; }
+            if ((b = e.target.closest("tr[data-sa-oth-row]"))) {
+                S.pick = { id: "oth|" + b.dataset.saOthRow, m: S.cm, row: JSON.parse(b.dataset.saOthRow), label: b.dataset.label + " · " + MBY[S.cm].label };
+                paint(); $("saDocsPanel").scrollIntoView({ behavior: "smooth", block: "nearest" }); return;
+            }
             if ((b = e.target.closest("th[data-sa-sort]"))) {
                 const k = b.dataset.saSort;
                 if (S.sort.key === k) S.sort.dir = S.sort.dir === "asc" ? "desc" : "asc"; else S.sort = { key: k, dir: k === "__label" || k === "__key" ? "asc" : "desc" };
@@ -554,6 +572,7 @@
     // ---------- charts ----------
     function paintChart(rows, ms) {
         destroyChart("saChart");
+        let oth = null;      // { what, col, rows: [{ label, v, row }], user } — what the grey "Others" part is made of
         const heat = S.chart === "heat";
         $("saChartWrap").style.display = heat ? "none" : ""; $("saHeat").style.display = heat ? "" : "none";
         $("saChartMeasure").style.display = (S.chart === "rank" || heat) ? "none" : "";
@@ -562,7 +581,7 @@
         const tickFmt = v => S.show === "amount" ? fmtMoney(v) : fmtInt(v);
         const dimLabel = (VIEWS.find(v => v[0] === S.view) || [])[1].toLowerCase();
         $("saChartNote").textContent = "";
-        if (heat) return paintHeat(rows);
+        if (heat) { paintOthers(null); return paintHeat(rows); }
         // group helper: Map key → node, for one measure or all
         const group = (list, dim) => { const g = new Map(); for (const e of list) { const [k, l] = keyOf(e, dim); if (!g.has(k)) g.set(k, node(k, l)); add(g.get(k), e); } return g; };
         let cfg = null;
@@ -575,9 +594,11 @@
             for (const e of list) { const [k] = keyOf(e, stackDim), s = topN.some(n => n.key === k) ? k : "__other", ck = s + "|" + bucket(e.date); if (!cell.has(ck)) cell.set(ck, node(ck, "")); add(cell.get(ck), e); }
             const ds = topN.map((n, i) => ({ label: n.label, stack: "s", backgroundColor: colour(i), borderRadius: 2, data: buckets.map(b => { const c = cell.get(n.key + "|" + b); return c ? val(c, m.k) : 0; }) }));
             if (rest.length) ds.push({ label: "Others (" + rest.length + ")", stack: "s", backgroundColor: "#9e9e9e", borderRadius: 2, data: buckets.map(b => { const c = cell.get("__other|" + b); return c ? val(c, m.k) : 0; }) });
+            if (rest.length) oth = { what: rest.length + " more, whole period", col: (VIEWS.find(v => v[0] === stackDim) || [])[1], rows: rest.map(n => ({ label: n.label, v: val(n, m.k), row: [[stackDim, n.key]] })) };
             cfg = { type: "bar", data: { labels: buckets.map(bucketLabel), datasets: ds },
                 options: chartBase({ plugins: { legend: { position: "bottom" }, tooltip: { mode: "index", intersect: false, filter: i => i.parsed.y !== 0, callbacks: { label: c => c.dataset.label + ": " + tickFmt(c.parsed.y), footer: it => "Total: " + tickFmt(it.reduce((s, i) => s + i.parsed.y, 0)) } } },
-                    scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, ticks: { callback: tickFmt, precision: 0 } } } }) };
+                    scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, ticks: { callback: tickFmt, precision: 0 } } },
+                    onClick: (ev, els) => { if (els.length && rest.length && els[0].datasetIndex === topN.length) { S.othOpen = true; paint(); } } }) };
             $("saChartTitle").textContent = m.label + " — " + unit + " per " + (S.grain === "day" ? "day" : S.grain) + ", by " + (VIEWS.find(v => v[0] === stackDim) || [])[1].toLowerCase();
         } else if (S.chart === "rank") {
             const dim = S.view === "period" ? "user" : S.view, g = group(rows, dim);
@@ -593,9 +614,11 @@
             const keys = [...g.values()].filter(n => val(n, m.k) > 0).sort((a, b) => val(b, m.k) - val(a, m.k)), topN = keys.slice(0, 11), rest = keys.slice(11);
             const labels = topN.map(n => n.label), data = topN.map(n => val(n, m.k));
             if (rest.length) { labels.push("Others (" + rest.length + ")"); data.push(rest.reduce((s, n) => s + val(n, m.k), 0)); }
+            if (rest.length) oth = { what: rest.length + " more", col: (VIEWS.find(v => v[0] === dim) || [])[1], rows: rest.map(n => ({ label: n.label, v: val(n, m.k), row: [[dim, n.key]] })) };
             const sum = data.reduce((s, v) => s + v, 0);
             cfg = { type: "doughnut", data: { labels, datasets: [{ data, backgroundColor: labels.map((_, i) => i === 11 ? "#9e9e9e" : colour(i)), borderWidth: 1 }] },
-                options: chartBase({ plugins: { legend: { position: "right" }, tooltip: { callbacks: { label: c => c.label + ": " + tickFmt(c.parsed) + (sum ? " (" + (c.parsed / sum * 100).toFixed(1) + "%)" : "") } } } }) };
+                options: chartBase({ plugins: { legend: { position: "right" }, tooltip: { callbacks: { label: c => c.label + ": " + tickFmt(c.parsed) + (sum ? " (" + (c.parsed / sum * 100).toFixed(1) + "%)" : "") } } },
+                    onClick: (ev, els) => { if (els.length && rest.length && els[0].index === topN.length) { S.othOpen = true; paint(); } } }) };
             $("saChartTitle").textContent = m.label + " — share of " + unit + " by " + dimLabelOf(dim);
         } else if (S.chart === "party") {
             const list = rows.filter(e => e.m === m.k), byUser = group(list, "user"), byParty = group(list, "party");
@@ -604,18 +627,39 @@
             const cell = new Map();
             for (const e of list) { const pk = e.kind + "|" + e.party, s = topP.some(n => n.key === pk) ? pk : "__other", ck = (e.user || "") + "||" + s; if (!cell.has(ck)) cell.set(ck, node(ck, "")); add(cell.get(ck), e); }
             const ds = topP.map((p, i) => ({ label: truncate(p.label, 30), stack: "s", backgroundColor: colour(i), borderRadius: 2, data: us.map(u => { const c = cell.get(u.key + "||" + p.key); return c ? val(c, m.k) : 0; }) }));
+            if (ps.length > 9) {
+                // everybody's Others, or (after a click on one person's grey part) that person's
+                const who = S.othUser && us.some(u => u.key === S.othUser) ? S.othUser : "";
+                const pool = who ? [...group(list.filter(e => (e.user || "") === who && !topP.some(n => n.key === e.kind + "|" + e.party)), "party").values()] : ps.slice(9);
+                oth = { what: pool.length + (m.side === "purch" ? " more suppliers" : " more customers") + (who ? " for " + userLabel(who) : ", all employees"), col: m.side === "purch" ? "Supplier" : "Customer", user: who,
+                    rows: pool.map(n => ({ label: n.label, v: val(n, m.k), row: who ? [["user", who], ["party", n.key]] : [["party", n.key]] })) };
+            }
             if (ps.length > 9) ds.push({ label: "Others (" + (ps.length - 9) + ")", stack: "s", backgroundColor: "#9e9e9e", borderRadius: 2, data: us.map(u => { const c = cell.get(u.key + "||__other"); return c ? val(c, m.k) : 0; }) });
             cfg = { type: "bar", data: { labels: us.map(u => truncate(u.label, 26)), datasets: ds },
                 options: chartBase({ indexAxis: "y", plugins: { legend: { position: "bottom" }, tooltip: { mode: "index", axis: "y", intersect: false, filter: i => i.parsed.x !== 0, callbacks: { label: c => c.dataset.label + ": " + tickFmt(c.parsed.x) } } },
-                    scales: { x: { stacked: true, beginAtZero: true, ticks: { callback: tickFmt, precision: 0 } }, y: { stacked: true } } }) };
+                    scales: { x: { stacked: true, beginAtZero: true, ticks: { callback: tickFmt, precision: 0 } }, y: { stacked: true } },
+                    onClick: (ev, els) => { if (els.length && ps.length > 9 && els[0].datasetIndex === topP.length) { S.othOpen = true; S.othUser = us[els[0].index].key; paint(); } } }) };
             $("saChartTitle").textContent = m.label + " — " + unit + " by employee, split by " + (m.side === "purch" ? "supplier" : "customer") + " (nine largest named)";
         }
+        paintOthers(oth);
+        if (oth) $("saChartNote").textContent = ($("saChartNote").textContent ? $("saChartNote").textContent + " " : "") + "Click the grey “Others” part of the chart, or the line below, to see what is in it.";
         if (!cfg) return;
         const empty = !cfg.data.datasets.length || cfg.data.datasets.every(d => d.data.every(v => !v));
         if (empty) $("saChartNote").textContent = "Nothing to chart for this period and these filters.";
         state.charts.saChart = new Chart($("saChart").getContext("2d"), cfg);
         function dimLabelOf(d) { return (VIEWS.find(v => v[0] === d) || [])[1].toLowerCase(); }
         void dimLabel;
+    }
+    // The list behind the grey "Others" part of a chart; a row lists its documents below.
+    function paintOthers(o) {
+        const box = $("saOthers"); if (!box) return;
+        if (!o || !o.rows.length) { box.innerHTML = ""; return; }
+        const rows = o.rows.filter(r => r.v).sort((a, b) => b.v - a.v || a.label.localeCompare(b.label)), sum = rows.reduce((t, r) => t + r.v, 0);
+        box.innerHTML = `<span class="sa-link" data-sa-oth-toggle="1">${S.othOpen ? "▾ Hide" : "▸ Show"} what is in “Others” — ${esc(o.what)}</span>`
+            + (S.othOpen && o.user ? `<span class="sa-link" data-sa-oth-all="1" style="margin-left:14px;">show for all employees</span>` : "")
+            + (S.othOpen ? `<div class="table-scroll" style="max-height:340px; margin-top:8px;"><table class="ds-table" id="saOthTable"><thead><tr><th>${esc(o.col)}</th><th class="num">${S.show === "amount" ? "Value (excl. tax)" : "Documents"}</th><th class="num">Share of Others</th></tr></thead><tbody>`
+                + rows.map(r => `<tr data-sa-oth-row='${escapeAttr(JSON.stringify(r.row))}' data-label="${escapeAttr(r.label)}" style="cursor:pointer;"><td>${esc(r.label)}</td><td class="num">${fmtVal(r.v)}</td><td class="num">${sum ? (r.v / sum * 100).toFixed(1) + "%" : ""}</td></tr>`).join("")
+                + `<tr class="ds-total"><td>Others in total</td><td class="num">${fmtVal(sum)}</td><td class="num">100%</td></tr></tbody></table></div><div class="sa-note" style="padding-left:0;">Largest first. Click a row to list its documents below.</div>` : "");
     }
     function paintHeat(rows) {
         const list = rows.filter(e => e.hour >= 0), grid = new Map(); let max = 0, lo = 7, hi = 17;
@@ -669,7 +713,17 @@
     }
     function paintDocs() {
         if (S.status !== "ready") return;
-        const rows = pickedRows().slice().sort((a, b) => (b.date + (b.time || "99")).localeCompare(a.date + (a.time || "99")) || a.no.localeCompare(b.no));
+        const DCOLS = [["date", "Date"], ["time", "Time"], ["m", "Activity"], ["no", "Document"], ["user", "Employee"], ["party", "Customer / supplier"], ["br", "Branch"], ["sp", "Salesperson"],
+            ["qty", "Qty", 1], ["amt", "Value (excl. tax)", 1], ["order", "Order"], ["detail", "Detail"]];
+        const dv = (e, k) => k === "date" ? e.date + (e.time || "99") : k === "time" ? (e.time || "") : k === "m" ? MBY[e.m].short : k === "user" ? userLabel(e.user).toLowerCase()
+            : k === "party" ? partyName(e).toLowerCase() : k === "qty" ? (e.qty == null ? -Infinity : e.qty) : k === "amt" ? (e.amt == null ? -Infinity : e.amt)
+            : k === "order" ? (e.doc === "order" ? e.no : e.order || "") : k === "detail" ? detail(e) : String(e[k] || "");
+        const dk = S.docSort.key, dm = S.docSort.dir === "asc" ? 1 : -1, newest = (a, b) => (b.date + (b.time || "99")).localeCompare(a.date + (a.time || "99")) || a.no.localeCompare(b.no);
+        const rows = pickedRows().slice().sort((a, b) => {
+            const x = dv(a, dk), y = dv(b, dk);
+            return (typeof x === "number" ? x - y : String(x).localeCompare(String(y), undefined, { numeric: true })) * dm || newest(a, b);
+        });
+        $("saDocs").querySelector("thead").innerHTML = "<tr>" + DCOLS.map(c => `<th data-sa-dsort="${c[0]}" title="Click to sort" class="${c[2] ? "num " : ""}${dk === c[0] ? "sorted-" + S.docSort.dir : ""}">${c[1]}</th>`).join("") + "</tr>";
         $("saDocsTitle").textContent = "Documents" + (S.pick ? " — " + S.pick.label : "");
         $("saPickClear").style.display = S.pick ? "" : "none";
         const shown = rows.slice(0, S.docLimit);
@@ -685,7 +739,7 @@
                 <td class="wrap">${esc(detail(e))}</td></tr>`;
         }).join("") + (rows.length > shown.length ? `<tr><td colspan="12" class="empty"><span class="sa-link" data-sa-more="1">Showing the first ${fmtInt(shown.length)} of ${fmtInt(rows.length)} lines — show 500 more</span></td></tr>` : "")
             : `<tr><td colspan="12" class="empty">No documents for this choice.</td></tr>`;
-        $("saDocsNote").textContent = "Newest first. Click an order number in the Order column for its full story. The ↗ opens the document in Wiise; an order or quote that is no longer open has no link because Wiise removes it once it is fully invoiced.";
+        $("saDocsNote").textContent = "Newest first unless you click a column heading to sort. Click an order number in the Order column for its full story. The ↗ opens the document in Wiise; an order or quote that is no longer open has no link because Wiise removes it once it is fully invoiced.";
     }
 
     // ---------- one order's story ----------
@@ -703,12 +757,16 @@
         const posted = (bag, what) => { for (const n in bag) { const y = bag[n]; if (y.o === no && y.d) push(y.d, y.u, what + " " + n, (y.a != null ? fmtMoneyFull(y.a) : "") + (y.i ? " · with invoice " + y.i : "")); } };
         if (kind === "S") { posted(d.sh, "Posted shipment"); posted(d.si, "Posted invoice"); }
         else { posted(d.pr, "Posted receipt"); posted(d.pi, "Posted invoice"); }
-        lines.sort((a, b) => a.when.localeCompare(b.when));
+        const hk = S.histSort.key, hm = S.histSort.dir === "asc" ? 1 : -1;
+        const hsort = (list, get) => list.sort((a, b) => String(get(a)).localeCompare(String(get(b)), undefined, { numeric: true }) * hm || a.when.localeCompare(b.when));
+        hsort(lines, l => hk === "user" ? userLabel(l.user).toLowerCase() : l[hk] || "");
+        $("saHistTable").querySelector("thead").innerHTML = "<tr>" + [["when", "When"], ["user", "Employee"], ["what", "What happened"], ["det", "Detail"]]
+            .map(c => `<th data-sa-hsort="${c[0]}" title="Click to sort" class="${hk === c[0] ? "sorted-" + S.histSort.dir : ""}">${c[1]}</th>`).join("") + "</tr>";
         $("saHistTitle").textContent = (kind === "S" ? "Sales order " : "Purchase order ") + no;
         const party = x && x.cu ? ((kind === "S" ? d.cust[x.cu] : d.vend[x.cu]) || x.cu) : "";
         $("saHistMeta").textContent = [party, x && x.au ? "assigned to " + userLabel(x.au) : "", x && x.o ? "open" : ""].filter(Boolean).join(" · ");
         const fmtWhen = w => dateLabel(w.slice(0, 10)) + (w.length > 10 ? " " + w.slice(11, 16) : "");
-        const live = S.hist.live;
+        const live = Array.isArray(S.hist.live) ? hsort(S.hist.live.slice(), r => hk === "user" ? userLabel(r.user).toLowerCase() : hk === "what" ? r.field : hk === "det" ? r.change : r.when) : S.hist.live;
         $("saHistTable").querySelector("tbody").innerHTML = (lines.length ? lines.map(l => `<tr><td>${fmtWhen(l.when)}</td><td>${esc(userLabel(l.user))}</td><td>${esc(l.what)}</td><td class="wrap">${esc(l.det)}</td></tr>`).join("")
             : `<tr><td colspan="4" class="empty">Nothing on record for this order in the activity file.</td></tr>`)
             + (live === "loading" ? `<tr><td colspan="4" class="empty">Reading the Change Log from Wiise…</td></tr>` : "")
