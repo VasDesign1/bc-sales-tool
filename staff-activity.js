@@ -628,10 +628,10 @@
         const heat = S.chart === "heat";
         $("saChartWrap").style.display = heat ? "none" : ""; $("saHeat").style.display = heat ? "" : "none";
         $("saChartMeasure").style.display = (S.chart === "rank" || heat) ? "none" : "";
-        const hms = ms.filter(m => m.stamp);      // only these carry a time of day
+        const hms = ms;      // every activity; the posted ones carry no time of day and are shown by day only
         if (!hms.some(m => m.k === S.hm)) S.hm = "";
         $("saHeatMeasure").style.display = heat ? "" : "none";
-        $("saHeatMeasure").innerHTML = `<option value="">Everything raised, changed or deleted</option>` + hms.map(m => `<option value="${m.k}"${m.k === S.hm ? " selected" : ""}>${m.label}</option>`).join("");
+        $("saHeatMeasure").innerHTML = `<option value="">Everything raised, changed or deleted</option>` + hms.map(m => `<option value="${m.k}"${m.k === S.hm ? " selected" : ""}>${m.label}${m.stamp ? "" : " (by day only)"}</option>`).join("");
         const m = MBY[S.cm], unit = S.show === "amount" ? "value excl. tax" : "documents";
         const colour = i => ENTITY_PALETTE[i % ENTITY_PALETTE.length];
         const tickFmt = v => S.show === "amount" ? fmtMoney(v) : fmtInt(v);
@@ -719,6 +719,7 @@
                 + `<tr class="ds-total"><td>Others in total</td><td class="num">${fmtVal(sum)}</td><td class="num">100%</td></tr></tbody></table></div><div class="sa-note" style="padding-left:0;">Largest first unless you click a heading to sort. Click a row to list its documents below.</div>` : "");
     }
     function paintHeat(rows) {
+        if (S.hm && !MBY[S.hm].stamp) return paintHeatDays(rows);
         const list = rows.filter(e => e.hour >= 0 && (!S.hm || e.m === S.hm)), grid = new Map(); let max = 0, lo = 7, hi = 17;
         for (const e of list) { const wd = (D(e.date).getUTCDay() + 6) % 7, k = wd + "|" + e.hour, s = grid.get(k) || new Set(); s.add(e.m + e.key); grid.set(k, s); if (s.size > max) max = s.size; if (e.hour < lo) lo = e.hour; if (e.hour > hi) hi = e.hour; }
         const hours = []; for (let h = lo; h <= hi; h++) hours.push(h);
@@ -732,13 +733,26 @@
         $("saChartNote").textContent = "Melbourne time. Counts orders and quotes raised or changed in each hour (a document counts once per hour). Posted shipments, invoices and receipts carry a posting date but no time of day in Wiise, so they are not in this grid. Click a figure to list its documents.";
     }
 
+    // Posted documents (shipments, invoices, credit memos, receipts): Wiise keeps their posting date but no time of day, so one figure per weekday.
+    function paintHeatDays(rows) {
+        const m = MBY[S.hm], days = WD.map(() => new Set()), amts = WD.map(() => 0);
+        for (const e of rows) { if (e.m !== S.hm) continue; const wd = (D(e.date).getUTCDay() + 6) % 7; if (!days[wd].has(e.key)) { days[wd].add(e.key); amts[wd] += e.amt || 0; } }
+        const max = Math.max(1, ...days.map(d => d.size)), total = days.reduce((t, d) => t + d.size, 0), on = id => S.pick && S.pick.id === "heat|" + id ? "sa-on" : "";
+        $("saChartTitle").textContent = "Busiest day — " + m.label.toLowerCase();
+        $("saHeat").innerHTML = !total ? `<div class="sa-empty">No ${esc(m.label.toLowerCase())} in this period.</div>`
+            : `<table class="sa-heat"><thead><tr><th>Day</th><th>Documents</th><th>Value (excl. tax)</th><th>Share</th></tr></thead><tbody>`
+            + WD.map((d, wd) => { const n = days[wd].size; return `<tr><th>${d}</th><td${n ? ` data-sa-heat="${wd}|" data-label="${d}"` : ""} class="${on(wd + "|")}" style="background:color-mix(in srgb, var(--tree-tint, #3949ab) ${n ? Math.round(12 + 78 * n / max) : 0}%, transparent);${n / max > .55 ? "color:#fff;" : ""}${n ? "cursor:pointer;" : ""}" title="${n ? "Click to list them" : ""}">${n ? fmtInt(n) : ""}</td><td>${n ? money0(amts[wd]) : ""}</td><td>${n ? (n / total * 100).toFixed(0) + "%" : ""}</td></tr>`; }).join("")
+            + `<tr><th>Total</th><td><strong>${fmtInt(total)}</strong></td><td><strong>${money0(amts.reduce((a, b) => a + b, 0))}</strong></td><td></td></tr></tbody></table>`;
+        $("saChartNote").textContent = m.label + " carry a posting date but no time of day in Wiise, so they are shown by day of the week (posting date) only. Click a figure to list its documents.";
+    }
+
     // ---------- documents ----------
     function pickedRows() {
         let rows = filteredCache;
         if (S.pick) {
             if (S.pick.m) rows = rows.filter(e => e.m === S.pick.m);
             for (const [dim, k] of (S.pick.row || [])) rows = rows.filter(e => keyOf(e, dim)[0] === k);
-            if (S.pick.heat) { const [wd, h] = S.pick.heat; rows = rows.filter(e => e.hour >= 0 && (h < 0 || e.hour === h) && (D(e.date).getUTCDay() + 6) % 7 === wd); }
+            if (S.pick.heat) { const [wd, h] = S.pick.heat; const timed = !(S.pick.m && !MBY[S.pick.m].stamp); rows = rows.filter(e => (!timed || e.hour >= 0) && (h < 0 || e.hour === h) && (D(e.date).getUTCDay() + 6) % 7 === wd); }
         }
         const q = S.docQ.trim().toLowerCase();
         if (q) rows = rows.filter(e => (e.no + " " + (e.order || "") + " " + userLabel(e.user) + " " + e.user + " " + partyName(e) + " " + e.party + " " + e.sp + " " + MBY[e.m].label).toLowerCase().includes(q));
