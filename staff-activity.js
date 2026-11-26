@@ -65,13 +65,8 @@
     const VIEWS = [["user", "Employee"], ["branch", "Branch"], ["party", "Customer / supplier"], ["sp", "Salesperson / purchaser"], ["period", "Period"]];
     const CHARTS = [
         ["trend", "Over time — stacked by the View by choice"],
-        ["line",  "Over time — one line each"],
-        ["cum",   "Running total over the period"],
-        ["wday",  "By day of the week"],
         ["rank",  "Ranking — every activity side by side"],
         ["share", "Share of the total"],
-        ["pareto", "80/20 — largest first with the running share"],
-        ["scatter", "Documents against value — one dot each"],
         ["party", "Who works for which customer / supplier"],
         ["heat",  "Busiest day and hour (orders and quotes raised or changed)"],
     ];
@@ -646,7 +641,7 @@
         // group helper: Map key → node, for one measure or all
         const group = (list, dim) => { const g = new Map(); for (const e of list) { const [k, l] = keyOf(e, dim); if (!g.has(k)) g.set(k, node(k, l)); add(g.get(k), e); } return g; };
         let cfg = null;
-        if (S.chart === "trend" || S.chart === "line" || S.chart === "cum") {
+        if (S.chart === "trend") {
             const stackDim = S.view === "period" ? "user" : S.view;
             const list = rows.filter(e => e.m === m.k), g = group(list, stackDim);
             const keys = [...g.values()].sort((a, b) => val(b, m.k) - val(a, m.k)), topN = keys.slice(0, 9), rest = keys.slice(9);
@@ -661,19 +656,6 @@
                     scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, ticks: { callback: tickFmt, precision: 0 } } },
                     onClick: (ev, els) => { if (els.length && rest.length && els[0].datasetIndex === topN.length) { S.othOpen = true; paint(); } } }) };
             $("saChartTitle").textContent = m.label + " — " + unit + " per " + (S.grain === "day" ? "day" : S.grain) + ", by " + (VIEWS.find(v => v[0] === stackDim) || [])[1].toLowerCase();
-            if (S.chart !== "trend") {
-                // the same figures as lines: side by side, or added up as the period goes on
-                const run = S.chart === "cum";
-                cfg.type = "line";
-                for (const d of ds) {
-                    if (run) { let t = 0; d.data = d.data.map(v => (t += v)); }
-                    delete d.stack; d.borderColor = d.backgroundColor; d.borderWidth = 2; d.pointRadius = buckets.length > 45 ? 0 : 2.5; d.pointHoverRadius = 5; d.tension = run ? 0 : .25; d.fill = false;
-                }
-                cfg.options.scales.x.stacked = false; cfg.options.scales.y.stacked = false;
-                cfg.options.plugins.tooltip.itemSort = (a, b) => b.parsed.y - a.parsed.y;
-                delete cfg.options.plugins.tooltip.callbacks.footer;
-                if (run) $("saChartTitle").textContent = m.label + " — running total of " + unit + ", by " + (VIEWS.find(v => v[0] === stackDim) || [])[1].toLowerCase();
-            }
         } else if (S.chart === "rank") {
             const dim = S.view === "period" ? "user" : S.view, g = group(rows, dim);
             const keys = [...g.values()].sort((a, b) => totalOf(b) - totalOf(a)).slice(0, 20);
@@ -683,42 +665,6 @@
                     onClick: (ev, els) => { if (!els.length) return; const n = keys[els[0].index]; if (dim === "user") S.user = S.user === n.key ? "" : n.key; else if (dim === "branch") S.branch = S.branch === n.key ? "" : n.key; else return; S.pick = null; paint(); } }) };
             $("saChartTitle").textContent = "Every activity by " + (VIEWS.find(v => v[0] === dim) || [])[1].toLowerCase() + " — " + unit + (keys.length === 20 ? " (top 20)" : "");
             if (dim === "user" || dim === "branch") $("saChartNote").textContent = "Click a bar to filter the whole tab to that " + (dim === "user" ? "employee" : "branch") + "; click it again to clear.";
-        } else if (S.chart === "wday") {
-            const dim = S.view === "period" ? "user" : S.view, list = rows.filter(e => e.m === m.k), g = group(list, dim);
-            const keys = [...g.values()].sort((a, b) => val(b, m.k) - val(a, m.k)), topN = keys.slice(0, 9), rest = keys.slice(9);
-            const cell = new Map();
-            for (const e of list) { const [k] = keyOf(e, dim), sk = topN.some(n => n.key === k) ? k : "__other", ck = sk + "|" + (D(e.date).getUTCDay() + 6) % 7; if (!cell.has(ck)) cell.set(ck, node(ck, "")); add(cell.get(ck), e); }
-            const at = (k, wd) => { const c = cell.get(k + "|" + wd); return c ? val(c, m.k) : 0; };
-            const ds = topN.map((n, i) => ({ label: n.label, stack: "s", backgroundColor: colour(i), borderRadius: 2, data: WD.map((_, wd) => at(n.key, wd)) }));
-            if (rest.length) ds.push({ label: "Others (" + rest.length + ")", stack: "s", backgroundColor: "#9e9e9e", borderRadius: 2, data: WD.map((_, wd) => at("__other", wd)) });
-            if (rest.length) oth = { what: rest.length + " more, whole period", col: (VIEWS.find(v => v[0] === dim) || [])[1], rows: rest.map(n => ({ label: n.label, v: val(n, m.k), row: [[dim, n.key]] })) };
-            cfg = { type: "bar", data: { labels: WD, datasets: ds },
-                options: chartBase({ plugins: { legend: { position: "bottom" }, tooltip: { mode: "index", intersect: false, filter: i => i.parsed.y !== 0, callbacks: { label: c => c.dataset.label + ": " + tickFmt(c.parsed.y), footer: it => "Total: " + tickFmt(it.reduce((t, i) => t + i.parsed.y, 0)) } } },
-                    scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, ticks: { callback: tickFmt, precision: 0 } } },
-                    onClick: (ev, els) => { if (els.length && rest.length && els[0].datasetIndex === topN.length) { S.othOpen = true; paint(); } } }) };
-            $("saChartTitle").textContent = m.label + " — " + unit + " by day of the week, by " + dimLabelOf(dim);
-            $("saChartNote").textContent = "Every Monday, every Tuesday … in the period added together.";
-        } else if (S.chart === "pareto") {
-            const dim = S.view === "period" ? "user" : S.view, g = group(rows.filter(e => e.m === m.k), dim);
-            const all = [...g.values()].filter(n => val(n, m.k) > 0).sort((a, b) => val(b, m.k) - val(a, m.k)), keys = all.slice(0, 25);
-            const sum = all.reduce((t, n) => t + val(n, m.k), 0); let runT = 0;
-            const share = keys.map(n => { runT += val(n, m.k); return sum ? Math.round(runT / sum * 1000) / 10 : 0; });
-            const n80 = share.findIndex(v => v >= 80);
-            cfg = { type: "bar", data: { labels: keys.map(n => truncate(n.label, 22)), datasets: [
-                    { type: "line", label: "Running share of the total", yAxisID: "p", data: share, borderColor: "#e53935", backgroundColor: "#e53935", borderWidth: 2, pointRadius: 3, tension: .15 },
-                    { label: m.label, data: keys.map(n => val(n, m.k)), backgroundColor: keys.map((_, i) => n80 >= 0 && i <= n80 ? colour(0) : "#9e9e9e"), borderRadius: 2 }] },
-                options: chartBase({ plugins: { legend: { position: "bottom" }, tooltip: { mode: "index", intersect: false, callbacks: { label: c => c.dataset.yAxisID === "p" ? "Running share: " + c.parsed.y + "%" : c.dataset.label + ": " + tickFmt(c.parsed.y) } } },
-                    scales: { y: { beginAtZero: true, ticks: { callback: tickFmt, precision: 0 } }, p: { position: "right", min: 0, max: 100, grid: { drawOnChartArea: false }, ticks: { callback: v => v + "%" } } } }) };
-            $("saChartTitle").textContent = m.label + " — " + unit + " by " + dimLabelOf(dim) + ", largest first" + (all.length > 25 ? " (top 25 of " + all.length + ")" : "");
-            if (n80 >= 0) $("saChartNote").textContent = "The first " + (n80 + 1) + " of " + all.length + " (coloured) make up 80% of the total; the red line is the running share.";
-        } else if (S.chart === "scatter") {
-            const dim = S.view === "period" ? "user" : S.view, g = group(rows.filter(e => e.m === m.k), dim);
-            const keys = [...g.values()].filter(n => cnt(n, m.k) > 0).sort((a, b) => cnt(b, m.k) - cnt(a, m.k)).slice(0, 60);
-            cfg = { type: "scatter", data: { datasets: [{ label: m.label, data: keys.map(n => ({ x: cnt(n, m.k), y: Math.round(amt(n, m.k)), who: n.label })), backgroundColor: keys.map((_, i) => colour(i)), pointRadius: 7, pointHoverRadius: 9 }] },
-                options: chartBase({ plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => c.raw.who + ": " + plural(c.raw.x, "document") + " · " + money0(c.raw.y) + (c.raw.x ? " · " + money0(c.raw.y / c.raw.x) + " each" : "") } } },
-                    scales: { x: { beginAtZero: true, title: { display: true, text: "Documents" }, ticks: { precision: 0 } }, y: { beginAtZero: true, title: { display: true, text: "Value (excl. tax)" }, ticks: { callback: v => fmtMoney(v) } } } }) };
-            $("saChartTitle").textContent = m.label + " — documents against value, one dot per " + dimLabelOf(dim).split(" / ")[0];
-            $("saChartNote").textContent = "Further right = more documents; higher = more value. Hover a dot for the name and the average per document.";
         } else if (S.chart === "share") {
             const dim = S.view === "period" ? "user" : S.view, g = group(rows.filter(e => e.m === m.k), dim);
             const keys = [...g.values()].filter(n => val(n, m.k) > 0).sort((a, b) => val(b, m.k) - val(a, m.k)), topN = keys.slice(0, 11), rest = keys.slice(11);
