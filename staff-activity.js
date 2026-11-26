@@ -36,6 +36,8 @@
         { k: "sqC", side: "sales", label: "Quotes raised",              short: "Quotes raised",      tint: "k-loc",  stamp: true },
         { k: "sqV", side: "sales", label: "Quotes turned into orders",  short: "Quotes → orders",    tint: "k-avg",  stamp: true },
         { k: "sqD", side: "sales", label: "Quotes deleted",             short: "Quotes deleted",     tint: "k-gpp",  stamp: true, gone: true },
+        { k: "sbC", side: "sales", label: "Blanket orders raised",      short: "Blankets raised",    tint: "k-loc",  stamp: true },
+        { k: "sbV", side: "sales", label: "Blanket orders turned into orders", short: "Blankets → orders", tint: "k-avg", stamp: true },
         { k: "sh",  side: "sales", label: "Shipments posted",           short: "Shipments",          tint: "k-inv" },
         { k: "si",  side: "sales", label: "Sales invoices posted",      short: "Invoices",           tint: "k-gp" },
         { k: "sc",  side: "sales", label: "Sales credit memos posted",  short: "Credit memos",       tint: "k-gpp" },
@@ -151,19 +153,20 @@
         }
         for (const key in d.docs) {
             const x = d.docs[key], kind = key[0], type = key[1], no = key.slice(3);
-            if (type !== "1" && !(kind === "S" && type === "0")) continue;       // orders, and sales quotes
+            if (type !== "1" && !(kind === "S" && (type === "0" || type === "4"))) continue;       // orders, sales quotes and blanket sales orders
             const inv = (kind === "S" ? siO : piO).get(no), goods = (kind === "S" ? shO : prO).get(no), linked = inv || goods || {};
             const base = { kind, no, key, party: x.cu || linked.c || "", br: x.br || linked.b || "", sp: x.sp != null ? x.sp : (linked.s || ""),
-                amt: x.a != null ? x.a : (inv ? Math.round(inv.a * 100) / 100 : null), au: x.au || "", open: !!x.o, closed: x.d || null, doc: type === "1" ? "order" : "quote", dropped: !!x.d && !inv && !goods };
+                amt: x.a != null ? x.a : (inv ? Math.round(inv.a * 100) / 100 : null), au: x.au || "", open: !!x.o, closed: x.d || null, doc: type === "1" ? "order" : type === "4" ? "blanket" : "quote", dropped: !!x.d && !inv && !goods };
             if (x.c) {
                 const stamp = { date: x.f[0].slice(0, 10), hour: +x.f[0].slice(11, 13), time: x.f[0].slice(11, 16), user: x.f[1] };
-                ev.push(Object.assign({ m: type === "0" ? "sqC" : kind === "S" ? "soC" : "poC" }, base, stamp));
+                ev.push(Object.assign({ m: type === "0" ? "sqC" : type === "4" ? "sbC" : kind === "S" ? "soC" : "poC" }, base, stamp));
+                if (kind === "S" && type === "1" && x.bo) ev.push(Object.assign({ m: "sbV", blanket: x.bo }, base, stamp));
                 if (kind === "S" && type === "1" && quoteOf.has(no)) ev.push(Object.assign({ m: "sqV", quote: quoteOf.get(no), quoteGuess: !x.q }, base, stamp));
             }
             // Deleted = removed from Wiise without ever being shipped, received or
             // invoiced (an order) or without becoming an order (a quote). Counted
             // on the day it was removed, for the person who removed it.
-            if (x.d && (type === "1" ? base.dropped : !turned.has(no))) {
+            if (x.d && type !== "4" && (type === "1" ? base.dropped : !turned.has(no))) {
                 ev.push(Object.assign({ m: type === "0" ? "sqD" : kind === "S" ? "soD" : "poD", raised: x.c ? x.f : null }, base,
                     { date: x.d[0].slice(0, 10), hour: +x.d[0].slice(11, 13), time: x.d[0].slice(11, 16), user: x.d[1] }));
             }
@@ -595,7 +598,7 @@
             ? acc.join("") + `<tr class="ds-total" data-key="sa|total" data-label="All" data-row="[]"><td>Total</td>${cells(tot)}</tr>`
             : `<tr><td colspan="${ms.length + 3}" class="empty">Nothing recorded for this period and these filters.</td></tr>`;
         $("saMeta").textContent = rows.length ? fmtInt(top.size) + " " + ({ user: ["employee", "employees"], branch: ["branch", "branches"], party: ["customer / supplier", "customers / suppliers"], sp: ["salesperson / purchaser", "salespeople / purchasers"], period: ["period", "periods"] })[S.view][top.size === 1 ? 0 : 1] + " · " + dateLabel(S.from) + " to " + dateLabel(S.to) : "";
-        $("saTableNote").textContent = "Deleted = removed from Wiise without a shipment, receipt or invoice (an order) or without becoming an order (a quote); it is counted for the person who removed it and is not added into the All column. A document counts once per row however many times it was touched. “Changed” leaves out the first hour of the person who raised the order (that is part of raising it) and the fields Wiise fills in by itself on release and posting. Click a figure to list its documents"
+        $("saTableNote").textContent = "Blankets → orders counts each sales order made from a blanket order, for the person who made it; the link is read while the order is open, so orders already closed before 26 Nov 2026 are not in it. Deleted = removed from Wiise without a shipment, receipt or invoice (an order) or without becoming an order (a quote); it is counted for the person who removed it and is not added into the All column. A document counts once per row however many times it was touched. “Changed” leaves out the first hour of the person who raised the order (that is part of raising it) and the fields Wiise fills in by itself on release and posting. Click a figure to list its documents"
             + (levels.length ? "; click a row to open it" + (levels.length > 1 ? ", then a row inside it to go a level deeper." : ".") : ".");
     }
 
@@ -725,6 +728,7 @@
         if (e.kind === "S") {
             if (e.doc === "order") return e.open ? wiiseDocLinkHtml("Sales Order", e.no) : "";
             if (e.doc === "quote") return e.open ? wiiseDocLinkHtml("Sales Quote", e.no) : "";
+            if (e.doc === "blanket") return "";
             return wiiseDocLinkHtml(e.doc === "shipment" ? "Posted Sales Shipment" : e.doc === "invoice" ? "Posted Sales Invoice" : "Posted Sales CR/Adj Note", e.no);
         }
         if (e.doc === "order") return e.open ? purchLink(PURCH_PAGES.order, e.no) : "";
@@ -734,8 +738,10 @@
         const bits = [];
         if (e.m === "soM" || e.m === "poM") bits.push(plural(e.n, "change") + ": " + e.fields.slice(0, 6).join(", ") + (e.fields.length > 6 ? " +" + (e.fields.length - 6) + " more" : ""));
         if (e.m === "sqV") bits.push("from quote " + e.quote + (e.quoteGuess ? " (matched by time and customer)" : ""));
+        if (e.m === "sbV") bits.push("from blanket order " + e.blanket);
         if (MBY[e.m].gone) bits.push(e.raised ? "raised " + dateLabel(e.raised[0].slice(0, 10)) + " by " + userLabel(e.raised[1]) : "raised before the Change Log started");
-        if ((e.doc === "order" || e.doc === "quote") && e.au && e.au !== e.user) bits.push("assigned to " + userLabel(e.au));
+        if ((e.doc === "order" || e.doc === "quote" || e.doc === "blanket") && e.au && e.au !== e.user) bits.push("assigned to " + userLabel(e.au));
+        if (e.doc === "blanket" && e.closed) bits.push("removed " + dateLabel(e.closed[0].slice(0, 10)) + " by " + userLabel(e.closed[1]));
         if (e.doc === "order" || e.doc === "quote") bits.push(e.open ? "still open" : e.closed ? (e.doc === "order" && e.dropped ? "deleted " : e.doc === "quote" && MBY[e.m].gone ? "deleted " : "closed ") + dateLabel(e.closed[0].slice(0, 10)) + " by " + userLabel(e.closed[1]) + (e.doc === "order" && e.dropped ? " with no shipment or invoice" : "") : "no longer open");
         if (e.via) bits.push("posted with invoice " + e.via);
         if (e.lines) bits.push(plural(e.lines, "line"));

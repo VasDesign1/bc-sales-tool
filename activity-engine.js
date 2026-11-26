@@ -431,6 +431,26 @@ async function activityTopUp(st, env) {
     }
     log("Headers: " + linked + " goods/invoice documents tied to their order · open now: " + openSo.length + " sales orders, " + openPo.length + " purchase orders, " + openSq.length + " quotes");
 
+    // =====================================================
+    // 5. Orders made from a blanket order
+    //    The blanket order number sits on the order LINES, not the header, and
+    //    only the open order lines are published (Sales_Order_Line_Excel). So
+    //    the link is picked up while the order is open and kept in the file
+    //    after it closes; an order that was already closed before this was
+    //    first read has no link on record.
+    // =====================================================
+    try {
+        const bl = await odataEither("Sales_Order_Line_Excel", ["Blanket_Order_No ne ''", "Document_Type eq 'Order'"], "Document_Type,Document_No,Blanket_Order_No", "Blanket order links");
+        let linked = 0;
+        for (const r of bl) {
+            const bo = String(r.Blanket_Order_No || "").trim();
+            if (!bo || (r.Document_Type && r.Document_Type !== "Order")) continue;
+            const d = st.docs["S1|" + r.Document_No];
+            if (d && d.bo !== bo) { d.bo = bo; linked++; }
+        }
+        log("Blanket orders: " + bl.length + " open order lines carry a blanket order number · " + linked + " orders newly tied to their blanket order");
+    } catch (e) { warn("  [Blanket order links] not readable: " + String(e.message || e).slice(0, 160)); }
+
     return st;
 }
 
