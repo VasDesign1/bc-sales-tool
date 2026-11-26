@@ -77,7 +77,7 @@
         src: null, ev: [],
         range: "month", from: "", to: "",
         user: "", field: "", part: "", type: "", q: "", sys: false, setup: false,
-        view: "user", sort: { key: "n", dir: "desc" }, pick: null,
+        view: "user", sort: { key: "n", dir: "desc" }, lsort: { key: "ts", dir: "desc" }, pick: null,
         sumLimit: 200, limit: 300,
     });
     const STATES = { item: newState(), customer: newState(), vendor: newState() };
@@ -253,6 +253,11 @@
             if (e.target.closest("a")) return;
             let b;
             if ((b = e.target.closest("[data-ic-view]"))) { S.view = b.dataset.icView; S.pick = null; S.sumLimit = 200; S.sort = S.view === "day" ? { key: "key", dir: "desc" } : { key: "n", dir: "desc" }; paint(); return; }
+            if ((b = e.target.closest("th[data-ic-lsort]"))) {
+                const k = b.dataset.icLsort;
+                S.lsort = S.lsort.key === k ? { key: k, dir: S.lsort.dir === "asc" ? "desc" : "asc" } : { key: k, dir: k === "ts" ? "desc" : "asc" };
+                S.limit = 300; paint(); return;
+            }
             if ((b = e.target.closest("th[data-ic-sort]"))) {
                 const k = b.dataset.icSort;
                 if (S.sort.key === k) S.sort.dir = S.sort.dir === "asc" ? "desc" : "asc"; else S.sort = { key: k, dir: k === "label" ? "asc" : "desc" };
@@ -297,7 +302,8 @@
         $("icQ").placeholder = K.One + " number, " + K.nameCol.toLowerCase() + ", value…";
         $("icPart").innerHTML = `<option value="">Whole card</option>` + Object.keys(K.parts).map(k => `<option value="${k}">${esc(K.parts[k])}</option>`).join("");
         $("icViews").innerHTML = views().map(v => `<button type="button" class="gp-filter-btn${v[0] === S.view ? " active" : ""}" data-ic-view="${v[0]}">${v[1]}</button>`).join("");
-        $("icList").querySelector("thead").innerHTML = `<tr><th>When</th><th>Employee</th><th>${K.One}</th><th>${K.nameCol}</th><th>Part of the card</th><th>Field</th><th>Old value</th><th>New value</th></tr>`;
+        $("icList").querySelector("thead").innerHTML = "<tr>" + [["ts", "When"], ["user", "Employee"], ["item", K.One], ["name", K.nameCol], ["part", "Part of the card"], ["field", "Field"], ["oldV", "Old value"], ["newV", "New value"]]
+            .map(c => `<th data-ic-lsort="${c[0]}" style="cursor:pointer;" title="Click to sort" class="${S.lsort.key === c[0] ? "sorted-" + S.lsort.dir : ""}">${c[1]}</th>`).join("") + "</tr>";
 
         const has = ready && (d[K.rows] || []).length > 0;
         const off = "Nothing has been recorded yet. " + K.off;
@@ -380,7 +386,10 @@
     function paintList(all) {
         let rows = all;
         if (S.pick) rows = rows.filter(e => keyOf(e, S.pick.dim)[0] === S.pick.k);
-        rows = rows.slice().sort((a, b) => b.ts.localeCompare(a.ts) || a.item.localeCompare(b.item, undefined, { numeric: true }) || a.field.localeCompare(b.field));
+        const lk = S.lsort.key, lm = S.lsort.dir === "asc" ? 1 : -1;
+        const lv = e => lk === "user" ? userLabel(e.user).toLowerCase() : lk === "part" ? (K.parts[e.t] || "") : String(e[lk] == null ? "" : e[lk]).toLowerCase();
+        const newest = (a, b) => b.ts.localeCompare(a.ts) || a.item.localeCompare(b.item, undefined, { numeric: true }) || a.field.localeCompare(b.field);
+        rows = rows.slice().sort((a, b) => lv(a).localeCompare(lv(b), undefined, { numeric: true }) * lm || newest(a, b));
         $("icListTitle").textContent = "Every change" + (S.pick ? " — " + S.pick.label : "");
         $("icPickClear").style.display = S.pick ? "" : "none";
         $("icListMeta").textContent = rows.length ? plural(rows.length, "line") + " · " + plural(new Set(rows.map(e => e.item)).size, K.one) : "";
@@ -395,7 +404,7 @@
                 <td class="wrap">${esc(e.field)}${e.sys ? '<span class="ic-chip" title="Wiise rewrites this field by itself">Wiise</span>' : ""}${e.setup ? '<span class="ic-chip" title="Filled in while the new ' + K.one + ' was being set up">new ' + K.one + '</span>' : ""}</td>${oldCell}${newCell}</tr>`;
         }).join("") + (rows.length > shown.length ? `<tr><td colspan="8" class="empty"><span class="ic-link" data-ic-more="list">Showing the first ${fmtInt(shown.length)} of ${fmtInt(rows.length)} lines — show 500 more</span></td></tr>` : "")
             : `<tr><td colspan="8" class="empty">No ${K.one} changes for this choice.</td></tr>`;
-        $("icListNote").textContent = "Newest first, Melbourne time. Click " + (kind === "item" ? "an item" : "a " + K.one) + " number to keep only that " + K.one + "; the ↗ opens its card in Wiise. A login shared by several people shows as one employee. Values longer than 140 characters are cut short"
+        $("icListNote").textContent = "Newest first unless you click a column heading to sort; Melbourne time. Click " + (kind === "item" ? "an item" : "a " + K.one) + " number to keep only that " + K.one + "; the ↗ opens its card in Wiise. A login shared by several people shows as one employee. Values longer than 140 characters are cut short"
             + (kind === "item" ? "." : "; bank account numbers are shown by their last three digits only.");
     }
 

@@ -78,7 +78,7 @@
         chart: "trend", cm: "",
         pick: null, docQ: "", docLimit: 300, hist: null,
         docSort: { key: "date", dir: "desc" }, histSort: { key: "when", dir: "asc" },
-        othOpen: false, othUser: "",      // the "what is in Others" list under the chart
+        othOpen: false, othUser: "", othSort: { key: "v", dir: "desc" },      // the "what is in Others" list under the chart
         live: "", liveErr: "",      // "" | loading | done | error  — "Get latest from Wiise"
     };
     const money0 = n => n == null || isNaN(n) ? "—" : new Intl.NumberFormat("en-AU", { style: "currency", currency: "AUD", maximumFractionDigits: 0 }).format(n);
@@ -451,6 +451,11 @@
                 S.histSort = S.histSort.key === k ? { key: k, dir: S.histSort.dir === "asc" ? "desc" : "asc" } : { key: k, dir: "asc" };
                 paintHist(); return;
             }
+            if ((b = e.target.closest("th[data-sa-osort]"))) {
+                const k = b.dataset.saOsort;
+                S.othSort = S.othSort.key === k ? { key: k, dir: S.othSort.dir === "asc" ? "desc" : "asc" } : { key: k, dir: k === "v" ? "desc" : "asc" };
+                paint(); return;
+            }
             if ((b = e.target.closest("[data-sa-oth-toggle]"))) { S.othOpen = !S.othOpen; if (!S.othOpen) S.othUser = ""; paint(); return; }
             if ((b = e.target.closest("[data-sa-oth-all]"))) { S.othUser = ""; paint(); return; }
             if ((b = e.target.closest("tr[data-sa-oth-row]"))) {
@@ -682,12 +687,13 @@
     function paintOthers(o) {
         const box = $("saOthers"); if (!box) return;
         if (!o || !o.rows.length) { box.innerHTML = ""; return; }
-        const rows = o.rows.filter(r => r.v).sort((a, b) => b.v - a.v || a.label.localeCompare(b.label)), sum = rows.reduce((t, r) => t + r.v, 0);
+        const om = S.othSort.dir === "asc" ? 1 : -1, oc = k => S.othSort.key === k ? "sorted-" + S.othSort.dir : "";
+        const rows = o.rows.filter(r => r.v).sort((a, b) => (S.othSort.key === "label" ? a.label.localeCompare(b.label, undefined, { numeric: true }) : a.v - b.v) * om || a.label.localeCompare(b.label)), sum = rows.reduce((t, r) => t + r.v, 0);
         box.innerHTML = `<span class="sa-link" data-sa-oth-toggle="1">${S.othOpen ? "▾ Hide" : "▸ Show"} what is in “Others” — ${esc(o.what)}</span>`
             + (S.othOpen && o.user ? `<span class="sa-link" data-sa-oth-all="1" style="margin-left:14px;">show for all employees</span>` : "")
-            + (S.othOpen ? `<div class="table-scroll" style="max-height:340px; margin-top:8px;"><table class="ds-table" id="saOthTable"><thead><tr><th>${esc(o.col)}</th><th class="num">${S.show === "amount" ? "Value (excl. tax)" : "Documents"}</th><th class="num">Share of Others</th></tr></thead><tbody>`
+            + (S.othOpen ? `<div class="table-scroll" style="max-height:340px; margin-top:8px;"><table class="ds-table" id="saOthTable"><thead><tr><th data-sa-osort="label" style="cursor:pointer;" title="Click to sort" class="${oc("label")}">${esc(o.col)}</th><th data-sa-osort="v" style="cursor:pointer;" title="Click to sort" class="num ${oc("v")}">${S.show === "amount" ? "Value (excl. tax)" : "Documents"}</th><th data-sa-osort="v" style="cursor:pointer;" title="Click to sort" class="num">Share of Others</th></tr></thead><tbody>`
                 + rows.map(r => `<tr data-sa-oth-row='${escapeAttr(JSON.stringify(r.row))}' data-label="${escapeAttr(r.label)}" style="cursor:pointer;"><td>${esc(r.label)}</td><td class="num">${fmtVal(r.v)}</td><td class="num">${sum ? (r.v / sum * 100).toFixed(1) + "%" : ""}</td></tr>`).join("")
-                + `<tr class="ds-total"><td>Others in total</td><td class="num">${fmtVal(sum)}</td><td class="num">100%</td></tr></tbody></table></div><div class="sa-note" style="padding-left:0;">Largest first. Click a row to list its documents below.</div>` : "");
+                + `<tr class="ds-total"><td>Others in total</td><td class="num">${fmtVal(sum)}</td><td class="num">100%</td></tr></tbody></table></div><div class="sa-note" style="padding-left:0;">Largest first unless you click a heading to sort. Click a row to list its documents below.</div>` : "");
     }
     function paintHeat(rows) {
         const list = rows.filter(e => e.hour >= 0), grid = new Map(); let max = 0, lo = 7, hi = 17;
