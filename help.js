@@ -125,6 +125,7 @@
         saParty: B('Customer or supplier', 'Type part of a customer or supplier name or number to keep only their documents.'),
         saClear: B('Clear filters', 'Clears branch, employee, salesperson and customer. The period stays.'),
         saTiles: B('Activity tiles', 'One tile per kind of activity for the period and filters. The big figure is the number of documents (or their value, with Show set to Amounts). Click a tile to list its documents below and to chart it.'),
+        saViewTop: B('View by / Then by', 'How the activity table is grouped: by employee, branch, customer or supplier, salesperson or period, with up to three further levels inside. The same buttons sit in the heading of the table; either set does the same thing.'),
         saThen: B('Then by', 'A second level under each row. Pick one, then click a row to open it. Once it is chosen, another box appears for a third level, and then a fourth, for example employee, then branch, then customer.'),
         saThen2: B('Then by, third level', 'A further level inside the second one. Open a row, then open one of the rows inside it.'),
         saThen3: B('Then by, fourth level', 'One more level inside the third.'),

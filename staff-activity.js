@@ -358,13 +358,16 @@
                 <button type="button" class="gp-filter-btn" data-sa-side="sales">Sales</button><button type="button" class="gp-filter-btn" data-sa-side="purch">Purchasing</button><button type="button" class="gp-filter-btn" data-sa-side="all">Both</button>
                 <span class="lbl">Show</span>
                 <button type="button" class="gp-filter-btn" data-sa-show="count">Documents</button><button type="button" class="gp-filter-btn" data-sa-show="amount">Amounts</button>
-            </div><div class="panel-header sa-bar" style="border-bottom:0;">
+            </div><div class="panel-header sa-bar">
                 <span class="lbl">Filter</span>
                 <select id="saBranch" class="mini-select" title="Branch"></select>
                 <select id="saUser" class="mini-select" title="Employee"></select>
                 <select id="saSp" class="mini-select" title="Salesperson or purchaser code on the document"></select>
                 <input type="search" id="saParty" class="mini-select" placeholder="Customer or supplier…" title="Part of a customer or supplier name or number">
                 <button type="button" class="more-btn" id="saClear" title="Clear the filters (keeps the period)">Clear filters</button>
+            </div><div class="panel-header sa-bar" style="border-bottom:0;" id="saViewTop">
+                <span class="lbl">View by</span>${VIEWS.map(v => `<button type="button" class="gp-filter-btn" data-sa-view="${v[0]}">${v[1]}</button>`).join("")}
+                <span class="lbl">Then by</span><select data-sa-then="0" class="mini-select" title="Second level: click a row to open it"></select><select data-sa-then="1" class="mini-select" title="Third level"></select><select data-sa-then="2" class="mini-select" title="Fourth level"></select>
             </div></div>
             <div class="kpi-row sa-tiles" id="saTiles"></div>
             <div class="panel" id="saPanel">
@@ -521,8 +524,10 @@
         fill("saUser", filtered({ noUser: true }), "user", S.user, "All employees");
         fill("saSp", filtered({ noSp: true }), "sp", S.sp, "All salespeople / purchasers");
         const levels = thenList();
-        ["saThen", "saThen2", "saThen3"].forEach((id, i) => {
-            const taken = levels.slice(0, i), el = $(id);
+        // the same boxes sit twice: under the filters and in the table heading
+        root.querySelectorAll("[data-sa-then]").forEach(el => {
+            const i = +el.dataset.saThen, taken = levels.slice(0, i);
+            el.disabled = false;
             el.style.display = i === 0 || levels.length >= i ? "" : "none";       // the next level appears once the one before is chosen
             el.innerHTML = `<option value="">${i === 0 ? "(nothing)" : "(no further level)"}</option>` + VIEWS.filter(v => v[0] !== S.view && !taken.includes(v[0])).map(v => `<option value="${v[0]}"${v[0] === levels[i] ? " selected" : ""}>${v[1]}</option>`).join("");
         });
