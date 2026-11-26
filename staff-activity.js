@@ -74,7 +74,7 @@
         status: "idle", err: "", data: null, meta: null, ev: [],
         range: "month", from: "", to: "", grain: "day", side: "sales", show: "count",
         branch: "", user: "", sp: "", party: "",
-        view: "user", then: "", sort: { key: "__total", dir: "desc" },
+        view: "user", thens: ["", "", ""], sort: { key: "__total", dir: "desc" },      // thens: up to three further levels under View by
         chart: "trend", cm: "",
         pick: null, docQ: "", docLimit: 300, hist: null,
         docSort: { key: "date", dir: "desc" }, histSort: { key: "when", dir: "asc" },
@@ -258,15 +258,25 @@
 
     // ---------- filtering + aggregation ----------
     const sideOf = e => MBY[e.m].side;
+    // A filter list also offers "the ones with nothing" (no branch, no salesperson).
+    // That choice needs a value of its own: an empty value means "all".
+    const NONE = "\u2205";
+    const hit = (sel, v) => sel === NONE ? !v : v === sel;
+    // the levels chosen under View by: no repeats, none equal to the view, stops at the first blank
+    function thenList() {
+        const out = [];
+        for (const t of S.thens) { if (!t || t === S.view || out.includes(t)) break; out.push(t); }
+        return out;
+    }
     function filtered(opts) {
         opts = opts || {};
         const q = S.party.trim().toLowerCase();
         return S.ev.filter(e => {
             if (e.date < S.from || e.date > S.to) return false;
             if (S.side !== "all" && sideOf(e) !== S.side) return false;
-            if (!opts.noBranch && S.branch && e.br !== S.branch) return false;
-            if (!opts.noUser && S.user && e.user !== S.user) return false;
-            if (!opts.noSp && S.sp && e.sp !== S.sp) return false;
+            if (!opts.noBranch && S.branch && !hit(S.branch, e.br)) return false;
+            if (!opts.noUser && S.user && !hit(S.user, e.user)) return false;
+            if (!opts.noSp && S.sp && !hit(S.sp, e.sp)) return false;
             if (q && !(String(e.party).toLowerCase().includes(q) || partyName(e).toLowerCase().includes(q))) return false;
             return true;
         });
@@ -361,7 +371,7 @@
                 <div class="panel-header"><h2 id="saTableTitle">Activity by employee</h2><div class="meta" id="saMeta"></div>
                     <div class="sa-ctl">
                         <span class="lbl">View by</span>${VIEWS.map(v => `<button type="button" class="gp-filter-btn" data-sa-view="${v[0]}">${v[1]}</button>`).join("")}
-                        <span class="lbl">Then by</span><select id="saThen" class="mini-select" title="Second level: click a row to open it"></select>
+                        <span class="lbl">Then by</span><select id="saThen" data-sa-then="0" class="mini-select" title="Second level: click a row to open it"></select><select id="saThen2" data-sa-then="1" class="mini-select" title="Third level: open a row, then open one of its rows"></select><select id="saThen3" data-sa-then="2" class="mini-select" title="Fourth level"></select>
                     </div>
                 </div>
                 <div class="table-scroll"><table id="saTable" class="ds-table"><thead></thead><tbody></tbody></table></div>
@@ -407,7 +417,13 @@
         $("saSp").addEventListener("change", e => { S.sp = e.target.value; S.pick = null; paint(); });
         $("saParty").addEventListener("input", e => { S.party = e.target.value; S.pick = null; paint(); });
         $("saClear").addEventListener("click", () => { S.branch = S.user = S.sp = S.party = ""; S.pick = null; paint(); });
-        $("saThen").addEventListener("change", e => { S.then = e.target.value; paint(); });
+        root.addEventListener("change", e => {
+            const t = e.target.closest("[data-sa-then]"); if (!t) return;
+            const i = +t.dataset.saThen; S.thens[i] = t.value;
+            for (let j = i + 1; j < S.thens.length; j++) if (!t.value || S.thens[j] === t.value) S.thens[j] = "";      // a blank level ends the chain; no level twice
+            S.thens = thenList().concat(["", "", ""]).slice(0, 3);
+            paint();
+        });
         $("saChartSel").addEventListener("change", e => { S.chart = e.target.value; paint(); });
         $("saChartMeasure").addEventListener("change", e => { S.cm = e.target.value; paint(); });
         $("saDocQ").addEventListener("input", e => { S.docQ = e.target.value; S.docLimit = 300; paintDocs(); });
@@ -420,7 +436,7 @@
             if ((b = e.target.closest("[data-sa-grain]"))) { S.grain = b.dataset.saGrain; paint(); return; }
             if ((b = e.target.closest("[data-sa-side]"))) { S.side = b.dataset.saSide; S.pick = null; S.cm = ""; S.sort = { key: "__total", dir: "desc" }; paint(); return; }
             if ((b = e.target.closest("[data-sa-show]"))) { S.show = b.dataset.saShow; paint(); return; }
-            if ((b = e.target.closest("[data-sa-view]"))) { S.view = b.dataset.saView; if (S.then === S.view) S.then = ""; S.pick = null; S.sort = { key: S.view === "period" ? "__key" : "__total", dir: S.view === "period" ? "asc" : "desc" }; paint(); return; }
+            if ((b = e.target.closest("[data-sa-view]"))) { S.view = b.dataset.saView; S.thens = S.thens.filter(t => t && t !== S.view).concat(["", "", ""]).slice(0, 3); S.pick = null; S.sort = { key: S.view === "period" ? "__key" : "__total", dir: S.view === "period" ? "asc" : "desc" }; paint(); return; }
             if ((b = e.target.closest("[data-sa-tile]"))) { const k = b.dataset.saTile; S.pick = S.pick && S.pick.m === k && !S.pick.row ? null : { m: k, label: MBY[k].label }; S.cm = k; paint(); return; }
             if ((b = e.target.closest("th[data-sa-dsort]"))) {
                 const k = b.dataset.saDsort;
@@ -481,7 +497,7 @@
             : !ready ? "Loading the staff activity file…"
             : (S.live === "error" ? "<strong>" + esc(S.liveErr) + "</strong> Showing the robot's file. " : "") + "Who raised, changed, shipped, invoiced and received what. <strong>Raised</strong> and <strong>changed</strong> come from the Wiise Change Log, held from "
               + dateLabel(String(S.meta.logFrom || "").slice(0, 10)) + "; <strong>posted</strong> documents are held from " + dateLabel(S.meta.postedFrom || "") + ". The toolbar filters above do not apply here; use the ones below. Click a tile or any figure to list its documents.";
-        ["saRange", "saFrom", "saTo", "saBranch", "saUser", "saSp", "saParty", "saThen", "saChartSel", "saChartMeasure", "saDocQ"].forEach(id => { $(id).disabled = !ready; });
+        ["saRange", "saFrom", "saTo", "saBranch", "saUser", "saSp", "saParty", "saThen", "saThen2", "saThen3", "saChartSel", "saChartMeasure", "saDocQ"].forEach(id => { $(id).disabled = !ready; });
         if (!ready) {
             $("saTiles").innerHTML = ""; $("saTable").querySelector("thead").innerHTML = ""; $("saTable").querySelector("tbody").innerHTML = `<tr><td class="empty">${esc(S.status === "error" ? S.err : "Loading…")}</td></tr>`;
             $("saDocs").querySelector("tbody").innerHTML = ""; destroyChart("saChart"); return;
@@ -497,13 +513,19 @@
         // filter lists: whoever / whatever has something in the period without that filter
         const fill = (id, rows, dim, cur, allLabel) => {
             const seen = new Map(); for (const e of rows) { const [k, l] = keyOf(e, dim); if (!seen.has(k)) seen.set(k, l); }
-            if (cur && !seen.has(cur)) seen.set(cur, cur);
-            $(id).innerHTML = `<option value="">${allLabel}</option>` + [...seen].sort((a, b) => a[1].localeCompare(b[1], undefined, { numeric: true })).map(([v, l]) => `<option value="${escapeAttr(v)}"${v === cur ? " selected" : ""}>${esc(l)}</option>`).join("");
+            if (cur && cur !== NONE && !seen.has(cur)) seen.set(cur, cur);
+            $(id).innerHTML = `<option value=""${cur ? "" : " selected"}>${allLabel}</option>` + [...seen].sort((a, b) => a[1].localeCompare(b[1], undefined, { numeric: true }))
+                .map(([v, l]) => `<option value="${escapeAttr(v || NONE)}"${(v || NONE) === cur ? " selected" : ""}>${esc(l)}</option>`).join("");
         };
         fill("saBranch", filtered({ noBranch: true }), "branch", S.branch, "All branches");
         fill("saUser", filtered({ noUser: true }), "user", S.user, "All employees");
         fill("saSp", filtered({ noSp: true }), "sp", S.sp, "All salespeople / purchasers");
-        $("saThen").innerHTML = `<option value="">(nothing)</option>` + VIEWS.filter(v => v[0] !== S.view).map(v => `<option value="${v[0]}"${v[0] === S.then ? " selected" : ""}>${v[1]}</option>`).join("");
+        const levels = thenList();
+        ["saThen", "saThen2", "saThen3"].forEach((id, i) => {
+            const taken = levels.slice(0, i), el = $(id);
+            el.style.display = i === 0 || levels.length >= i ? "" : "none";       // the next level appears once the one before is chosen
+            el.innerHTML = `<option value="">${i === 0 ? "(nothing)" : "(no further level)"}</option>` + VIEWS.filter(v => v[0] !== S.view && !taken.includes(v[0])).map(v => `<option value="${v[0]}"${v[0] === levels[i] ? " selected" : ""}>${v[1]}</option>`).join("");
+        });
         const ms = measures();
         if (!ms.some(m => m.k === S.cm)) S.cm = ms[0].k;
         $("saChartMeasure").innerHTML = ms.map(m => `<option value="${m.k}"${m.k === S.cm ? " selected" : ""}>${m.label}</option>`).join("");
@@ -527,17 +549,18 @@
 
     function paintTable(rows, ms) {
         const viewName = (VIEWS.find(v => v[0] === S.view) || [])[1] || "";
-        $("saTableTitle").textContent = "Activity by " + viewName.toLowerCase() + (S.then ? ", then " + (VIEWS.find(v => v[0] === S.then) || [])[1].toLowerCase() : "");
+        const levels = thenList(), dims = [S.view].concat(levels);
+        $("saTableTitle").textContent = "Activity by " + viewName.toLowerCase() + levels.map(t => ", then " + (VIEWS.find(v => v[0] === t) || [])[1].toLowerCase()).join("");
         const top = new Map(), tot = node("tot", "Total");
         for (const e of rows) {
             add(tot, e);
-            const [k, l] = keyOf(e, S.view), gk = "sa|" + S.view + "|" + k;
-            if (!top.has(gk)) top.set(gk, Object.assign(node(gk, l), { row: [[S.view, k]], sortKey: k }));
-            const g = top.get(gk); add(g, e);
-            if (S.then) {
-                const [k2, l2] = keyOf(e, S.then), ck = gk + "|" + S.then + "|" + k2;
-                if (!g.kids.has(ck)) g.kids.set(ck, Object.assign(node(ck, l2), { row: [[S.view, k], [S.then, k2]], sortKey: k2 }));
-                add(g.kids.get(ck), e);
+            let map = top, path = "sa", row = [];
+            for (const dim of dims) {                      // one node per level, each inside the one above
+                const [k, l] = keyOf(e, dim);
+                path += "|" + dim + "|" + k; row = row.concat([[dim, k]]);
+                let n = map.get(path);
+                if (!n) map.set(path, n = Object.assign(node(path, l), { row, sortKey: k }));
+                add(n, e); map = n.kids;
             }
         }
         const sv = n => S.sort.key === "__label" ? n.label.toLowerCase() : S.sort.key === "__key" ? n.sortKey : S.sort.key === "__total" ? totalOf(n) : S.sort.key === "__parties" ? n.parties.size : val(n, S.sort.key);
@@ -566,7 +589,7 @@
             : `<tr><td colspan="${ms.length + 3}" class="empty">Nothing recorded for this period and these filters.</td></tr>`;
         $("saMeta").textContent = rows.length ? fmtInt(top.size) + " " + ({ user: ["employee", "employees"], branch: ["branch", "branches"], party: ["customer / supplier", "customers / suppliers"], sp: ["salesperson / purchaser", "salespeople / purchasers"], period: ["period", "periods"] })[S.view][top.size === 1 ? 0 : 1] + " · " + dateLabel(S.from) + " to " + dateLabel(S.to) : "";
         $("saTableNote").textContent = "Deleted = removed from Wiise without a shipment, receipt or invoice (an order) or without becoming an order (a quote); it is counted for the person who removed it and is not added into the All column. A document counts once per row however many times it was touched. “Changed” leaves out the first hour of the person who raised the order (that is part of raising it) and the fields Wiise fills in by itself on release and posting. Click a figure to list its documents"
-            + (S.then ? "; click a row to open it." : ".");
+            + (levels.length ? "; click a row to open it" + (levels.length > 1 ? ", then a row inside it to go a level deeper." : ".") : ".");
     }
 
     // ---------- charts ----------
