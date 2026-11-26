@@ -156,6 +156,62 @@ async function api(pathAndQuery, label) { return F.bcFetchAll(C2 + "/" + pathAnd
         users: async () => F.bcFetchAll(F.BC_API_BASE + "/api/microsoft/automation/v2.0/companies(" + (await F.bcGetCompanyId()) + ")/users?$select=userName,displayName,state", "Users"),
     });
 
+    // ---- check on the blanket order figures (counts, field captions and seconds only) ----
+    try {
+        const docNum = (k) => { const m = /^(.*?)(\d+)$/.exec(k.slice(3)); return m ? [m[1], +m[2]] : null; };
+        // Per number series: the 10th lowest number that was seen being raised. Any
+        // higher number was certainly raised after the log began, so one of those
+        // without "seen being raised" is a document the creator rule missed.
+        const floor = {};
+        for (const type of ["S0", "S1", "S4", "P1"]) {
+            const by = {};
+            for (const k of Object.keys(st.docs)) { if (!k.startsWith(type + "|") || !st.docs[k].c) continue; const n = docNum(k); if (n) (by[n[0]] = by[n[0]] || []).push(n[1]); }
+            for (const p of Object.keys(by)) { by[p].sort((a, b) => a - b); floor[type + "|" + p] = by[p][Math.min(9, by[p].length - 1)]; }
+        }
+        const after = (k) => { const n = docNum(k); if (!n) return false; const f = floor[k.slice(0, 2) + "|" + n[0]]; return f != null && n[1] > f; };
+        const missed = {};
+        for (const type of ["S0", "S1", "S4", "P1"]) {
+            let all = 0, c1 = 0, c0After = 0, gone = 0; const who = new Set();
+            for (const k of Object.keys(st.docs)) {
+                if (!k.startsWith(type + "|")) continue;
+                const d = st.docs[k]; all++;
+                if (d.c) { c1++; who.add(d.f[1]); } else if (after(k)) { c0After++; (missed[type] = missed[type] || []).push(k); }
+                if (d.d) gone++;
+            }
+            console.log("Check " + type + ": " + all + " in the file · " + c1 + " seen being raised (by " + who.size + " users) · " + c0After + " raised after the log began but NOT seen being raised · " + gone + " removed");
+        }
+        const bo = Object.keys(st.docs).filter(k => k.startsWith("S1|") && st.docs[k].bo);
+        const boMissed = bo.filter(k => !st.docs[k].c && after(k));
+        console.log("Check blanket links: " + bo.length + " orders tied to a blanket order · " + bo.filter(k => st.docs[k].c).length + " of them seen being raised · " + boMissed.length + " raised after the log began but not seen being raised · "
+            + new Set(bo.map(k => st.docs[k].bo)).size + " different blanket orders · " + bo.filter(k => st.docs["S4|" + st.docs[k].bo]).length + " whose blanket order is in the file");
+        // the blanket order list itself, when a service carries it
+        try {
+            const info = await F.bcDiscoverSalesEntity("blanket");
+            if (!info) console.log("Check blanket list: no published service found");
+            else {
+                let rows = await F.bcFetchAll(F.BC_ODATA_URL + "/Company('" + encodeURIComponent(CO) + "')/" + info.entity, "Blanket order list");
+                if (info.fDocType && !info.nameMatchesKind) rows = rows.filter(r => r[info.fDocType] === info.docTypeValue);
+                const from = String(st.meta.logFrom || "").slice(0, 10);
+                const noF = info.fNo || "No", recent = rows.filter(r => info.fDocDate && String(r[info.fDocDate] || "").slice(0, 10) >= from);
+                const inFile = (list) => { let c1 = 0, c0 = 0, none = 0; for (const r of list) { const d = st.docs["S4|" + r[noF]]; if (!d) none++; else if (d.c) c1++; else c0++; } return c1 + " seen being raised, " + c0 + " in the file but not seen being raised, " + none + " not in the file"; };
+                console.log("Check blanket list: service " + info.entity + " (date field " + info.fDocDate + ", amount field " + info.fAmount + ") · " + rows.length + " open blanket orders: " + inFile(rows)
+                    + " · " + recent.length + " dated since the log began: " + inFile(recent) + " · " + rows.filter(r => num(r[info.fAmount])).length + " carry an amount");
+                console.log("  fields: " + (info.fields || []).join(", ").slice(0, 1500));
+            }
+        } catch (e) { console.warn("Check blanket list: " + String(e.message || e).slice(0, 200)); }
+        // what the first lines of a missed document look like
+        const sample = boMissed.slice(-3).concat((missed.S4 || []).slice(-3), (missed.S1 || []).filter(k => !st.docs[k].bo).slice(-2), (missed.S0 || []).slice(-2));
+        for (const k of sample) {
+            const rows = await odata("ChangeLogEntries", "Table_No eq 36 and Primary_Key_Field_2_Value eq '" + k.slice(3).replace(/'/g, "''") + "'", "Entry_No,Date_and_Time,User_ID,Primary_Key_Field_1_Value,Field_Caption,Type_of_Change,Old_Value,New_Value", "Check lines");
+            rows.sort((a, b) => a.Entry_No - b.Entry_No);
+            const mine = rows.filter(r => String(r.Primary_Key_Field_1_Value || "") === k[1]);
+            if (!mine.length) { console.log("  missed " + k.slice(0, 2) + (st.docs[k].bo ? " (from a blanket order)" : "") + ": no lines"); continue; }
+            const t0 = new Date(mine[0].Date_and_Time).getTime(), u0 = mine[0].User_ID;
+            console.log("  missed " + k.slice(0, 2) + (st.docs[k].bo ? " (from a blanket order)" : "") + ": " + mine.length + " lines · " + mine.slice(0, 14).map(r =>
+                "+" + Math.round((new Date(r.Date_and_Time).getTime() - t0) / 1000) + "s " + (r.Type_of_Change || "")[0] + " " + r.Field_Caption + " [" + (String(r.Old_Value || "").trim() ? "set" : "blank") + "→" + (String(r.New_Value || "").trim() ? "set" : "blank") + "]" + (r.User_ID === u0 ? "" : " other user")).join(" | "));
+        }
+    } catch (e) { console.warn("Check on the blanket figures did not finish: " + String(e.message || e).slice(0, 200)); }
+
     // ---- totals (counts only) ----
     const count = (o) => Object.keys(o).length;
     const docKinds = {}; let confident = 0, withEdits = 0;

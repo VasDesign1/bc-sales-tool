@@ -315,10 +315,14 @@
         if (!$("saStyle")) {
             const st = document.createElement("style"); st.id = "saStyle";
             st.textContent = `
-                .sa-tiles { grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); }
-                .sa-tiles .kpi { padding: 12px 16px; cursor: pointer; transition: transform .15s, opacity .15s; }
-                .sa-tiles .kpi:hover { transform: translateY(-1px); }
-                .sa-tiles .kpi .value { font-size: 23px; }
+                /* every tile on ONE line: as many equal columns as there are tiles; the figure shrinks with its tile */
+                #saTiles { grid-template-columns: repeat(var(--sa-n, 6), minmax(0, 1fr)); gap: 10px; }
+                #saTiles .kpi { padding: 11px 12px; cursor: pointer; transition: transform .15s, opacity .15s; display: flex; flex-direction: column; container-type: inline-size; min-width: 0; }
+                #saTiles .kpi:hover { transform: translateY(-1px); }
+                #saTiles .kpi .label { font-size: 9.5px; letter-spacing: .4px; line-height: 1.3; margin-bottom: auto; }
+                #saTiles .kpi .value { font-size: 22px; font-size: clamp(15px, 17cqw, 26px); white-space: nowrap; }
+                #saTiles .kpi .sub { font-size: 10.5px; line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+                @media (max-width: 1100px) { #saTiles { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); } }
                 .sa-tiles.has-pick .kpi:not(.active) { opacity: .5; }
                 .sa-tiles .kpi.active { outline: 3px solid #ffd54f; outline-offset: 1px; }
                 /* panel headings: title and its small print side by side on one line of text, controls at the right */
@@ -548,12 +552,12 @@
     function paintTiles(rows, ms) {
         const tot = node("tot", "Total"); rows.forEach(e => add(tot, e));
         const tilePick = S.pick && !S.pick.row ? S.pick.m : "";
-        $("saTiles").classList.toggle("has-pick", !!tilePick);
+        $("saTiles").classList.toggle("has-pick", !!tilePick); $("saTiles").style.setProperty("--sa-n", ms.length > 11 ? Math.ceil(ms.length / 2) : ms.length);      // Sales + Purchasing together: two lines
         $("saTiles").innerHTML = ms.map(m => {
             const c = cnt(tot, m.k), a = amt(tot, m.k), people = new Set(rows.filter(e => e.m === m.k).map(e => e.user)).size;
             return `<div class="kpi ${m.tint}${tilePick === m.k ? " active" : ""}" data-sa-tile="${m.k}" title="Click to list these documents">
                 <div class="label">${esc(m.label)}</div><div class="value">${S.show === "amount" ? money0(a) : fmtInt(c)}</div>
-                <div class="sub">${S.show === "amount" ? plural(c, "document") : (a ? money0(a) : "no value held")} · ${plural(people, "employee")}</div></div>`;
+                <div class="sub">${S.show === "amount" ? plural(c, "document") : (a ? money0(a) : "no value held")}<br>${plural(people, "employee")}</div></div>`;
         }).join("");
     }
 
