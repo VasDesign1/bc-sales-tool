@@ -156,6 +156,18 @@ async function api(pathAndQuery, label) { return F.bcFetchAll(C2 + "/" + pathAnd
         users: async () => F.bcFetchAll(F.BC_API_BASE + "/api/microsoft/automation/v2.0/companies(" + (await F.bcGetCompanyId()) + ")/users?$select=userName,displayName,state", "Users"),
     });
 
+    // ---- one-off look: which published web services carry a blanket order number (names of services and fields only) ----
+    try {
+        const md = await F.bcGetODataMetadata();
+        const hits = [];
+        for (const set of Object.keys(md.entitySets)) {
+            const f = md.entityTypes[md.entitySets[set]] || [];
+            const bl = f.filter(n => /blanket/i.test(n));
+            if (bl.length) hits.push(set + " [" + bl.join(", ") + "] keys: " + f.filter(n => /^(Document_No|Document_Type|No|Line_No|Order_No|Posting_Date|Sell_to_Customer_No|Type)$/i.test(n)).join(","));
+        }
+        console.log("Blanket order fields in published services (" + Object.keys(md.entitySets).length + " services): " + (hits.join(" | ") || "none"));
+    } catch (e) { console.warn("  [metadata look] " + String(e.message || e).slice(0, 160)); }
+
     // ---- totals (counts only) ----
     const count = (o) => Object.keys(o).length;
     const docKinds = {}; let confident = 0, withEdits = 0;
