@@ -246,7 +246,7 @@ async function activityTopUp(st, env) {
     // =====================================================
     {
         const CARD_DROP = /^(Last (Date|Time|Date ?Time) Modified|Last Modified Date Time|.+ Id)$/i;
-        const SECRET = /(Bank Account No|Bank Branch No|IBAN|SWIFT|BSB|Credit Card|Tax File)/i;
+        const SECRET = /(Bank Account No|Bank Branch No|Previous Account No|Account Number|IBAN|SWIFT|BSB|Credit Card|Tax File)/i;
         const maskV = (v) => v ? "•••" + v.slice(-3) : "";
         const clipV = (s) => s.length > 140 ? s.slice(0, 139) + "…" : s;
         for (const g of [
@@ -259,6 +259,8 @@ async function activityTopUp(st, env) {
                 if (cur[g.key] == null) cur[g.key] = 0;
                 if (!st[g.key]) st[g.key] = [];
                 const bag = st[g.key], c0 = cur[g.key];
+                // lines kept before a caption joined the SECRET list are masked now
+                for (const r of bag) if (r[4] === 1 && SECRET.test(st.fields[r[5]] || "")) { if (r[6] && !r[6].startsWith("•••")) r[6] = maskV(r[6]); if (r[7] && !r[7].startsWith("•••")) r[7] = maskV(r[7]); }
                 const rows = await odata("ChangeLogEntries", "Entry_No gt " + c0 + " and (" + Object.keys(g.tables).map(n => "Table_No eq " + n).join(" or ") + ")", CL_SEL, g.label + " change log");
                 rows.sort((a, b) => a.Entry_No - b.Entry_No);
                 const whole = new Map(), freq = new Map();
