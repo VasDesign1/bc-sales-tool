@@ -108,7 +108,7 @@ async function activityTopUp(st, env) {
         const when = new Date(r.Date_and_Time), sec = Math.floor(when.getTime() / 1000), ts = mel(when), user = upper(r.User_ID);
         if (!logFrom || ts < logFrom) logFrom = ts;
         let d = st.docs[key];
-        if (!d) d = st.docs[key] = { f: [ts, user], f0: sec, c: 0, n: 0 };
+        if (!d) { d = st.docs[key] = { f: [ts, user], f0: sec, c: 0, n: 0 }; if (r.Type_of_Change === "Deletion") d.fd = 1; }      // fd: first seen as it was removed
         d.n++;
         if (r.Type_of_Change === "Deletion") {
             if (r.Field_No === 2 || r.Field_No === 151) {
@@ -141,7 +141,37 @@ async function activityTopUp(st, env) {
         const fi = fIdx(cap); if (!e[1].includes(fi)) e[1].push(fi);
     }
     cur.cl = clMax; st.meta.logFrom = logFrom;
-    log("Change log: " + clRows.length + " lines read (" + clSkipped + " skipped) · " + clCreated + " documents raised · " + clDeleted + " closed · " + clEdits + " later changes · " + clParty + " closed documents given their customer / vendor · log starts " + (logFrom || "?").slice(0, 10));
+    // "Just raised", second rule: by document number. An order made from a
+    // blanket order or a quote arrives with its customer, branch and assigned
+    // user already filled in, and some people fill those in more than five
+    // minutes after starting a document, so the rule above never sees them
+    // being raised. Numbers are handed out in order, though: a document
+    // numbered above the ones being raised when the log began was raised
+    // after it, and its first line names who raised it (c: 2). The mark is
+    // the middle number of the first nine documents seen being raised, per
+    // document type and number series; nothing is worked out for a document
+    // first seen as it was removed.
+    let clByNo = 0;
+    {
+        const parts = (key) => { const m = /^(.*?)(\d+)$/.exec(key.slice(3)); return m ? [key.slice(0, 2) + "|" + m[1] + "|" + m[2].length, +m[2]] : null; };
+        const series = new Map();
+        for (const key in st.docs) { const d = st.docs[key]; if (d.c !== 1) continue; const p = parts(key); if (!p) continue; let l = series.get(p[0]); if (!l) series.set(p[0], l = []); l.push([d.f0, p[1]]); }
+        const mark = new Map();
+        for (const [k, l] of series) {
+            if (l.length < 3) continue;
+            l.sort((a, b) => a[0] - b[0]);
+            const firstNos = l.slice(0, 9).map(x => x[1]).sort((a, b) => a - b);
+            mark.set(k, firstNos[firstNos.length >> 1]);
+        }
+        for (const key in st.docs) {
+            const d = st.docs[key];
+            if (d.c || d.fd || (d.d && d.n <= 1)) continue;
+            const p = parts(key); if (!p) continue;
+            const m = mark.get(p[0]);
+            if (m != null && p[1] > m) { d.c = 2; clByNo++; }
+        }
+    }
+    log("Change log: " + clRows.length + " lines read (" + clSkipped + " skipped) · " + clCreated + " documents raised (+" + clByNo + " more by their number) · " + clDeleted + " closed · " + clEdits + " later changes · " + clParty + " closed documents given their customer / vendor · log starts " + (logFrom || "?").slice(0, 10));
     for (const k of ["S", "P"]) {
         const top = [...capFreq[k]].sort((a, b) => b[1] - a[1]).slice(0, 30).map(x => x[0] + " " + x[1]).join(" · ");
         if (top) log("  later changes by field (" + (k === "S" ? "sales" : "purchase") + "): " + top);
@@ -406,7 +436,7 @@ async function activityTopUp(st, env) {
     // =====================================================
     const since = "postingDate ge " + recentFrom;
     const quiet = (p, label) => api(p, label).catch(e => { warn("  [" + label + "] not readable: " + e.message.slice(0, 140)); return []; });
-    const [shH, siH, prH, piH, pcH, openSo, openPo, openSq] = await Promise.all([
+    const [shH, siH, prH, piH, pcH, openSo, openPo, openSq, openSb] = await Promise.all([
         quiet("salesShipments?$select=number,orderNumber&$filter=" + encodeURIComponent(since), "Shipment headers"),
         quiet("salesInvoices?$select=number,orderNumber&$filter=" + encodeURIComponent(since), "Invoice headers"),
         quiet("purchaseReceipts?$select=number,orderNumber&$filter=" + encodeURIComponent(since), "Receipt headers"),
@@ -415,6 +445,9 @@ async function activityTopUp(st, env) {
         quiet("salesOrders?$select=number,totalAmountExcludingTax,customerNumber", "Open sales orders"),
         quiet("purchaseOrders?$select=number,totalAmountExcludingTax,vendorNumber", "Open purchase orders"),
         quiet("salesQuotes?$select=number,totalAmountExcludingTax,customerNumber", "Open sales quotes"),
+        // blanket sales orders are not in the v2.0 API: the salesDocuments web service lists them with their ex-GST amount
+        odata("salesDocuments", "documentType eq 'Blanket Order'", "documentType,number,amount,sellToCustomerNumber", "Open blanket orders")
+            .catch(e => { warn("  [Open blanket orders] not readable: " + String(e.message || e).slice(0, 140)); return null; }),
     ]);
     let linked = 0;
     const link = (rows, bag, amt) => { for (const h of rows) { const d = bag[h.number]; if (!d) continue; if (h.orderNumber) { d.o = h.orderNumber; linked++; } if (amt && h.totalAmountExcludingTax != null) d.a = Math.round(num(h.totalAmountExcludingTax) * 100) / 100; } };
@@ -424,12 +457,13 @@ async function activityTopUp(st, env) {
     for (const o of openSo) openNow.set("S1|" + o.number, o);
     for (const o of openPo) openNow.set("P1|" + o.number, o);
     for (const o of openSq) openNow.set("S0|" + o.number, o);
+    for (const o of (openSb || [])) if (!o.documentType || o.documentType === "Blanket Order") openNow.set("S4|" + o.number, { totalAmountExcludingTax: o.amount, customerNumber: o.sellToCustomerNumber });
     for (const k of Object.keys(st.docs)) {
         const d = st.docs[k], o = openNow.get(k);
         if (o) { d.a = Math.round(num(o.totalAmountExcludingTax) * 100) / 100; d.o = 1; if (!d.cu) d.cu = String(o.customerNumber || o.vendorNumber || ""); }
-        else if (d.o) delete d.o;
+        else if (d.o && !(k.startsWith("S4|") && !openSb)) delete d.o;      // (blanket list not readable this run: leave them as they were)
     }
-    log("Headers: " + linked + " goods/invoice documents tied to their order · open now: " + openSo.length + " sales orders, " + openPo.length + " purchase orders, " + openSq.length + " quotes");
+    log("Headers: " + linked + " goods/invoice documents tied to their order · open now: " + openSo.length + " sales orders, " + openPo.length + " purchase orders, " + openSq.length + " quotes, " + (openSb ? openSb.length : "?") + " blanket orders");
 
     // =====================================================
     // 5. Orders made from a blanket order
