@@ -352,6 +352,7 @@
                 .sa-heat { border-collapse: collapse; width: 100%; table-layout: fixed; }
                 .sa-heat th, .sa-heat td { font-size: 11px; text-align: center; padding: 6px 2px; border: 1px solid rgba(128,128,128,.18); }
                 .sa-heat th { font-weight: 700; opacity: .8; }
+                .sa-heat td.sa-on { outline: 2px solid #ffd54f; outline-offset: -2px; }
                 .sa-chip { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 8px; background: rgba(128,128,128,.18); margin-left: 6px; }
                 .sa-empty { padding: 28px 16px; text-align: center; opacity: .75; }
             `;
@@ -477,6 +478,13 @@
                 const k = b.dataset.saSort;
                 if (S.sort.key === k) S.sort.dir = S.sort.dir === "asc" ? "desc" : "asc"; else S.sort = { key: k, dir: k === "__label" || k === "__key" ? "asc" : "desc" };
                 paint(); return;
+            }
+            if ((b = e.target.closest("td[data-sa-heat]"))) {      // a day-and-hour figure: list what was raised or changed then
+                const id = "heat|" + b.dataset.saHeat, same = S.pick && S.pick.id === id, [wd, h] = b.dataset.saHeat.split("|");
+                S.pick = same ? null : { id, m: "", row: [], heat: [+wd, h === "" ? -1 : +h], label: b.dataset.label + " · raised or changed" };
+                paint();
+                if (!same) $("saDocsPanel").scrollIntoView({ behavior: "smooth", block: "nearest" });
+                return;
             }
             if ((b = e.target.closest("td.sa-cell"))) {
                 const tr = b.closest("tr"), m = b.dataset.m || "";
@@ -710,12 +718,13 @@
         for (const e of list) { const wd = (D(e.date).getUTCDay() + 6) % 7, k = wd + "|" + e.hour, s = grid.get(k) || new Set(); s.add(e.m + e.key); grid.set(k, s); if (s.size > max) max = s.size; if (e.hour < lo) lo = e.hour; if (e.hour > hi) hi = e.hour; }
         const hours = []; for (let h = lo; h <= hi; h++) hours.push(h);
         const hl = h => (h % 12 || 12) + (h < 12 ? "am" : "pm");
+        const on = id => S.pick && S.pick.id === "heat|" + id ? "sa-on" : "";
         $("saChartTitle").textContent = "Busiest day and hour — orders and quotes raised or changed";
         $("saHeat").innerHTML = !list.length ? `<div class="sa-empty">Nothing with a time of day in this period.</div>`
             : `<table class="sa-heat"><thead><tr><th>Day</th>${hours.map(h => `<th>${hl(h)}</th>`).join("")}<th>Total</th></tr></thead><tbody>`
-            + WD.map((d, wd) => { let t = 0; const tds = hours.map(h => { const n = (grid.get(wd + "|" + h) || new Set()).size; t += n; return `<td style="background:color-mix(in srgb, var(--tree-tint, #3949ab) ${n ? Math.round(12 + 78 * n / max) : 0}%, transparent);${n / max > .55 ? "color:#fff;" : ""}" title="${d} ${hl(h)}: ${n} documents">${n || ""}</td>`; }).join(""); return `<tr><th>${d}</th>${tds}<td><strong>${fmtInt(t)}</strong></td></tr>`; }).join("")
+            + WD.map((d, wd) => { let t = 0; const tds = hours.map(h => { const n = (grid.get(wd + "|" + h) || new Set()).size; t += n; return `<td${n ? ` data-sa-heat="${wd}|${h}" data-label="${d} ${hl(h)}"` : ""} class="${on(wd + "|" + h)}" style="background:color-mix(in srgb, var(--tree-tint, #3949ab) ${n ? Math.round(12 + 78 * n / max) : 0}%, transparent);${n / max > .55 ? "color:#fff;" : ""}${n ? "cursor:pointer;" : ""}" title="${d} ${hl(h)}: ${n} documents${n ? " — click to list them" : ""}">${n || ""}</td>`; }).join(""); return `<tr><th>${d}</th>${tds}<td${t ? ` data-sa-heat="${wd}|" data-label="${d}, all day" style="cursor:pointer;" title="Click to list them"` : ""} class="${on(wd + "|")}"><strong>${fmtInt(t)}</strong></td></tr>`; }).join("")
             + `</tbody></table>`;
-        $("saChartNote").textContent = "Melbourne time. Counts orders and quotes raised or changed in each hour (a document counts once per hour). Posted shipments, invoices and receipts carry a posting date but no time of day in Wiise, so they are not in this grid.";
+        $("saChartNote").textContent = "Melbourne time. Counts orders and quotes raised or changed in each hour (a document counts once per hour). Posted shipments, invoices and receipts carry a posting date but no time of day in Wiise, so they are not in this grid. Click a figure to list its documents.";
     }
 
     // ---------- documents ----------
@@ -724,6 +733,7 @@
         if (S.pick) {
             if (S.pick.m) rows = rows.filter(e => e.m === S.pick.m);
             for (const [dim, k] of (S.pick.row || [])) rows = rows.filter(e => keyOf(e, dim)[0] === k);
+            if (S.pick.heat) { const [wd, h] = S.pick.heat; rows = rows.filter(e => e.hour >= 0 && (h < 0 || e.hour === h) && (D(e.date).getUTCDay() + 6) % 7 === wd); }
         }
         const q = S.docQ.trim().toLowerCase();
         if (q) rows = rows.filter(e => (e.no + " " + (e.order || "") + " " + userLabel(e.user) + " " + e.user + " " + partyName(e) + " " + e.party + " " + e.sp + " " + MBY[e.m].label).toLowerCase().includes(q));
