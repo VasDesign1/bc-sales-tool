@@ -178,6 +178,9 @@
                 .ic-tiles { grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); }
                 .ic-tiles .kpi { padding: 12px 16px; }
                 .ic-tiles .kpi .value { font-size: 23px; }
+                /* panel headings: title and its small print side by side on one line of text, controls at the right */
+                #icRoot .panel-header:not(.ic-bar) { justify-content: flex-start; align-items: baseline; }
+                #icViews { display: inline-flex; flex-wrap: wrap; gap: 8px; }
                 .ic-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 8px 10px; }
                 .ic-bar .lbl, .ic-ctl .lbl { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; opacity: .7; margin-left: 6px; }
                 .ic-bar .lbl:first-child { margin-left: 0; }
@@ -208,7 +211,7 @@
                 <input type="date" id="icFrom" class="mini-select" title="From"><span>to</span><input type="date" id="icTo" class="mini-select" title="To">
                 <label class="chk" id="icSysLbl" title="Fields Wiise rewrites by itself (on an item: Unit Cost, Last Direct Cost and similar, whenever a purchase is posted or costs are adjusted)"><input type="checkbox" id="icSys"> <span id="icSysTxt"></span></label>
                 <label class="chk" id="icSetupLbl" title="The fields somebody fills in during the first hour after creating a record are part of creating it, not changes"><input type="checkbox" id="icSetup"> <span id="icSetupTxt"></span></label>
-            </div><div class="panel-header ic-bar" style="border-bottom:0;">
+            </div><div class="panel-header ic-bar">
                 <span class="lbl">Filter</span>
                 <select id="icUser" class="mini-select" title="Employee"></select>
                 <select id="icField" class="mini-select" title="Field that was changed"></select>
@@ -216,11 +219,12 @@
                 <select id="icType" class="mini-select" title="Kind of change">${opt("", "All kinds")}${opt("1", "Changed")}${opt("0", "New / added")}${opt("2", "Deleted / removed")}</select>
                 <input type="search" id="icQ" class="mini-select" placeholder="Number, name, value…" title="Part of a number, name, field or value">
                 <button type="button" class="more-btn" id="icClear" title="Clear the filters (keeps the period)">Clear filters</button>
+            </div><div class="panel-header ic-bar" style="border-bottom:0;" id="icViewTop">
+                <span class="lbl">View by</span><span id="icViews"></span>
             </div></div>
             <div class="kpi-row ic-tiles" id="icTiles"></div>
             <div class="panel">
                 <div class="panel-header"><h2 id="icSumTitle">Changes by employee</h2><div class="meta" id="icSumMeta"></div>
-                    <div class="ic-ctl"><span class="lbl">View by</span><span id="icViews"></span></div>
                 </div>
                 <div class="table-scroll"><table id="icSum" class="ds-table"><thead></thead><tbody></tbody></table></div>
                 <div class="ic-note" id="icSumNote"></div>

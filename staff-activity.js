@@ -318,6 +318,8 @@
                 .sa-tiles .kpi .value { font-size: 23px; }
                 .sa-tiles.has-pick .kpi:not(.active) { opacity: .5; }
                 .sa-tiles .kpi.active { outline: 3px solid #ffd54f; outline-offset: 1px; }
+                /* panel headings: title and its small print side by side on one line of text, controls at the right */
+                #saRoot .panel-header:not(.sa-bar) { justify-content: flex-start; align-items: baseline; }
                 .sa-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 8px 10px; }
                 #saDocs th:last-child, #saDocs td:last-child { min-width: 220px; }
                 #saDocs td:nth-child(6) { max-width: 210px; overflow: hidden; text-overflow: ellipsis; }
@@ -367,15 +369,11 @@
                 <button type="button" class="more-btn" id="saClear" title="Clear the filters (keeps the period)">Clear filters</button>
             </div><div class="panel-header sa-bar" style="border-bottom:0;" id="saViewTop">
                 <span class="lbl">View by</span>${VIEWS.map(v => `<button type="button" class="gp-filter-btn" data-sa-view="${v[0]}">${v[1]}</button>`).join("")}
-                <span class="lbl">Then by</span><select data-sa-then="0" class="mini-select" title="Second level: click a row to open it"></select><select data-sa-then="1" class="mini-select" title="Third level"></select><select data-sa-then="2" class="mini-select" title="Fourth level"></select>
+                <span class="lbl">Then by</span><select id="saThen" data-sa-then="0" class="mini-select" title="Second level: click a row to open it"></select><select id="saThen2" data-sa-then="1" class="mini-select" title="Third level: open a row, then open one of its rows"></select><select id="saThen3" data-sa-then="2" class="mini-select" title="Fourth level"></select>
             </div></div>
             <div class="kpi-row sa-tiles" id="saTiles"></div>
             <div class="panel" id="saPanel">
                 <div class="panel-header"><h2 id="saTableTitle">Activity by employee</h2><div class="meta" id="saMeta"></div>
-                    <div class="sa-ctl">
-                        <span class="lbl">View by</span>${VIEWS.map(v => `<button type="button" class="gp-filter-btn" data-sa-view="${v[0]}">${v[1]}</button>`).join("")}
-                        <span class="lbl">Then by</span><select id="saThen" data-sa-then="0" class="mini-select" title="Second level: click a row to open it"></select><select id="saThen2" data-sa-then="1" class="mini-select" title="Third level: open a row, then open one of its rows"></select><select id="saThen3" data-sa-then="2" class="mini-select" title="Fourth level"></select>
-                    </div>
                 </div>
                 <div class="table-scroll"><table id="saTable" class="ds-table"><thead></thead><tbody></tbody></table></div>
                 <div class="sa-note" id="saTableNote"></div>
@@ -529,7 +527,6 @@
         fill("saUser", filtered({ noUser: true }), "user", S.user, "All employees");
         fill("saSp", filtered({ noSp: true }), "sp", S.sp, "All salespeople / purchasers");
         const levels = thenList();
-        // the same boxes sit twice: under the filters and in the table heading
         root.querySelectorAll("[data-sa-then]").forEach(el => {
             const i = +el.dataset.saThen, taken = levels.slice(0, i);
             el.disabled = false;
