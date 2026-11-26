@@ -335,6 +335,12 @@
                 .sa-bar input[type=date], .sa-bar input[type=search] { font: inherit; font-size: 12px; }
                 .sa-ctl { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-left: auto; }
                 .sa-ctl .lbl { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; opacity: .7; margin-left: 8px; }
+                /* the activity table on one page: tight rows, headings on two lines, no sideways scroll; it only scrolls inside its box once it is taller than the screen */
+                #saPanel .table-scroll { max-height: calc(100vh - 110px); }
+                #saTable { width: 100%; }
+                #saTable th { white-space: normal; font-size: 9.5px; letter-spacing: .3px; line-height: 1.25; padding: 6px 6px; vertical-align: bottom; }
+                #saTable td { padding: 2px 6px; font-size: 12px; line-height: 1.4; white-space: nowrap; }
+                #saTable th:first-child, #saTable td:first-child { max-width: 190px; overflow: hidden; text-overflow: ellipsis; padding-left: 12px; }
                 #saTable td.sa-cell { cursor: pointer; }
                 #saTable td.sa-cell:hover { text-decoration: underline; }
                 #saTable td.sa-on, #saTable th.sa-on { outline: 2px solid #ffd54f; outline-offset: -2px; }
