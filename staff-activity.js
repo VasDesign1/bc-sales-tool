@@ -32,13 +32,16 @@
     const MEAS = [
         { k: "soC", side: "sales", label: "Sales orders raised",        short: "Orders raised",      tint: "k-rev",  stamp: true },
         { k: "soM", side: "sales", label: "Sales orders changed",       short: "Orders changed",     tint: "k-qty",  stamp: true },
+        { k: "soD", side: "sales", label: "Sales orders deleted",       short: "Orders deleted",     tint: "k-gpp",  stamp: true, gone: true },
         { k: "sqC", side: "sales", label: "Quotes raised",              short: "Quotes raised",      tint: "k-loc",  stamp: true },
         { k: "sqV", side: "sales", label: "Quotes turned into orders",  short: "Quotes → orders",    tint: "k-avg",  stamp: true },
+        { k: "sqD", side: "sales", label: "Quotes deleted",             short: "Quotes deleted",     tint: "k-gpp",  stamp: true, gone: true },
         { k: "sh",  side: "sales", label: "Shipments posted",           short: "Shipments",          tint: "k-inv" },
         { k: "si",  side: "sales", label: "Sales invoices posted",      short: "Invoices",           tint: "k-gp" },
         { k: "sc",  side: "sales", label: "Sales credit memos posted",  short: "Credit memos",       tint: "k-gpp" },
         { k: "poC", side: "purch", label: "Purchase orders raised",     short: "POs raised",         tint: "k-rev",  stamp: true },
         { k: "poM", side: "purch", label: "Purchase orders changed",    short: "POs changed",        tint: "k-qty",  stamp: true },
+        { k: "poD", side: "purch", label: "Purchase orders deleted",    short: "POs deleted",        tint: "k-gpp",  stamp: true, gone: true },
         { k: "pr",  side: "purch", label: "Purchase receipts posted",   short: "Receipts",           tint: "k-inv" },
         { k: "pi",  side: "purch", label: "Purchase invoices posted",   short: "Purch. invoices",    tint: "k-gp" },
         { k: "pc",  side: "purch", label: "Purchase credit memos posted", short: "Purch. credits",   tint: "k-gpp" },
@@ -125,6 +128,25 @@
         const ev = [];
         const byOrder = bag => { const m = new Map(); for (const no in bag) { const x = bag[no]; if (!x.o) continue; const t = m.get(x.o) || { a: 0, c: x.c, b: x.b, s: x.s }; t.a += x.a || 0; m.set(x.o, t); } return m; };
         const siO = byOrder(d.si), piO = byOrder(d.pi), shO = byOrder(d.sh), prO = byOrder(d.pr);
+        // Which quote an order was made from. Wiise writes that on the order as it
+        // is created (no Change Log line), so it is known for certain only once the
+        // order has been removed (x.q, read from its removal line). Until then: a
+        // quote removed by the same person within two minutes of the order's first
+        // line, for the same customer, is the quote it was made from.
+        const mins = ts => Date.UTC(+ts.slice(0, 4), +ts.slice(5, 7) - 1, +ts.slice(8, 10), +ts.slice(11, 13), +ts.slice(14, 16)) / 60000;
+        const quoteOf = new Map(), turned = new Set(), goneQuotes = new Map();      // order no → quote no · quotes that became orders · user → removed quotes
+        for (const key in d.docs) { const x = d.docs[key]; if (key.startsWith("S1|") && x.q) { quoteOf.set(key.slice(3), x.q); turned.add(x.q); } }
+        for (const key in d.docs) { const x = d.docs[key]; if (key.startsWith("S0|") && x.d && !turned.has(key.slice(3))) { const l = goneQuotes.get(x.d[1]) || []; l.push({ no: key.slice(3), m: mins(x.d[0]), cu: x.cu || "" }); goneQuotes.set(x.d[1], l); } }
+        for (const key in d.docs) {
+            const x = d.docs[key];
+            if (!key.startsWith("S1|") || x.q || !x.c) continue;
+            const m = mins(x.f[0]); let best = null;
+            for (const qd of (goneQuotes.get(x.f[1]) || [])) {
+                if (turned.has(qd.no) || Math.abs(qd.m - m) > 2 || (qd.cu && x.cu && qd.cu !== x.cu)) continue;
+                if (!best || Math.abs(qd.m - m) < Math.abs(best.m - m)) best = qd;
+            }
+            if (best) { quoteOf.set(key.slice(3), best.no); turned.add(best.no); }
+        }
         for (const key in d.docs) {
             const x = d.docs[key], kind = key[0], type = key[1], no = key.slice(3);
             if (type !== "1" && !(kind === "S" && type === "0")) continue;       // orders, and sales quotes
@@ -134,7 +156,14 @@
             if (x.c) {
                 const stamp = { date: x.f[0].slice(0, 10), hour: +x.f[0].slice(11, 13), time: x.f[0].slice(11, 16), user: x.f[1] };
                 ev.push(Object.assign({ m: type === "0" ? "sqC" : kind === "S" ? "soC" : "poC" }, base, stamp));
-                if (kind === "S" && type === "1" && x.q) ev.push(Object.assign({ m: "sqV", quote: x.q }, base, stamp));
+                if (kind === "S" && type === "1" && quoteOf.has(no)) ev.push(Object.assign({ m: "sqV", quote: quoteOf.get(no), quoteGuess: !x.q }, base, stamp));
+            }
+            // Deleted = removed from Wiise without ever being shipped, received or
+            // invoiced (an order) or without becoming an order (a quote). Counted
+            // on the day it was removed, for the person who removed it.
+            if (x.d && (type === "1" ? base.dropped : !turned.has(no))) {
+                ev.push(Object.assign({ m: type === "0" ? "sqD" : kind === "S" ? "soD" : "poD", raised: x.c ? x.f : null }, base,
+                    { date: x.d[0].slice(0, 10), hour: +x.d[0].slice(11, 13), time: x.d[0].slice(11, 16), user: x.d[1] }));
             }
             if (type === "1" && x.e) for (const ek in x.e) {
                 const cut = ek.indexOf("|"), dh = ek.slice(0, cut), fields = x.e[ek][1].map(i => d.fields[i]).filter(f => f && !NOISE.has(f));
@@ -261,7 +290,7 @@
     const cnt = (n, k) => n.m[k] ? n.m[k].size : 0;
     const amt = (n, k) => { let s = 0; if (n.m[k]) for (const v of n.m[k].values()) s += v; return s; };
     const val = (n, k) => S.show === "amount" ? amt(n, k) : cnt(n, k);
-    const totalOf = n => measures().reduce((s, m) => s + val(n, m.k), 0);
+    const totalOf = n => measures().reduce((s, m) => s + (m.gone ? 0 : val(n, m.k)), 0);      // deleted documents are shown, not added to the total
     const fmtVal = v => S.show === "amount" ? (v ? money0(v) : "—") : (v ? fmtInt(v) : "—");
 
     // ---------- one-off page build ----------
@@ -502,7 +531,7 @@
         const th = (k, l, numCol, title) => `<th data-sa-sort="${k}" style="cursor:pointer;"${title ? ` title="${escapeAttr(title)}"` : ""} class="${numCol ? "num " : ""}${S.sort.key === k ? "sorted-" + S.sort.dir : ""}">${esc(l)}</th>`;
         $("saTable").querySelector("thead").innerHTML = "<tr>" + th(S.view === "period" ? "__key" : "__label", viewName, false)
             + ms.map(m => th(m.k, m.short, true, m.label + (S.show === "amount" ? " — value excl. tax" : " — number of documents"))).join("")
-            + th("__total", S.show === "amount" ? "All value" : "All documents", true, "The columns added together")
+            + th("__total", S.show === "amount" ? "All value" : "All documents", true, "The columns added together, leaving out the deleted ones")
             + th("__parties", S.side === "purch" ? "Suppliers" : S.side === "sales" ? "Customers" : "Customers / suppliers", true, "How many different customers or suppliers these documents were for") + "</tr>";
         const cells = (n) => ms.map(m => { const v = val(n, m.k); return `<td class="num${v ? " sa-cell" : ""}${S.pick && S.pick.id === n.key + "|" + m.k ? " sa-on" : ""}" data-m="${m.k}">${fmtVal(v)}</td>`; }).join("")
             + `<td class="num sa-cell${S.pick && S.pick.id === n.key + "|" ? " sa-on" : ""}" data-m="">${fmtVal(totalOf(n))}</td><td class="num">${fmtInt(n.parties.size)}</td>`;
@@ -518,7 +547,7 @@
             ? acc.join("") + `<tr class="ds-total" data-key="sa|total" data-label="All" data-row="[]"><td>Total</td>${cells(tot)}</tr>`
             : `<tr><td colspan="${ms.length + 3}" class="empty">Nothing recorded for this period and these filters.</td></tr>`;
         $("saMeta").textContent = rows.length ? fmtInt(top.size) + " " + ({ user: ["employee", "employees"], branch: ["branch", "branches"], party: ["customer / supplier", "customers / suppliers"], sp: ["salesperson / purchaser", "salespeople / purchasers"], period: ["period", "periods"] })[S.view][top.size === 1 ? 0 : 1] + " · " + dateLabel(S.from) + " to " + dateLabel(S.to) : "";
-        $("saTableNote").textContent = "A document counts once per row however many times it was touched. “Changed” leaves out the first hour of the person who raised the order (that is part of raising it) and the fields Wiise fills in by itself on release and posting. Click a figure to list its documents"
+        $("saTableNote").textContent = "Deleted = removed from Wiise without a shipment, receipt or invoice (an order) or without becoming an order (a quote); it is counted for the person who removed it and is not added into the All column. A document counts once per row however many times it was touched. “Changed” leaves out the first hour of the person who raised the order (that is part of raising it) and the fields Wiise fills in by itself on release and posting. Click a figure to list its documents"
             + (S.then ? "; click a row to open it." : ".");
     }
 
@@ -629,9 +658,10 @@
     function detail(e) {
         const bits = [];
         if (e.m === "soM" || e.m === "poM") bits.push(plural(e.n, "change") + ": " + e.fields.slice(0, 6).join(", ") + (e.fields.length > 6 ? " +" + (e.fields.length - 6) + " more" : ""));
-        if (e.m === "sqV") bits.push("from quote " + e.quote);
+        if (e.m === "sqV") bits.push("from quote " + e.quote + (e.quoteGuess ? " (matched by time and customer)" : ""));
+        if (MBY[e.m].gone) bits.push(e.raised ? "raised " + dateLabel(e.raised[0].slice(0, 10)) + " by " + userLabel(e.raised[1]) : "raised before the Change Log started");
         if ((e.doc === "order" || e.doc === "quote") && e.au && e.au !== e.user) bits.push("assigned to " + userLabel(e.au));
-        if (e.doc === "order" || e.doc === "quote") bits.push(e.open ? "still open" : e.closed ? (e.doc === "order" && e.dropped ? "deleted " : "closed ") + dateLabel(e.closed[0].slice(0, 10)) + " by " + userLabel(e.closed[1]) + (e.doc === "order" && e.dropped ? " with no shipment or invoice" : "") : "no longer open");
+        if (e.doc === "order" || e.doc === "quote") bits.push(e.open ? "still open" : e.closed ? (e.doc === "order" && e.dropped ? "deleted " : e.doc === "quote" && MBY[e.m].gone ? "deleted " : "closed ") + dateLabel(e.closed[0].slice(0, 10)) + " by " + userLabel(e.closed[1]) + (e.doc === "order" && e.dropped ? " with no shipment or invoice" : "") : "no longer open");
         if (e.via) bits.push("posted with invoice " + e.via);
         if (e.lines) bits.push(plural(e.lines, "line"));
         if (e.approx) bits.push("value estimated from the GST-inclusive total");

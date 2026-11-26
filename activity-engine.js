@@ -81,7 +81,7 @@ async function activityTopUp(st, env) {
         const [live, gone, goneParty] = await Promise.all([
             odata("ChangeLogEntries", clBase + " and Type_of_Change ne 'Deletion'", CL_SEL, "Change log"),
             odata("ChangeLogEntries", clBase + " and Type_of_Change eq 'Deletion' and Field_No eq 3", CL_SEL, "Change log (closed)"),
-            odata("ChangeLogEntries", clBase + " and Type_of_Change eq 'Deletion' and Field_No eq 2", CL_SEL, "Change log (closed, party)"),
+            odata("ChangeLogEntries", clBase + " and Type_of_Change eq 'Deletion' and (Field_No eq 2 or Field_No eq 151)", CL_SEL, "Change log (closed, party)"),
         ]);
         if (!gone.length && live.length > 3000) warn("  [Change log] no closing lines among " + live.length + " lines — check the Field_No 3 filter");
         clRows = live.concat(gone, goneParty);
@@ -111,9 +111,10 @@ async function activityTopUp(st, env) {
         if (!d) d = st.docs[key] = { f: [ts, user], f0: sec, c: 0, n: 0 };
         d.n++;
         if (r.Type_of_Change === "Deletion") {
-            if (r.Field_No === 2) {                        // the customer / vendor the removed document was for
-                const party = String(r.Old_Value == null ? "" : r.Old_Value).trim();
-                if (party && !d.cu) { d.cu = party; clParty++; }
+            if (r.Field_No === 2 || r.Field_No === 151) {
+                const v = String(r.Old_Value == null ? "" : r.Old_Value).trim();
+                if (r.Field_No === 2) { if (v && !d.cu) { d.cu = v; clParty++; } }       // the customer / vendor the removed document was for
+                else if (v) d.q = v;                                                    // field 151 Quote No.: the quote the order was made from
                 if (seenDel.has(key) || clSplit) { d.n--; continue; }
             }
             if (!seenDel.has(key)) { seenDel.add(key); if (!d.d) clDeleted++; d.d = [ts, user]; }
@@ -232,6 +233,75 @@ async function activityTopUp(st, env) {
     } catch (e) {
         st.meta.icErr = String(e.message || e).slice(0, 200);
         warn("  [Item change log] not added this run: " + st.meta.icErr);
+    }
+
+    // =====================================================
+    // 1c. CHANGE LOG → customer and vendor card changes
+    //     (Operations → Customer Changes / Vendor Changes)
+    //     18 Customer, 222 Ship-to Address, 287 Customer Bank Account;
+    //     23 Vendor, 224 Order Address, 288 Vendor Bank Account.
+    //     Same line shape as the item changes. Bank account numbers are
+    //     kept by their last three digits only: the file is opened with
+    //     the passphrase every user of the tool holds.
+    // =====================================================
+    {
+        const CARD_DROP = /^(Last (Date|Time|Date ?Time) Modified|Last Modified Date Time|.+ Id)$/i;
+        const SECRET = /(Bank Account No|Bank Branch No|IBAN|SWIFT|BSB|Credit Card|Tax File)/i;
+        const maskV = (v) => v ? "•••" + v.slice(-3) : "";
+        const clipV = (s) => s.length > 140 ? s.slice(0, 139) + "…" : s;
+        for (const g of [
+            { key: "cc", from: "custFrom", label: "Customer", tables: { 18: "C", 222: "A", 287: "B" } },
+            { key: "vc", from: "vendFrom", label: "Vendor", tables: { 23: "C", 224: "A", 288: "B" } },
+        ]) {
+            try {
+                delete st.meta[g.key + "Err"];
+                if (light && cur[g.key] == null) continue;      // not built by the robot yet: the whole history is not a job for a live top-up
+                if (cur[g.key] == null) cur[g.key] = 0;
+                if (!st[g.key]) st[g.key] = [];
+                const bag = st[g.key], c0 = cur[g.key];
+                const rows = await odata("ChangeLogEntries", "Entry_No gt " + c0 + " and (" + Object.keys(g.tables).map(n => "Table_No eq " + n).join(" or ") + ")", CL_SEL, g.label + " change log");
+                rows.sort((a, b) => a.Entry_No - b.Entry_No);
+                const whole = new Map(), freq = new Map();
+                let max = c0, kept = 0, neu = 0, gone = 0, dropped = 0, from = st.meta[g.from] || "";
+                for (const r of rows) {
+                    if (r.Entry_No <= c0) continue;
+                    if (r.Entry_No > max) max = r.Entry_No;
+                    const t = g.tables[r.Table_No];
+                    if (!t) continue;
+                    const no = String(r.Primary_Key_Field_1_Value || ""), sub = t === "C" ? "" : String(r.Primary_Key_Field_2_Value || "");
+                    if (!no) continue;
+                    const cap = String(r.Field_Caption || "");
+                    if (CARD_DROP.test(cap)) { dropped++; continue; }
+                    const when = new Date(r.Date_and_Time), sec = Math.floor(when.getTime() / 1000), ts = mel(when), user = upper(r.User_ID);
+                    if (!from || ts < from) from = ts;
+                    let oldV = String(r.Old_Value == null ? "" : r.Old_Value).trim(), newV = String(r.New_Value == null ? "" : r.New_Value).trim();
+                    if (SECRET.test(cap)) { oldV = maskV(oldV); newV = maskV(newV); }
+                    const type = r.Type_of_Change === "Insertion" ? 0 : r.Type_of_Change === "Deletion" ? 2 : 1;
+                    if (type !== 1) {
+                        const k = t + "|" + no + "|" + sub + "|" + type + "|" + user;
+                        let w = whole.get(k);
+                        if (!w || sec - w.sec > 300) {
+                            w = { sec, row: [ts, user, no, t, type, -1, "", "", sub, 0] };
+                            whole.set(k, w); bag.push(w.row); kept++;
+                            if (type === 0) neu++; else gone++;
+                        }
+                        w.row[9]++;
+                        if (/^Name$/i.test(cap)) { if (type === 0) w.row[7] = clipV(newV); else w.row[6] = clipV(oldV); }
+                        continue;
+                    }
+                    bag.push([ts, user, no, t, 1, fIdx(cap), clipV(oldV), clipV(newV), sub]);
+                    kept++;
+                    freq.set(cap, (freq.get(cap) || 0) + 1);
+                }
+                cur[g.key] = max; st.meta[g.from] = from;
+                log(g.label + " change log: " + rows.length + " lines read · " + kept + " kept (" + neu + " new records, " + gone + " deleted) · " + dropped + " bookkeeping lines left out · file holds " + bag.length + " lines" + (from ? " from " + from.slice(0, 10) : ""));
+                const top = [...freq].sort((a, b) => b[1] - a[1]).slice(0, 30).map(x => x[0] + " " + x[1]).join(" · ");
+                if (top) log("  " + g.label.toLowerCase() + " changes by field: " + top);
+            } catch (e) {
+                st.meta[g.key + "Err"] = String(e.message || e).slice(0, 200);
+                warn("  [" + g.label + " change log] not added this run: " + st.meta[g.key + "Err"]);
+            }
+        }
     }
 
     // =====================================================

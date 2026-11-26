@@ -1958,6 +1958,8 @@
             <div class="group-label restrictedNav" style="display:none;">Operations</div>
             <a data-tab="staffActivity" class="restrictedNav" style="display:none;">Staff Activity</a>
             <a data-tab="itemChanges" class="restrictedNav" style="display:none;">Item Changes</a>
+            <a data-tab="customerChanges" class="restrictedNav" style="display:none;">Customer Changes</a>
+            <a data-tab="vendorChanges" class="restrictedNav" style="display:none;">Vendor Changes</a>
         </nav>
     </aside>
 
@@ -4329,6 +4331,9 @@
             <section data-tab-content="staffActivity" style="display:none;"><div id="saRoot"></div></section>
             <!-- TAB: Item Changes (owner-only, 2026-11-26). Built and drawn by item-changes.js; same file as Staff Activity. -->
             <section data-tab-content="itemChanges" style="display:none;"><div id="icRoot"></div></section>
+            <!-- TABS: Customer Changes / Vendor Changes (owner-only, 2026-11-26). item-changes.js moves #icRoot into whichever of the three is open. -->
+            <section data-tab-content="customerChanges" style="display:none;"></section>
+            <section data-tab-content="vendorChanges" style="display:none;"></section>
 
             <section data-tab-content="ordersPastDel" style="display:none;">
                 <div class="placeholder">
@@ -4762,6 +4767,8 @@ const TAB_TITLES = {
     pnl: "Profit & Loss (General Ledger)",
     staffActivity: "Staff Activity",
     itemChanges: "Item Changes",
+    customerChanges: "Customer Changes",
+    vendorChanges: "Vendor Changes",
 };
 
 // ============================================================
@@ -5973,7 +5980,7 @@ function setActiveTab(name) {
         nextPaint().then(eomOpenWithProgress)
             .catch(e => { console.warn("[EOM] staged build failed, plain render instead:", e); if (state.tab === "eom") renderCurrentTab(); })
             .finally(hideBusy);
-    } else if (state.invoices.length || name === "pnl" || name === "staffActivity" || name === "itemChanges") renderCurrentTab();
+    } else if (state.invoices.length || name === "pnl" || name === "staffActivity" || name === "itemChanges" || name === "customerChanges" || name === "vendorChanges") renderCurrentTab();
     window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -6023,6 +6030,8 @@ function renderCurrentTab() {
         case "pnl":                    renderPnl(); break;
         case "staffActivity":          if (typeof renderStaffActivity === "function") renderStaffActivity(); break;
         case "itemChanges":            if (typeof renderItemChanges === "function") renderItemChanges(); break;
+        case "customerChanges":        if (typeof renderCustomerChanges === "function") renderCustomerChanges(); break;
+        case "vendorChanges":          if (typeof renderVendorChanges === "function") renderVendorChanges(); break;
     }
     // Re-sync the per-chart Gross/Adj pill active-state after every tab render.
     paintChartViewToggles();
@@ -17862,8 +17871,8 @@ const RESTRICTED_NAV_OWNER = "faiko@vicair.com.au";
 // Shipped Not Invoiced (Lists group) is open to everyone (Faik, 2026-11-18);
 // the two unbuilt Lists tabs stay owner-only.
 // Staff Activity (Operations group) is owner-only (Faik, 2026-11-25).
-// Item Changes (Operations group) is owner-only (Faik, 2026-11-26).
-const RESTRICTED_TABS = new Set(["branchMarginRate", "keyCustomers", "ordersPastDel", "staffActivity", "itemChanges"]);
+// Item / Customer / Vendor Changes (Operations group) are owner-only (Faik, 2026-11-26).
+const RESTRICTED_TABS = new Set(["branchMarginRate", "keyCustomers", "ordersPastDel", "staffActivity", "itemChanges", "customerChanges", "vendorChanges"]);
 // The Finance group (P&L tab) has its own allow-list (Faik 2026-09-23).
 // Finance view (P&L tab + Overview reconciliation rows): Faik, Michael,
 // Daniel and Shane — approved by Faik 2026-10-03. Nobody else.

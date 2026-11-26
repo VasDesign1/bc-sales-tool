@@ -1,24 +1,32 @@
 /* ============================================================
-   ITEM CHANGES  (Operations → Item Changes; Faik, 2026-11-26)
-   Every change made on an item card: who, when, which field, the
-   old value and the new value. Also new and deleted items, and the
-   lists that hang off the card when Wiise logs them (units of
-   measure, item suppliers, kit contents).
+   CARD CHANGES — three tabs in the Operations group, one build:
+     Item Changes       (itemChanges,     Faik 2026-11-26)
+     Customer Changes   (customerChanges, Faik 2026-11-26)
+     Vendor Changes     (vendorChanges,   Faik 2026-11-26)
+   Every change made on a card: who, when, which field, the old value
+   and the new value. Also new and deleted records, and the lists that
+   hang off the card when Wiise logs them.
 
-   OWNER-ONLY: the nav link carries class restrictedNav and the tab
-   is in RESTRICTED_TABS (index.html).
+   OWNER-ONLY: the nav links carry class restrictedNav and the tabs
+   are in RESTRICTED_TABS (index.html).
 
-   Data: the same file as Staff Activity (snapshots/activity.bin,
-   robot scripts/activity.js, section 1b). It is downloaded once and
-   shared: this tab asks staff-activity.js for it (staffActivity.ensure).
-     data.ic     [when, user, item, part, type, field, old, new, sub, n]
-                 part  I item card · S stock card per branch (stockkeeping unit) · U unit of measure · V supplier · K kit line
+   ONE page, three uses: the markup is built once in #icRoot and MOVED
+   into whichever of the three tab sections is open; KINDS below says
+   what differs (which rows, which words, which Wiise page). Each kind
+   keeps its own filters.
+
+   Data: the same file as Staff Activity (snapshots/activity.bin; rules
+   in activity-engine.js sections 1b and 1c). It is downloaded once and
+   shared: this file asks staff-activity.js for it (staffActivity.ensure).
+     data.ic / data.cc / data.vc
+                 [when, user, number, part, type, field, old, new, sub, n]
                  type  0 new · 1 changed · 2 deleted   (0 / 2: one line per record, n fields)
      data.items  item number → [description, category]
+     data.cust / data.vend   number → name
    "Get latest from Wiise" (staffActivity.live) adds what Wiise holds
-   beyond the file, on screen only; one press serves both tabs.
-   The history starts the day the Item table was switched on in the
-   Wiise Change Log Setup; nothing earlier exists.
+   beyond the file, on screen only; one press serves every tab.
+   The history starts the day each table was switched on in the Wiise
+   Change Log Setup; nothing earlier exists.
 
    Keep help.js in step when tiles, columns or controls change.
    ============================================================ */
@@ -27,31 +35,54 @@
     const $ = id => document.getElementById(id);
     const esc = s => escapeHtml(s == null ? "" : s);
 
-    const PARTS = { I: "Item card", S: "Stock card (per branch)", U: "Units of measure", V: "Suppliers", K: "Kit contents" };
-    const WHOLE = {
-        I: ["New item created", "", "Item deleted"],
-        U: ["Unit of measure added", "", "Unit of measure removed"],
-        V: ["Supplier added", "", "Supplier removed"],
-        K: ["Kit line added", "", "Kit line removed"],
-        S: ["Stock card created", "", "Stock card deleted"],
+    const KINDS = {
+        item: {
+            host: "itemChanges", rows: "ic", from: "itemFrom", err: "icErr", main: "I", page: 30,
+            one: "item", many: "items", One: "Item", name: (d, no) => (d.items && d.items[no]) || ["", ""], nameCol: "Description",
+            parts: { I: "Item card", S: "Stock card (per branch)", U: "Units of measure", V: "Suppliers", K: "Kit contents" },
+            whole: { I: ["New item created", "", "Item deleted"], U: ["Unit of measure added", "", "Unit of measure removed"], V: ["Supplier added", "", "Supplier removed"],
+                K: ["Kit line added", "", "Kit line removed"], S: ["Stock card created", "", "Stock card deleted"] },
+            sub: (d, t, sub) => t === "V" ? ((d.vend || {})[sub] ? d.vend[sub] + " (" + sub + ")" : sub) : t === "K" ? "line " + sub : t === "S" ? "branch " + sub : sub,
+            // Fields Wiise rewrites by itself when a purchase is posted or costs are
+            // adjusted. Nobody typed these; they are hidden until asked for.
+            system: new Set(["Unit Cost", "Last Direct Cost", "Cost is Adjusted", "Last Unit Cost Calc. Date", "Rolled-up Material Cost", "Rolled-up Capacity Cost",
+                "Rolled-up Subcontracted Cost", "Rolled-up Mfg. Ovhd Cost", "Rolled-up Cap. Overhead Cost", "Single-Level Material Cost", "Single-Level Capacity Cost",
+                "Single-Level Subcontrd. Cost", "Single-Level Cap. Ovhd Cost", "Single-Level Mfg. Ovhd Cost", "Low-Level Code", "Last Counting Period Update",
+                "Next Counting Start Date", "Next Counting End Date", "Last Phys. Invt. Date", "Coupled to Dataverse", "Allow Online Adjustment",
+                "Profit %", "Last Landed Cost", "Search Description", "Has Sales Forecast"]),
+            off: "Item changes are collected from the Wiise Change Log once the Item table (27) is switched on in Change Log Setup and people have signed in again; the robot then adds them on its next run.",
+        },
+        customer: {
+            host: "customerChanges", rows: "cc", from: "custFrom", err: "ccErr", main: "C", page: 21,
+            one: "customer", many: "customers", One: "Customer", name: (d, no) => [(d.cust && d.cust[no]) || "", ""], nameCol: "Name",
+            parts: { C: "Customer card", A: "Ship-to addresses", B: "Bank accounts" },
+            whole: { C: ["New customer created", "", "Customer deleted"], A: ["Ship-to address added", "", "Ship-to address removed"], B: ["Bank account added", "", "Bank account removed"] },
+            sub: (d, t, sub) => sub, system: new Set(["Search Name"]),
+            off: "Customer changes are collected from the Wiise Change Log once the Customer table (18) is switched on in Change Log Setup and people have signed in again; the robot then adds them on its next run.",
+        },
+        vendor: {
+            host: "vendorChanges", rows: "vc", from: "vendFrom", err: "vcErr", main: "C", page: 26,
+            one: "vendor", many: "vendors", One: "Vendor", name: (d, no) => [(d.vend && d.vend[no]) || "", ""], nameCol: "Name",
+            parts: { C: "Vendor card", A: "Order addresses", B: "Bank accounts" },
+            whole: { C: ["New vendor created", "", "Vendor deleted"], A: ["Order address added", "", "Order address removed"], B: ["Bank account added", "", "Bank account removed"] },
+            sub: (d, t, sub) => sub, system: new Set(["Search Name"]),
+            off: "Vendor changes are collected from the Wiise Change Log once the Vendor table (23) is switched on in Change Log Setup and people have signed in again; the robot then adds them on its next run.",
+        },
     };
-    // Fields Wiise rewrites by itself when a purchase is posted or costs are
-    // adjusted. Nobody typed these; they are hidden until asked for.
-    const SYSTEM = new Set(["Unit Cost", "Last Direct Cost", "Cost is Adjusted", "Last Unit Cost Calc. Date", "Rolled-up Material Cost", "Rolled-up Capacity Cost",
-        "Rolled-up Subcontracted Cost", "Rolled-up Mfg. Ovhd Cost", "Rolled-up Cap. Overhead Cost", "Single-Level Material Cost", "Single-Level Capacity Cost",
-        "Single-Level Subcontrd. Cost", "Single-Level Cap. Ovhd Cost", "Single-Level Mfg. Ovhd Cost", "Low-Level Code", "Last Counting Period Update",
-        "Next Counting Start Date", "Next Counting End Date", "Last Phys. Invt. Date", "Coupled to Dataverse", "Allow Online Adjustment",
-        "Profit %", "Last Landed Cost", "Search Description", "Has Sales Forecast"]);
-    const SETUP_MIN = 60;      // fields the creator fills in within this many minutes of creating an item are part of creating it
-    const VIEWS = [["user", "Employee"], ["item", "Item"], ["field", "Field"], ["day", "Day"]];
+    const SETUP_MIN = 60;      // fields the creator fills in within this many minutes of creating a record are part of creating it
+    const cap1 = s => s.charAt(0).toUpperCase() + s.slice(1);
+    const views = () => [["user", "Employee"], ["item", K.One], ["field", "Field"], ["day", "Day"]];
 
-    const S = {
+    const newState = () => ({
         src: null, ev: [],
         range: "month", from: "", to: "",
         user: "", field: "", part: "", type: "", q: "", sys: false, setup: false,
         view: "user", sort: { key: "n", dir: "desc" }, pick: null,
         sumLimit: 200, limit: 300,
-    };
+    });
+    const STATES = { item: newState(), customer: newState(), vendor: newState() };
+    let kind = "item", K = KINDS.item, S = STATES.item;
+
     const allowed = () => typeof currentSignInName === "function" && currentSignInName() === RESTRICTED_NAV_OWNER;
     const SA = () => window.staffActivity;
     const plural = (n, w) => fmtInt(n) + " " + w + (n === 1 ? "" : "s");
@@ -66,7 +97,7 @@
     const dateLabel = s => { if (!s) return "—"; const d = D(s); return String(d.getUTCDate()).padStart(2, "0") + " " + MON[d.getUTCMonth()] + " " + d.getUTCFullYear(); };
     const dayLabel = s => { const d = D(s); return WD[(d.getUTCDay() + 6) % 7] + " " + dateLabel(s); };
     const whenLabel = ts => dateLabel(ts.slice(0, 10)) + " " + ts.slice(11, 16);
-    const heldFrom = () => { const d = SA() && SA().state.data; return String((d && d.meta && d.meta.itemFrom) || "").slice(0, 10); };
+    const heldFrom = () => { const d = SA() && SA().state.data; return String((d && d.meta && d.meta[K.from]) || "").slice(0, 10); };
     function setRange(r) {
         const t = today(); S.range = r;
         if (r === "today") { S.from = S.to = t; }
@@ -88,20 +119,19 @@
 
     // ---------- file → lines ----------
     function build(d) {
-        const out = [], items = d.items || {}, fields = d.fields || [], vend = d.vend || {};
+        const out = [], fields = d.fields || [], rows = d[K.rows] || [];
         const mins = ts => Date.UTC(+ts.slice(0, 4), +ts.slice(5, 7) - 1, +ts.slice(8, 10), +ts.slice(11, 13), +ts.slice(14, 16)) / 60000;
-        const born = new Map();      // item → [minute, user] of its creation
-        for (const r of (d.ic || [])) if (r[3] === "I" && r[4] === 0) born.set(r[2], [mins(r[0]), r[1]]);
-        for (const r of (d.ic || [])) {
-            const ts = r[0], t = r[3], type = r[4], sub = r[8] || "", it = items[r[2]] || ["", ""];
-            const subLabel = !sub ? "" : t === "V" ? (vend[sub] ? vend[sub] + " (" + sub + ")" : sub) : t === "K" ? "line " + sub : t === "S" ? "branch " + sub : sub;
-            let field, sys = false;
-            if (type === 1) { const cap = fields[r[5]] || "(field)"; field = cap + (subLabel ? " — " + subLabel : ""); sys = t === "I" && SYSTEM.has(cap); }
-            else field = WHOLE[t][type] + (subLabel ? " — " + subLabel : "");
-            out.push({ ts, date: ts.slice(0, 10), user: r[1] || "", item: r[2], name: it[0] || (type !== 1 && t === "I" ? (r[7] || r[6] || "") : ""), cat: it[1] || "",
-                t, type, cap: type === 1 ? (fields[r[5]] || "(field)") : WHOLE[t][type], field, oldV: type === 1 ? r[6] : (t === "I" ? "" : ""), newV: type === 1 ? r[7] : "",
-                whole: type !== 1, n: r[9] || 0, sys,
-                setup: (() => { if (type !== 1) return false; const b = born.get(r[2]); if (!b || b[1] !== r[1]) return false; const m = mins(ts) - b[0]; return m >= 0 && m <= SETUP_MIN; })() });
+        const born = new Map();      // number → [minute, user] of its creation
+        for (const r of rows) if (r[3] === K.main && r[4] === 0) born.set(r[2], [mins(r[0]), r[1]]);
+        for (const r of rows) {
+            const ts = r[0], t = r[3], type = r[4], sub = r[8] || "", nm = K.name(d, r[2]), wh = K.whole[t] || ["Added", "", "Removed"];
+            const subLabel = sub ? K.sub(d, t, sub) : "";
+            const cap = type === 1 ? (fields[r[5]] || "(field)") : wh[type];
+            let setup = false;
+            if (type === 1) { const b = born.get(r[2]); if (b && b[1] === r[1]) { const m = mins(ts) - b[0]; setup = m >= 0 && m <= SETUP_MIN; } }
+            out.push({ ts, date: ts.slice(0, 10), user: r[1] || "", item: r[2], name: nm[0] || (type !== 1 && t === K.main ? (r[7] || r[6] || "") : ""), cat: nm[1] || "",
+                t, type, cap, field: cap + (subLabel ? " — " + subLabel : ""), oldV: type === 1 ? r[6] : "", newV: type === 1 ? r[7] : "",
+                whole: type !== 1, n: r[9] || 0, sys: type === 1 && t === K.main && K.system.has(cap), setup });
         }
         return out;
     }
@@ -134,10 +164,14 @@
         return ["", ""];
     }
 
-    // ---------- one-off page build ----------
+    // ---------- one-off page build (the words that differ per kind are filled in by paint) ----------
     function scaffold() {
         const root = $("icRoot");
-        if (!root || root.dataset.built) return;
+        if (!root) return null;
+        // the one page lives in whichever tab section is open
+        const host = document.querySelector('section[data-tab-content="' + K.host + '"]');
+        if (host && root.parentNode !== host) host.appendChild(root);
+        if (root.dataset.built) return root;
         if (!$("icStyle")) {
             const st = document.createElement("style"); st.id = "icStyle";
             st.textContent = `
@@ -164,7 +198,7 @@
         }
         const opt = (v, l) => `<option value="${v}">${l}</option>`;
         root.innerHTML = `
-            <div class="hint rr-hint"><span id="icHint">Every change made on an item card.</span>
+            <div class="hint rr-hint"><span id="icHint"></span>
                 <span class="rr-tgt"><span class="rr-tgt-lbl">Activity file</span><span id="icAsOf">not loaded</span><button type="button" class="more-btn" id="icReload" title="Read the latest file again">↻</button><button type="button" class="more-btn" id="icLive" title="Read everything newer than the file straight from Wiise, with your own sign-in">Get latest from Wiise</button></span></div>
             <div class="panel"><div class="panel-header ic-bar">
                 <span class="lbl">Period</span>
@@ -172,21 +206,21 @@
                     ${opt("today", "Today")}${opt("yesterday", "Yesterday")}${opt("week", "This week")}${opt("lastweek", "Last week")}${opt("month", "This month")}${opt("lastmonth", "Last month")}${opt("all", "Everything held")}${opt("custom", "Custom dates")}
                 </select>
                 <input type="date" id="icFrom" class="mini-select" title="From"><span>to</span><input type="date" id="icTo" class="mini-select" title="To">
-                <label class="chk" id="icSysLbl" title="Unit Cost, Last Direct Cost and similar fields are rewritten by Wiise itself whenever a purchase is posted or costs are adjusted"><input type="checkbox" id="icSys"> Include the cost updates Wiise makes by itself</label>
-                <label class="chk" id="icSetupLbl" title="The fields somebody fills in during the first hour after creating an item are part of creating it, not changes"><input type="checkbox" id="icSetup"> Include the fields filled in while a new item was set up</label>
+                <label class="chk" id="icSysLbl" title="Fields Wiise rewrites by itself (on an item: Unit Cost, Last Direct Cost and similar, whenever a purchase is posted or costs are adjusted)"><input type="checkbox" id="icSys"> <span id="icSysTxt"></span></label>
+                <label class="chk" id="icSetupLbl" title="The fields somebody fills in during the first hour after creating a record are part of creating it, not changes"><input type="checkbox" id="icSetup"> <span id="icSetupTxt"></span></label>
             </div><div class="panel-header ic-bar" style="border-bottom:0;">
                 <span class="lbl">Filter</span>
                 <select id="icUser" class="mini-select" title="Employee"></select>
                 <select id="icField" class="mini-select" title="Field that was changed"></select>
-                <select id="icPart" class="mini-select" title="Part of the item card">${opt("", "Whole card")}${Object.keys(PARTS).map(k => opt(k, PARTS[k])).join("")}</select>
+                <select id="icPart" class="mini-select" title="Part of the card"></select>
                 <select id="icType" class="mini-select" title="Kind of change">${opt("", "All kinds")}${opt("1", "Changed")}${opt("0", "New / added")}${opt("2", "Deleted / removed")}</select>
-                <input type="search" id="icQ" class="mini-select" placeholder="Item number, description, value…" title="Part of an item number, description, field or value">
+                <input type="search" id="icQ" class="mini-select" placeholder="Number, name, value…" title="Part of a number, name, field or value">
                 <button type="button" class="more-btn" id="icClear" title="Clear the filters (keeps the period)">Clear filters</button>
             </div></div>
             <div class="kpi-row ic-tiles" id="icTiles"></div>
             <div class="panel">
                 <div class="panel-header"><h2 id="icSumTitle">Changes by employee</h2><div class="meta" id="icSumMeta"></div>
-                    <div class="ic-ctl"><span class="lbl">View by</span>${VIEWS.map(v => `<button type="button" class="gp-filter-btn" data-ic-view="${v[0]}">${v[1]}</button>`).join("")}</div>
+                    <div class="ic-ctl"><span class="lbl">View by</span><span id="icViews"></span></div>
                 </div>
                 <div class="table-scroll"><table id="icSum" class="ds-table"><thead></thead><tbody></tbody></table></div>
                 <div class="ic-note" id="icSumNote"></div>
@@ -195,9 +229,7 @@
                 <div class="panel-header"><h2 id="icListTitle">Every change</h2><div class="meta" id="icListMeta"></div>
                     <div class="ic-ctl"><button type="button" class="more-btn" id="icPickClear" style="display:none;">Show all changes</button></div>
                 </div>
-                <div class="table-scroll"><table id="icList" class="ds-table"><thead><tr>
-                    <th>When</th><th>Employee</th><th>Item</th><th>Description</th><th>Part of the card</th><th>Field</th><th>Old value</th><th>New value</th>
-                </tr></thead><tbody></tbody></table></div>
+                <div class="table-scroll"><table id="icList" class="ds-table"><thead></thead><tbody></tbody></table></div>
                 <div class="ic-note" id="icListNote"></div>
             </div>`;
         root.dataset.built = "1";
@@ -234,23 +266,24 @@
                 if (!same) $("icListPanel").scrollIntoView({ behavior: "smooth", block: "nearest" });
             }
         });
+        return root;
     }
 
-    function itemLink(no) {
+    function cardLink(no) {
         if (typeof BC_CONFIG === "undefined" || !no) return "";
-        return ' <a href="' + escapeAttr("https://businesscentral.dynamics.com/" + BC_CONFIG.tenantId + "/" + BC_CONFIG.environment + "?page=30&filter=" + encodeURIComponent("'No.' IS '" + no + "'"))
-            + '" target="_blank" rel="noopener" title="Open item ' + escapeAttr(no) + ' in Wiise" style="text-decoration:none; font-size:11px; opacity:0.7;">↗</a>';
+        return ' <a href="' + escapeAttr("https://businesscentral.dynamics.com/" + BC_CONFIG.tenantId + "/" + BC_CONFIG.environment + "?page=" + K.page + "&filter=" + encodeURIComponent("'No.' IS '" + no + "'"))
+            + '" target="_blank" rel="noopener" title="Open ' + escapeAttr(K.one + " " + no) + ' in Wiise" style="text-decoration:none; font-size:11px; opacity:0.7;">↗</a>';
     }
 
     // ---------- painting ----------
     function paint(force) {
         if (!allowed()) return;
-        scaffold();
-        if (!$("icRoot") || !$("icRoot").dataset.built) return;
+        const root = scaffold();
+        if (!root || !root.dataset.built) return;
         const sa = SA().state, status = force || sa.status, ready = status === "ready", d = sa.data || {};
         const meta = d.meta || {}, built = String(meta.builtAtMelbourne || "");
         const fileAsOf = "as of " + built.slice(11) + " on " + dateLabel(built.slice(0, 10));
-        const liveErr = ready && sa.live === "error" ? sa.liveErr : ready && meta.liveAt && meta.icErr ? "The item changes could not be read live (" + meta.icErr + ")." : "";
+        const liveErr = ready && sa.live === "error" ? sa.liveErr : ready && meta.liveAt && meta[K.err] ? "The " + K.one + " changes could not be read live (" + meta[K.err] + ")." : "";
         $("icAsOf").textContent = status === "loading" || status === "idle" ? "loading…" : !ready ? "not loaded"
             : sa.live === "loading" ? fileAsOf + " · reading Wiise…"
             : liveErr ? fileAsOf + " · live read failed"
@@ -258,22 +291,30 @@
         $("icAsOf").title = liveErr || (meta.liveAt ? "The robot's file " + fileAsOf + ", plus everything Wiise holds since. On screen only; ↻ goes back to the file." : "");
         $("icLive").disabled = !ready || sa.live === "loading";
         $("icLive").textContent = sa.live === "loading" ? "Reading Wiise…" : "Get latest from Wiise";
-        const has = ready && (d.ic || []).length > 0;
-        const off = "Nothing has been recorded yet. Item changes are collected from the Wiise Change Log once the Item table (27) is switched on in Change Log Setup and people have signed in again; the robot then adds them on its next run.";
+        // the words of this kind
+        $("icSysTxt").textContent = kind === "item" ? "Include the cost updates Wiise makes by itself" : "Include the fields Wiise fills in by itself";
+        $("icSetupTxt").textContent = "Include the fields filled in while a new " + K.one + " was set up";
+        $("icQ").placeholder = K.One + " number, " + K.nameCol.toLowerCase() + ", value…";
+        $("icPart").innerHTML = `<option value="">Whole card</option>` + Object.keys(K.parts).map(k => `<option value="${k}">${esc(K.parts[k])}</option>`).join("");
+        $("icViews").innerHTML = views().map(v => `<button type="button" class="gp-filter-btn${v[0] === S.view ? " active" : ""}" data-ic-view="${v[0]}">${v[1]}</button>`).join("");
+        $("icList").querySelector("thead").innerHTML = `<tr><th>When</th><th>Employee</th><th>${K.One}</th><th>${K.nameCol}</th><th>Part of the card</th><th>Field</th><th>Old value</th><th>New value</th></tr>`;
+
+        const has = ready && (d[K.rows] || []).length > 0;
+        const off = "Nothing has been recorded yet. " + K.off;
         $("icHint").innerHTML = status === "error" ? esc(sa.err) : !ready ? "Loading the activity file…" : !has ? (liveErr ? "<strong>" + esc(liveErr) + "</strong> " : "") + esc(off)
-            : (liveErr ? "<strong>" + esc(liveErr) + "</strong> Showing the robot's file. " : "") + "Every change made on an item card: who, when, which field, and the old and new value. From the Wiise Change Log, held from <strong>" + dateLabel(heldFrom()) + "</strong>; nothing earlier exists. The toolbar filters above do not apply here; use the ones below.";
+            : (liveErr ? "<strong>" + esc(liveErr) + "</strong> Showing the robot's file. " : "") + "Every change made on " + (kind === "item" ? "an item" : "a " + K.one) + " card: who, when, which field, and the old and new value. From the Wiise Change Log, held from <strong>" + dateLabel(heldFrom()) + "</strong>; nothing earlier exists. The toolbar filters above do not apply here; use the ones below.";
         ["icRange", "icFrom", "icTo", "icSys", "icSetup", "icUser", "icField", "icPart", "icType", "icQ"].forEach(id => { $(id).disabled = !has; });
         if (!has) {
             $("icTiles").innerHTML = ""; $("icSum").querySelector("thead").innerHTML = "";
             $("icSum").querySelector("tbody").innerHTML = `<tr><td class="empty">${esc(status === "error" ? sa.err : ready ? off : "Loading…")}</td></tr>`;
             $("icList").querySelector("tbody").innerHTML = ""; $("icSumMeta").textContent = $("icListMeta").textContent = ""; $("icSumNote").textContent = $("icListNote").textContent = "";
+            $("icSumTitle").textContent = K.One + " changes"; $("icListTitle").textContent = "Every change"; $("icPickClear").style.display = "none";
             return;
         }
         if (!S.from) setRange(S.range);
         $("icRange").value = S.range; $("icFrom").value = S.from; $("icTo").value = S.to; $("icSys").checked = S.sys; $("icSetup").checked = S.setup;
         $("icPart").value = S.part; $("icType").value = S.type;
         if ($("icQ").value !== S.q) $("icQ").value = S.q;
-        $("icRoot").querySelectorAll("[data-ic-view]").forEach(b => b.classList.toggle("active", b.dataset.icView === S.view));
         const fill = (id, rows, dim, cur, allLabel) => {
             const seen = new Map(); for (const e of rows) { const [k, l] = keyOf(e, dim); seen.set(k, [l, (seen.get(k) || [l, 0])[1] + 1]); }
             if (cur && !seen.has(cur)) seen.set(cur, [dim === "user" ? userLabel(cur) : cur, 0]);
@@ -291,34 +332,34 @@
         const items = new Set(), people = new Set(), fields = new Set(); let chg = 0, neu = 0, del = 0;
         for (const e of rows) {
             items.add(e.item); people.add(e.user);
-            if (e.type === 1) { chg++; fields.add(e.cap); } else if (e.t === "I") { if (e.type === 0) neu++; else del++; } else chg++;
+            if (e.type === 1) { chg++; fields.add(e.cap); } else if (e.t === K.main) { if (e.type === 0) neu++; else del++; } else chg++;
         }
         const hidden = S.sys ? 0 : events().filter(e => e.sys && e.date >= S.from && e.date <= S.to).length;
         const tile = (tint, label, value, sub) => `<div class="kpi ${tint}"><div class="label">${label}</div><div class="value">${value}</div><div class="sub">${sub}</div></div>`;
         $("icTiles").innerHTML =
             tile("k-rev", "Changes", fmtInt(chg), plural(fields.size, "different field"))
-            + tile("k-qty", "Items touched", fmtInt(items.size), dateLabel(S.from) + " to " + dateLabel(S.to))
-            + tile("k-loc", "New items", fmtInt(neu), "created in the period")
-            + tile("k-gpp", "Items deleted", fmtInt(del), "removed in the period")
+            + tile("k-qty", cap1(K.many) + " touched", fmtInt(items.size), dateLabel(S.from) + " to " + dateLabel(S.to))
+            + tile("k-loc", "New " + K.many, fmtInt(neu), "created in the period")
+            + tile("k-gpp", cap1(K.many) + " deleted", fmtInt(del), "removed in the period")
             + tile("k-avg", "Employees", fmtInt(people.size), "made at least one change")
-            + tile("k-inv", "Wiise's own cost updates", S.sys ? "shown" : fmtInt(hidden), S.sys ? "included in every figure" : "hidden; tick the box to include");
+            + tile("k-inv", kind === "item" ? "Wiise's own cost updates" : "Wiise's own updates", S.sys ? "shown" : fmtInt(hidden), S.sys ? "included in every figure" : "hidden; tick the box to include");
     }
 
     function paintSum(rows) {
-        const viewName = (VIEWS.find(v => v[0] === S.view) || [])[1];
-        $("icSumTitle").textContent = "Changes by " + viewName.toLowerCase();
+        const viewName = (views().find(v => v[0] === S.view) || [])[1];
+        $("icSumTitle").textContent = K.One + " changes by " + viewName.toLowerCase();
         const g = new Map();
         for (const e of rows) {
             const [k, l] = keyOf(e, S.view);
             let n = g.get(k); if (!n) g.set(k, n = { key: k, label: l, n: 0, items: new Set(), people: new Set(), fields: new Set(), neu: 0, del: 0, last: "" });
             n.n++; n.items.add(e.item); n.people.add(e.user); if (e.type === 1) n.fields.add(e.cap);
-            if (e.t === "I" && e.type === 0) n.neu++; if (e.t === "I" && e.type === 2) n.del++;
+            if (e.t === K.main && e.type === 0) n.neu++; if (e.t === K.main && e.type === 2) n.del++;
             if (e.ts > n.last) n.last = e.ts;
         }
         const cols = [["label", viewName, false], ["n", "Changes", true],
-            S.view === "item" ? ["people", "Employees", true] : ["items", "Items", true],
+            S.view === "item" ? ["people", "Employees", true] : ["items", cap1(K.many), true],
             S.view === "field" ? ["people", "Employees", true] : ["fields", "Fields", true],
-            ["neu", "New items", true], ["del", "Deleted", true], ["last", "Latest change", false]];
+            ["neu", "New " + K.many, true], ["del", "Deleted", true], ["last", "Latest change", false]];
         const sv = (n, k) => k === "label" ? n.label.toLowerCase() : k === "key" ? n.key : (n[k] instanceof Set ? n[k].size : n[k]);
         const list = [...g.values()].sort((a, b) => {
             const x = sv(a, S.sort.key), y = sv(b, S.sort.key), m = S.sort.dir === "asc" ? 1 : -1;
@@ -331,9 +372,9 @@
         $("icSum").querySelector("tbody").innerHTML = shown.length
             ? shown.map(n => `<tr data-k="${escapeAttr(n.key)}" data-label="${escapeAttr(n.label)}" class="${S.pick && S.pick.dim === S.view && S.pick.k === n.key ? "ic-on" : ""}">${cols.map(c => cell(n, c)).join("")}</tr>`).join("")
               + (list.length > shown.length ? `<tr><td colspan="${cols.length}" class="empty"><span class="ic-link" data-ic-more="sum">Showing the first ${fmtInt(shown.length)} of ${fmtInt(list.length)} — show 500 more</span></td></tr>` : "")
-            : `<tr><td colspan="${cols.length}" class="empty">No item changes for this period and these filters.</td></tr>`;
+            : `<tr><td colspan="${cols.length}" class="empty">No ${K.one} changes for this period and these filters.</td></tr>`;
         $("icSumMeta").textContent = rows.length ? plural(rows.length, "line") + " · " + dateLabel(S.from) + " to " + dateLabel(S.to) : "";
-        $("icSumNote").textContent = "Click a row to list its changes below; click it again to clear. Click a column heading to sort. A new item counts as one line: the fields its creator fills in during the first hour are left out unless the box above is ticked.";
+        $("icSumNote").textContent = "Click a row to list its changes below; click it again to clear. Click a column heading to sort. A new " + K.one + " counts as one line: the fields its creator fills in during the first hour are left out unless the box above is ticked.";
     }
 
     function paintList(all) {
@@ -342,27 +383,32 @@
         rows = rows.slice().sort((a, b) => b.ts.localeCompare(a.ts) || a.item.localeCompare(b.item, undefined, { numeric: true }) || a.field.localeCompare(b.field));
         $("icListTitle").textContent = "Every change" + (S.pick ? " — " + S.pick.label : "");
         $("icPickClear").style.display = S.pick ? "" : "none";
-        $("icListMeta").textContent = rows.length ? plural(rows.length, "line") + " · " + plural(new Set(rows.map(e => e.item)).size, "item") : "";
+        $("icListMeta").textContent = rows.length ? plural(rows.length, "line") + " · " + plural(new Set(rows.map(e => e.item)).size, K.one) : "";
         const shown = rows.slice(0, S.limit);
         $("icList").querySelector("tbody").innerHTML = shown.length ? shown.map(e => {
-            const gone = e.t === "I" && e.type === 2;
+            const gone = e.t === K.main && e.type === 2;
             const oldCell = e.whole ? `<td class="wrap">${e.type === 2 ? esc(plural(e.n, "field") + " cleared") : ""}</td>` : `<td class="wrap ic-old" title="${escapeAttr(e.oldV)}">${e.oldV === "" ? "(blank)" : esc(e.oldV)}</td>`;
             const newCell = e.whole ? `<td class="wrap">${e.type === 0 ? esc(plural(e.n, "field") + " filled in") : ""}</td>` : `<td class="wrap ic-new" title="${escapeAttr(e.newV)}">${e.newV === "" ? "(blank)" : esc(e.newV)}</td>`;
             return `<tr><td>${esc(whenLabel(e.ts))}</td><td title="${escapeAttr(e.user)}">${esc(userLabel(e.user))}</td>
-                <td><span class="ic-link" data-ic-item="${escapeAttr(e.item)}" title="Show only this item">${esc(e.item)}</span>${gone ? "" : itemLink(e.item)}</td>
-                <td class="wrap" title="${escapeAttr(e.cat ? "Category " + e.cat : "")}">${esc(e.name)}</td><td>${esc(PARTS[e.t] || "")}</td>
-                <td class="wrap">${esc(e.field)}${e.sys ? '<span class="ic-chip" title="Wiise rewrites this field by itself">Wiise</span>' : ""}${e.setup ? '<span class="ic-chip" title="Filled in while the new item was being set up">new item</span>' : ""}</td>${oldCell}${newCell}</tr>`;
+                <td><span class="ic-link" data-ic-item="${escapeAttr(e.item)}" title="Show only this ${K.one}">${esc(e.item)}</span>${gone ? "" : cardLink(e.item)}</td>
+                <td class="wrap" title="${escapeAttr(e.cat ? "Category " + e.cat : "")}">${esc(e.name)}</td><td>${esc(K.parts[e.t] || "")}</td>
+                <td class="wrap">${esc(e.field)}${e.sys ? '<span class="ic-chip" title="Wiise rewrites this field by itself">Wiise</span>' : ""}${e.setup ? '<span class="ic-chip" title="Filled in while the new ' + K.one + ' was being set up">new ' + K.one + '</span>' : ""}</td>${oldCell}${newCell}</tr>`;
         }).join("") + (rows.length > shown.length ? `<tr><td colspan="8" class="empty"><span class="ic-link" data-ic-more="list">Showing the first ${fmtInt(shown.length)} of ${fmtInt(rows.length)} lines — show 500 more</span></td></tr>` : "")
-            : `<tr><td colspan="8" class="empty">No item changes for this choice.</td></tr>`;
-        $("icListNote").textContent = "Newest first, Melbourne time. Click an item number to keep only that item; the ↗ opens its card in Wiise. A login shared by several people shows as one employee. Values longer than 140 characters are cut short.";
+            : `<tr><td colspan="8" class="empty">No ${K.one} changes for this choice.</td></tr>`;
+        $("icListNote").textContent = "Newest first, Melbourne time. Click " + (kind === "item" ? "an item" : "a " + K.one) + " number to keep only that " + K.one + "; the ↗ opens its card in Wiise. A login shared by several people shows as one employee. Values longer than 140 characters are cut short"
+            + (kind === "item" ? "." : "; bank account numbers are shown by their last three digits only.");
     }
 
-    // ---------- entry point ----------
-    window.renderItemChanges = function () {
+    // ---------- entry points ----------
+    function render(k) {
         if (!allowed() || !SA()) return;
-        scaffold();
-        if (SA().state.status !== "ready") { paint("loading"); SA().ensure().then(() => paint()); return; }
+        kind = k; K = KINDS[k]; S = STATES[k];
+        if (!scaffold()) return;
+        if (SA().state.status !== "ready") { paint("loading"); SA().ensure().then(() => { if (kind === k) paint(); }); return; }
         paint();
-    };
-    window.itemChanges = { state: S, repaint: () => paint() };
+    }
+    window.renderItemChanges = () => render("item");
+    window.renderCustomerChanges = () => render("customer");
+    window.renderVendorChanges = () => render("vendor");
+    window.itemChanges = { states: STATES, repaint: () => paint() };
 })();
